@@ -172,7 +172,7 @@
                 Version: {__VERSION__}
             </div>
             <Button
-                href="https://github.com/Scorpio3310"
+                href="https://github.com/Scorpio3310/domain-watcher"
                 title="GitHub"
                 target="_blank"
                 size="lg"
