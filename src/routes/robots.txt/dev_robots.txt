@@ -1,0 +1,87 @@
+# Block ALL bots, crawlers, and AI scrapers
+User-agent: *
+Disallow: /
+
+# Explicitly block major search engines
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+User-agent: facebookexternalhit
+Disallow: /
+
+# Block AI training bots
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: OpenAI-ChatGPT
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Perplexity
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: ImagesiftBot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: Applebot
+Disallow: /
+
+# Block common scrapers
+User-agent: Scrapy
+Disallow: /
+
+User-agent: python-requests
+Disallow: /
+
+User-agent: curl
+Disallow: /
+
+User-agent: wget
+Disallow: /
+
+User-agent: HeadlessChrome
+Disallow: /
+
+User-agent: PhantomJS
+Disallow: /
+
+User-agent: Selenium
+Disallow: /
+
+User-agent: WebDriver
+Disallow: /

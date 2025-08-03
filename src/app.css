@@ -1,0 +1,912 @@
+@import "tailwindcss";
+@import "@fontsource/figtree";
+
+@theme {
+    /* ===== COLORS ===== */
+    --color-main-background: #f0f0f0;
+    --color-black: #1a1a1a;
+    --color-white: #ffffff;
+    --color-red: #fb0d0d;
+    --color-green: #39c50f;
+    --color-blue: #1781f3;
+    --color-lime: #84ff00;
+    --color-yellow: #ffe100;
+    --color-orange: #ff8800;
+
+    /* ===== FONTS ===== */
+    --font-display: "Figtree", "sans-serif";
+
+    /* ===== SHADOW ===== */
+    --shadow-button-white: 0 0 24px rgba(0, 0, 0, 0.1);
+    --shadow-button-red: 0 0 24px rgba(251, 13, 13, 0.4);
+    --shadow-input-white: 0 0 24px rgba(0, 0, 0, 0.05);
+    --shadow-focus-visible: 0 0 32px rgba(132, 255, 0, 0.8);
+}
+
+*:focus-visible {
+    @apply outline-none ring-2 ring-lime rounded-xl shadow-focus-visible;
+}
+
+body {
+    @apply bg-main-background font-display p-4 sm:p-8 text-black antialiased;
+}
+
+/* ======================================== */
+/* BASE BUTTON STYLES */
+/* ======================================== */
+.button {
+    /* Layout & Typography */
+    @apply font-display inline-flex items-center justify-center rounded-full text-base w-fit bg-transparent border-1 text-transparent cursor-pointer flex-none;
+
+    /* Interactions & Accessibility */
+    @apply transition-all duration-200 ease-in-out;
+
+    /* Focus styles for keyboard navigation */
+    @apply focus:outline-none;
+}
+
+/* Hover effects - only apply when NOT disabled */
+.button:not(.button--disabled):hover {
+    @apply scale-105;
+}
+
+/* Active/pressed state */
+.button:not(.button--disabled):active {
+    @apply scale-95;
+}
+
+/* Disabled state styles */
+.button--disabled {
+    @apply opacity-30 cursor-not-allowed;
+}
+
+/* ===== SIZE VARIANTS ===== */
+.button--lg {
+    @apply pl-3 pr-4 py-2.5 gap-2;
+}
+.button--md {
+    @apply px-4 py-2 gap-1.5;
+}
+.button--sm {
+    @apply px-2.5 py-1.5 gap-1.5;
+}
+
+/* Icon-only sizes (square aspect ratio) */
+.button--icon-only.button--lg {
+    @apply p-0 w-11.5 h-11.5;
+}
+.button--icon-only.button--md {
+    @apply p-0 w-10.5 h-10.5;
+}
+.button--icon-only.button--sm {
+    @apply p-0 w-9.5 h-9.5;
+}
+
+/* ===== COLOR THEMES ===== */
+.button--white {
+    @apply bg-white text-black border-white shadow-button-white;
+}
+
+.button--black {
+    @apply bg-black text-white border-black;
+}
+
+.button--red {
+    @apply bg-red text-white border-red shadow-button-red;
+}
+
+.button--white-outline {
+    @apply border border-white/10 bg-transparent text-white;
+}
+
+.button--black-outline {
+    @apply border border-black/10 bg-transparent text-black;
+}
+
+/* ======================================== */
+/* BASE RADIO BUTTON STYLES */
+/* ======================================== */
+.radio-button {
+    /* Layout & Structure */
+    @apply rounded-full flex items-center justify-center border flex-none cursor-pointer;
+
+    /* Interactions & Accessibility */
+    @apply transition-all duration-200 ease-in-out;
+
+    /* Prevent text selection */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Enhanced focus styles for keyboard navigation */
+.radio-button__input:focus + .radio-button,
+.radio-button__input:focus-visible + .radio-button {
+    @apply outline-none ring-2 ring-lime shadow-focus-visible rounded-full;
+}
+
+/* Hover effects - only apply when NOT disabled */
+.radio-button:not(.radio-button--disabled):hover {
+    @apply scale-105;
+}
+
+/* Active/pressed state */
+.radio-button:not(.radio-button--disabled):active {
+    @apply scale-95;
+}
+
+/* Disabled state styles */
+.radio-button--disabled {
+    @apply opacity-30 cursor-not-allowed;
+}
+
+/* Hidden radio input for accessibility */
+.radio-button__input {
+    @apply sr-only;
+}
+
+/* ===== SIZE VARIANTS ===== */
+.radio-button--sm {
+    @apply size-4;
+}
+
+.radio-button--md {
+    @apply size-6;
+}
+
+.radio-button--lg {
+    @apply size-8;
+}
+
+/* Icon sizes */
+.radio-button--sm .radio-button__icon {
+    @apply w-3 h-3;
+}
+
+.radio-button--md .radio-button__icon {
+    @apply w-4 h-4;
+}
+
+.radio-button--lg .radio-button__icon {
+    @apply w-5 h-5;
+}
+
+/* ===== STATE VARIANTS ===== */
+
+/* Unchecked states */
+.radio-button--unchecked {
+    @apply border-blue text-white;
+}
+
+/* Checked states */
+.radio-button--checked {
+    @apply text-white;
+}
+
+/* ===== COLOR THEMES ===== */
+
+/* Primary variant */
+.radio-button--primary.radio-button--checked {
+    @apply bg-blue border-blue;
+}
+
+.radio-button--primary.radio-button--checked:not(
+        .radio-button--disabled
+    ):hover {
+    @apply bg-blue;
+}
+
+/* Secondary variant */
+.radio-button--secondary.radio-button--checked {
+    @apply bg-gray-700 border-gray-700;
+}
+
+.radio-button--secondary.radio-button--checked:not(
+        .radio-button--disabled
+    ):hover {
+    @apply bg-gray-800;
+}
+
+.radio-button--secondary:focus {
+    @apply ring-gray-500;
+}
+
+/* ======================================== */
+/* TOGGLE SWITCH STYLES */
+/* ======================================== */
+.toggle-switch__input.sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+}
+
+.toggle-switch {
+    @apply flex items-center cursor-pointer transition-all duration-200 ease-in-out rounded-full relative select-none;
+}
+
+.toggle-switch:hover:not(.toggle-switch--disabled) {
+    @apply scale-105;
+}
+
+.toggle-switch:active:not(.toggle-switch--disabled) {
+    @apply scale-95;
+}
+
+/* Size variants */
+.toggle-switch--sm {
+    @apply w-11 h-6; /* 44px x 24px */
+}
+
+.toggle-switch--md {
+    @apply w-14 h-8; /* 56px x 32px */
+}
+
+.toggle-switch--lg {
+    @apply w-18 h-10; /* 68px x 40px */
+}
+
+/* Thumb (slider) */
+.toggle-switch__thumb {
+    @apply absolute bg-white rounded-full transition-all duration-200 ease-in-out flex items-center justify-center shadow-button-white;
+    /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06); */
+}
+
+.toggle-switch__thumb--sm {
+    @apply size-5 left-0.5;
+}
+
+.toggle-switch__thumb--md {
+    @apply size-7 left-0.5;
+}
+
+.toggle-switch__thumb--lg {
+    @apply size-9 left-0.5;
+}
+
+/* Checked state transforms */
+.toggle-switch--sm .toggle-switch__thumb--checked {
+    @apply translate-x-5;
+}
+
+.toggle-switch--md .toggle-switch__thumb--checked {
+    @apply translate-x-6;
+}
+
+.toggle-switch--lg .toggle-switch__thumb--checked {
+    @apply translate-x-8;
+}
+
+/* Color variants - Unchecked */
+.toggle-switch--primary {
+    @apply bg-black/10;
+}
+
+.toggle-switch--secondary {
+    @apply bg-gray-200;
+}
+
+/* Color variants - Checked */
+.toggle-switch--primary.toggle-switch--checked {
+    @apply bg-green;
+}
+
+.toggle-switch--secondary.toggle-switch--checked {
+    @apply bg-blue-500;
+}
+
+/* Disabled state */
+.toggle-switch--disabled {
+    @apply opacity-30 cursor-not-allowed pointer-events-none;
+}
+
+/* Focus state for accessibility */
+.toggle-switch__input:focus + .toggle-switch {
+    @apply outline-none ring-2 ring-lime rounded-full shadow-focus-visible;
+}
+
+/* Icon styling */
+.toggle-switch__icon {
+    @apply w-3 h-3 text-black/30;
+}
+
+.toggle-switch--checked .toggle-switch__icon {
+    @apply text-black;
+}
+
+/* ======================================== */
+/* HEADER */
+/* ======================================== */
+header {
+    @apply pl-3 pr-1.5 py-1.5 bg-black rounded-full flex justify-between items-center h-[60px] sticky top-4 z-10;
+
+    .link-logo {
+        @apply flex flex-row gap-2 text-white font-medium text-xl items-center transition-all duration-400;
+
+        img {
+            @apply transition-transform duration-800;
+        }
+
+        .title {
+            @apply hidden sm:block;
+        }
+
+        &:hover {
+            @apply text-white/70;
+
+            img {
+                @apply rotate-180 scale-105;
+            }
+        }
+    }
+
+    .link-go-back {
+        @apply flex flex-row gap-2 text-white font-medium text-xl items-center transition-all duration-400;
+
+        .icon {
+            @apply size-9 text-lime transition-all duration-400;
+        }
+
+        .title {
+            @apply hidden sm:block;
+        }
+
+        &:hover {
+            @apply text-white/70;
+
+            .icon {
+                @apply opacity-70;
+            }
+        }
+    }
+}
+
+/* ===== HOVER ===== */
+.hover-fade {
+    @apply hover:opacity-80 transition-all duration-400;
+}
+
+/* ======================================== */
+/* ENV TAGs */
+/* ======================================== */
+.environment-tag {
+    @apply inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium rounded-full gap-1.5 border transition-all duration-200;
+}
+
+.environment-tag--demo {
+    @apply bg-amber-500;
+}
+
+.environment-tag--dev {
+    @apply bg-red;
+}
+
+.environment-tag--staging {
+    @apply bg-blue;
+}
+
+/* ======================================== */
+/* TOOLTIP */
+/* ======================================== */
+.tooltip-container {
+    @apply relative inline-block w-fit cursor-help;
+}
+
+.tooltip {
+    @apply absolute bg-black/70 backdrop-blur-md text-white px-2 py-1 rounded-2xl text-sm z-50 pointer-events-none w-max max-w-72 text-center;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Position variants */
+.tooltip--top {
+    @apply bottom-full mb-1;
+}
+
+.tooltip--bottom {
+    @apply top-full mt-1;
+}
+
+/* Responsive text wrapping for longer content */
+@media (max-width: 640px) {
+    .tooltip {
+        max-width: 250px;
+        font-size: 0.8125rem;
+    }
+}
+
+/* ======================================== */
+/* CARD */
+/* ======================================== */
+.card {
+    @apply bg-white/60 rounded-4xl p-4 sm:p-5 relative;
+}
+
+.card--error {
+    @apply flex flex-col gap-2 items-center justify-center text-black mt-16;
+
+    .icon {
+        @apply size-14 opacity-60;
+    }
+    h1,
+    h2 {
+        @apply text-2xl text-center;
+    }
+
+    p {
+        @apply text-base text-center opacity-60;
+    }
+
+    pre {
+        @apply bg-black/5 rounded-2xl p-5 pb-0 mt-4 text-xs font-light opacity-60 font-mono overflow-x-auto max-h-96 w-full;
+
+        .error {
+            @apply pb-5;
+
+            .toggle {
+                @apply text-center flex gap-1 justify-center items-center cursor-pointer hover:opacity-60 transition-all duration-200 ease-in-out;
+                .icon {
+                    @apply size-4 transition-all duration-300 ease-in-out;
+                }
+            }
+        }
+
+        .json-data {
+            @apply mt-4 pb-5 whitespace-pre-wrap break-all;
+        }
+
+        hr {
+            @apply text-black opacity-15;
+        }
+    }
+}
+
+.card--domain {
+    @apply p-0;
+
+    .main-content {
+        @apply flex flex-col sm:flex-row sm:gap-2 sm:items-center sm:justify-between;
+
+        .main-info {
+            @apply flex sm:items-center gap-4 px-4 pt-4 pb-0 sm:px-5 sm:pt-6.5 sm:pb-6.5 w-full;
+
+            .icon-status {
+                @apply relative w-max h-fit;
+
+                .icon-globe {
+                    @apply size-7 opacity-60;
+                }
+
+                .status {
+                    @apply size-5 border border-white rounded-full flex justify-center items-center absolute -bottom-2 -right-2;
+
+                    .icon {
+                        @apply size-4;
+
+                        path {
+                            stroke-width: 2; /* or desired value */
+                        }
+                    }
+                }
+
+                .status-expiring-soon {
+                    @apply size-6  flex justify-center items-center absolute -bottom-2 -right-3  text-orange bg-white/80 backdrop-blur-3xl rounded-full;
+
+                    .icon {
+                        @apply size-10 animate-bounce;
+                    }
+                }
+
+                .status--available {
+                    @apply bg-green text-white;
+                }
+
+                .status--not-available {
+                    @apply bg-red text-white;
+                }
+
+                .status--not-checked {
+                    @apply bg-blue text-white;
+                }
+
+                .status--unknown {
+                    @apply bg-orange-500 text-white;
+                }
+            }
+
+            h3 {
+                @apply text-lg break-words break-all leading-6;
+            }
+        }
+
+        .container-for-animation {
+            @apply justify-end flex relative h-20 p-4 sm:p-5 items-center overflow-clip rounded-4xl sm:w-72;
+        }
+
+        .buttons {
+            @apply flex items-center gap-2;
+        }
+    }
+
+    .details {
+        @apply px-5 pb-5;
+
+        .text-inline {
+            @apply flex items-center gap-1 mb-1;
+
+            .icon {
+                @apply size-4;
+            }
+        }
+
+        .inline {
+            @apply flex gap-1 items-start flex-wrap;
+        }
+
+        hr {
+            @apply border border-dashed opacity-10 my-2.5 first:mt-0;
+        }
+
+        pre {
+            @apply text-xs font-mono overflow-x-auto max-h-80 border border-black/10 rounded-xl p-4 text-wrap break-all;
+        }
+
+        .other {
+            @apply flex flex-col sm:flex-row sm:items-center justify-between gap-2;
+
+            .buttons {
+                @apply flex items-center gap-2 flex-wrap;
+            }
+        }
+    }
+}
+
+.card--settings {
+    @apply flex flex-col  gap-3;
+
+    h2 {
+        @apply text-2xl font-medium;
+    }
+
+    h3 {
+        @apply text-xl font-normal;
+    }
+
+    h6 {
+        @apply text-sm font-medium;
+    }
+
+    p {
+        @apply text-sm opacity-70;
+    }
+
+    a {
+        @apply underline hover:opacity-60 transition-all;
+    }
+
+    hr {
+        @apply border border-dashed opacity-10 my-2.5;
+    }
+
+    .warning {
+        @apply flex gap-1 text-orange;
+
+        .icon {
+            @apply size-5;
+        }
+
+        div {
+            @apply text-sm;
+        }
+    }
+
+    .test {
+        @apply p-3 sm:p-4 rounded-3xl border border-black/10 space-y-1.5;
+    }
+
+    .save {
+        @apply flex flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-between sm:items-center;
+    }
+
+    .response {
+        @apply flex flex-col sm:flex-row sm:gap-2 sm:items-center;
+
+        .text {
+            @apply text-sm opacity-50;
+        }
+
+        .last-checked {
+            @apply text-sm opacity-70 italic;
+        }
+
+        .status {
+            @apply flex sm:items-center gap-1 text-sm;
+
+            .icon {
+                @apply size-2 rounded-full flex-none mt-1.5 sm:mt-0;
+            }
+        }
+
+        .status--valid {
+            .icon {
+                @apply bg-green;
+            }
+        }
+
+        .status--invalid {
+            .icon {
+                @apply bg-red;
+            }
+        }
+
+        .status--ready {
+            .icon {
+                @apply bg-blue;
+            }
+        }
+
+        .status--unknown {
+            .icon {
+                @apply bg-neutral-500;
+            }
+        }
+    }
+
+    .black-bg-card {
+        @apply p-4 rounded-3xl bg-black/5;
+    }
+
+    .ui-view {
+        @apply p-3 sm:p-4 rounded-3xl border border-black/10 flex gap-2;
+
+        .view-card {
+            @apply grid gap-1 w-full;
+
+            h4 {
+                @apply text-base;
+            }
+
+            .domain-card {
+                @apply p-3 rounded-2xl bg-white shadow-input-white mt-1.5;
+
+                .row {
+                    @apply flex gap-4 justify-between;
+
+                    .left,
+                    .right {
+                        @apply flex gap-1 items-center;
+
+                        div {
+                            @apply bg-black/10 rounded-full;
+                        }
+                    }
+                }
+
+                hr {
+                    @apply border-dotted opacity-25;
+                }
+            }
+        }
+    }
+
+    .buttons {
+        @apply flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3;
+    }
+}
+
+/* ======================================== */
+/* SECTIONs */
+/* ======================================== */
+.hero-section {
+    @apply max-w-lg mx-auto;
+
+    h1 {
+        @apply text-4xl font-medium text-black;
+    }
+
+    p {
+        @apply text-base text-black opacity-70;
+    }
+}
+
+.hero-domain-title {
+    @apply flex justify-between mb-4 items-center;
+
+    h2 {
+        @apply text-2xl text-black;
+    }
+
+    p {
+        @apply text-base text-black;
+    }
+}
+
+/* ======================================== */
+/* INPUT FILED */
+/* ======================================== */
+.input-field {
+    @apply flex flex-col gap-1 w-full;
+}
+
+/* ===== LABEL STYLES ===== */
+.input__label {
+    @apply flex items-center gap-1 text-sm text-black transition-colors duration-200;
+}
+
+.input__label--disabled {
+    @apply text-black/50 cursor-not-allowed;
+}
+
+.input__tooltip-icon {
+    @apply w-4 h-4 flex-shrink-0 opacity-60;
+}
+
+.input__required-mark {
+    @apply text-red-500 font-bold;
+}
+
+/* ===== INPUT STYLES ===== */
+.input {
+    @apply w-full rounded-full border transition-all duration-200 font-medium placeholder:text-black/30 shadow-input-white px-4 py-3 text-base h-[3.125rem];
+}
+
+/* Variant styles */
+.input--default {
+    @apply bg-white border-white text-black;
+    @apply hover:border-black/30;
+}
+
+.input--error {
+    @apply bg-red-50 border-red-300 text-red-900;
+    @apply hover:border-red-400 focus:border-red-500 focus:ring-red-500/30;
+}
+
+.input--success {
+    @apply bg-green-50 border-green-300 text-green-900;
+    @apply hover:border-green-400 focus:border-green-500 focus:ring-green-500/30;
+}
+
+/* Disabled state */
+.input--disabled {
+    @apply bg-neutral-100 border-black/10 text-black/30 cursor-not-allowed;
+    @apply hover:border-black/10 focus:border-black/10 focus:ring-0;
+}
+
+/* ===== HELPER TEXT ===== */
+.input__helper {
+    @apply text-sm text-gray-600 transition-colors duration-200;
+}
+
+.input__helper--error {
+    @apply text-red-600;
+}
+
+.input__helper--success {
+    @apply text-green-600;
+}
+
+/* ======================================== */
+/* BLURED GRADIANTS MAIN */
+/* ======================================== */
+.blured-left {
+    @apply bg-lime size-[800px] rounded-full blur-[500px] fixed top-0 bottom-0 -z-10 -left-[500px] opacity-20;
+}
+
+.blured-right {
+    @apply bg-yellow size-[800px] rounded-full blur-[500px] fixed -bottom-[500px] -z-10 -right-[400px] opacity-20;
+}
+
+/* ======================================== */
+/* TOAST NOTIFICATION */
+/* ======================================== */
+.toast-notification {
+    @apply p-5 fixed bottom-0 right-0 z-50 flex justify-end;
+
+    .panel {
+        @apply inline-flex items-center justify-between p-4 rounded-3xl shadow-lg transition-all duration-300 gap-4 bg-black text-white max-w-md relative overflow-clip;
+
+        .icon-box {
+            @apply p-2 isolate rounded-full relative;
+
+            .icon {
+                @apply size-6;
+
+                path {
+                    stroke-width: 2; /* or desired value */
+                }
+            }
+        }
+
+        .bg-blur {
+            @apply size-40 blur-3xl absolute -left-20 -bottom-20;
+        }
+    }
+
+    .panel--success {
+        .icon-box {
+            @apply bg-green shadow-green;
+            box-shadow: 0 0 26px var(--color-green);
+        }
+
+        .bg-blur {
+            @apply bg-green/40;
+        }
+    }
+
+    .panel--error {
+        .icon-box {
+            @apply bg-red shadow-red;
+            box-shadow: 0 0 26px var(--color-red);
+        }
+
+        .bg-blur {
+            @apply bg-red/40;
+        }
+    }
+}
+
+/* ======================================== */
+/* OTHER */
+/* ======================================== */
+
+.validate-input-error {
+    @apply text-sm px-2 py-1 bg-red text-white font-bold rounded-xl flex items-center justify-center gap-1;
+
+    .icon {
+        @apply size-4;
+    }
+}
+
+.absolute-positioned {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.no-javascript {
+    @apply fixed top-0 left-0 w-full h-full bg-black/80 backdrop-blur-xs text-white flex flex-col items-center justify-center z-50 text-center p-4;
+
+    .title {
+        @apply text-2xl font-medium mb-2 mt-4;
+    }
+
+    .description {
+        @apply text-base opacity-70;
+    }
+}
+
+/* ======================================== */
+/* PLAYGORUND */
+/* ======================================== */
+.playground-container {
+    .component-nav-button {
+        @apply flex items-center gap-2 px-4 py-3 bg-white rounded-2xl cursor-pointer transition-all duration-200 ease-in-out relative min-w-[120px] justify-center;
+    }
+
+    .component-nav-button:hover {
+        @apply -translate-y-0.5 shadow-lg shadow-black/5;
+    }
+
+    .component-nav-button.active {
+        @apply bg-blue text-white shadow-lg shadow-blue/20;
+    }
+
+    .component-nav-button .icon {
+        @apply text-xl;
+    }
+
+    .component-nav-button .text {
+        @apply font-medium;
+    }
+
+    .default-badge {
+        @apply absolute -top-1.5 -right-1.5 bg-amber-500 text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-xs font-bold;
+    }
+
+    .error-state {
+        @apply flex items-center justify-center h-32 text-red text-lg;
+    }
+}
