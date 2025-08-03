@@ -34,6 +34,7 @@ A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers 
 -   [🛠️ Development](#️-development)
 -   [🌐 Deployment](#-deployment---via-cloudflare-with-github-integration)
 -   [🗃️ Database Schema](#️-database-schema)
+-   [🤖 Robots.txt](#️-robotstxt)
 -   [🐛 Troubleshooting](#-troubleshooting)
 
 ---
@@ -291,6 +292,17 @@ The application uses two main tables:
 -   Supports enabled/disabled states for notification services
 
 For detailed table structure and relationships, see [schema.sql](schema.sql)
+
+---
+
+## 🤖 Robots.txt
+
+Update Production URL: In [src/routes/robots.txt/+server.js](src/routes/robots.txt/+server.js), replace `PRODUCTION_DOMAIN` with your live application URL.
+
+```bash
+# Update this URL
+const PRODUCTION_DOMAIN = "https://your-domain.workers.dev";
+```
 
 ---
 
