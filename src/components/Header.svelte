@@ -1,4 +1,5 @@
 <script>
+    import { PUBLIC_ENVIRONMENT } from "$env/static/public";
     import Button from "./Button.svelte";
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
@@ -56,7 +57,13 @@
             tabindex="0"
         >
             <img src="/logo.svg" alt="Domain Watcher Logo" class="logo" />
-            <div class="title">Domain Watcher</div>
+            <div
+                class="title {PUBLIC_ENVIRONMENT === 'production'
+                    ? '!block'
+                    : ''}"
+            >
+                Domain Watcher
+            </div>
         </a>
         {#if showEnvTag}
             <EnvTag />
@@ -74,7 +81,13 @@
             tabindex="0"
         >
             <Icon icon="iconoir:arrow-left" class="icon" />
-            <div class="title">Go Back</div>
+            <div
+                class="title {PUBLIC_ENVIRONMENT === 'production'
+                    ? '!block'
+                    : ''}"
+            >
+                Go Back
+            </div>
         </a>
         <EnvTag />
     </div>
