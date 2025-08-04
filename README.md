@@ -34,7 +34,6 @@ A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers 
 -   [🛠️ Development](#️-development)
 -   [🌐 Deployment](#-deployment---via-cloudflare-with-github-integration)
 -   [🗃️ Database Schema](#️-database-schema)
--   [🤖 Robots.txt](#️-robotstxt)
 -   [🐛 Troubleshooting](#-troubleshooting)
 
 ---
@@ -107,6 +106,7 @@ A daily summary keeps you informed and helps you act fast.
     PUBLIC_ENVIRONMENT=dev
     PUBLIC_TIMEZONE=Europe/Ljubljana
     CRON_SECRET=dev-super-secure-key
+    PRODUCTION_DOMAIN=https://your-app.com
     ```
 
 2. **Local Database Setup**
@@ -252,8 +252,9 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
 
     ```bash
     PUBLIC_ENVIRONMENT = production
-    PUBLIC_TIMEZONE = Europe/Ljubljana  # Change to your timezone (e.g., America/New_York, UTC)
+    PUBLIC_TIMEZONE = Europe/Ljubljana         # Change to your timezone (e.g., America/New_York, UTC)
     CRON_SECRET = strong-secret-key-here       # Replace with a secure random string (32+ characters)
+    PRODUCTION_DOMAIN = https://your-app.com   # Set to your live application URL for robots.txt control
     ```
 
 > ⚠️ **Important**: The CRON_SECRET environment variable must be identical to the value set in your [`wrangler.jsonc`](wrangler.jsonc) configuration file under `env.production.vars.CRON_SECRET`!
@@ -269,7 +270,7 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
 **Set Environment Variables** in Cloudflare Worker Dashboard:
 
 -   Go to **Settings > Build > Variables and Secrets**
--   Add `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE` and `CRON_SECRET`
+-   Add `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE`, `PRODUCTION_DOMAIN` and `CRON_SECRET`
 
 ---
 
@@ -292,17 +293,6 @@ The application uses two main tables:
 -   Supports enabled/disabled states for notification services
 
 For detailed table structure and relationships, see [schema.sql](schema.sql)
-
----
-
-## 🤖 Robots.txt
-
-Update Production URL: In [src/routes/robots.txt/+server.js](src/routes/robots.txt/+server.js), replace `PRODUCTION_DOMAIN` with your live application URL.
-
-```bash
-# Update this URL
-const PRODUCTION_DOMAIN = "https://your-domain.workers.dev";
-```
 
 ---
 
