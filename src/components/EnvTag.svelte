@@ -10,7 +10,7 @@
             modifier: "demo",
             icon: "iconoir:info-circle",
             tooltip:
-                "You're currently using a demo version of the app. For demonstration purposes, domain actions such as adding, removing, or verifying domains are disabled.",
+                "This is a demo version with limited functionality. Want the full version? Click the GitHub icon in settings to deploy your own!",
             showTooltip: true,
         },
         staging: {
