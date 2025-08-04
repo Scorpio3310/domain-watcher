@@ -19,10 +19,11 @@ A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers 
 ### Tech Stack
 
 -   **Frontend**: SvelteKit
--   **Backend**: Cloudflare Workers
+-   **Platform**: Cloudflare Workers
 -   **Database**: Cloudflare D1 (SQLite)
 -   **Notifications**: Slack Webhooks, Resend API
 -   **Scheduling**: Cloudflare Cron Triggers
+-   **Domain API**: WhoisJSON (1000 free calls/month)
 
 ---
 
