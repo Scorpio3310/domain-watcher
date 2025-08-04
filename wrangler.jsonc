@@ -69,7 +69,7 @@
                 "crons": ["* * * * *"] // Every minute
             },
             // Cloudflare Worker application name
-            "name": "domain-watcher"
+            "name": "check-watcher-private"
         }
     },
 
