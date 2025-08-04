@@ -1,4 +1,3 @@
-<!-- RadioButton.svelte -->
 <script>
     import Icon from "@iconify/svelte";
 
