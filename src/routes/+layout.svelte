@@ -5,6 +5,7 @@
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import "../app.css";
     import NoJavascript from "$components/NoJavascript.svelte";
+    import { dev } from "$app/environment";
 
     let { children, data } = $props();
 
@@ -30,6 +31,9 @@
 </script>
 
 <svelte:head>
+    {#if dev}
+        <link rel="shortcut icon" href="./favicon-dev.ico" />
+    {/if}
     <title>Domain Watcher // Never Lose a Domain Again</title>
     <meta
         name="description"
