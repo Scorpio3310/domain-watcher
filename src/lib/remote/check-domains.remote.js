@@ -364,3 +364,19 @@ export const batchCheck = form(async (data) => {
         };
     }
 });
+
+// ========================================
+// TYPE DEFINITIONS FOR JSDOC
+// ========================================
+
+/**
+ * @typedef {Object} BatchServiceResponse
+ * @property {number} status - HTTP status code (200 for success, 204 for no domains, 207 for partial success, 422 for mostly failed, 403 for demo mode, 400 for missing API key, 500 for error)
+ * @property {string} message - Human-readable status message with statistics
+ * @property {Object} [results] - Detailed statistics if there were errors
+ * @property {number} [results.total] - Total domains processed
+ * @property {number} [results.successful] - Successfully processed domains
+ * @property {number} [results.errors] - Number of failed verifications
+ * @property {number} [results.successRate] - Success rate as percentage
+ * @memberof module:CheckDomainsRemote
+ */
