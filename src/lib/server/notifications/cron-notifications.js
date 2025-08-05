@@ -1,6 +1,6 @@
 import { executeSql } from "$lib/database/db.js";
 import { SETTINGS_QUERIES } from "$lib/database/settings-queries.js";
-import { domainVerification } from "../domains.js";
+import { domainVerification } from "../services/domain.js";
 import {
     getCurrentTimeInTimezone,
     formatHumanDate,
@@ -10,8 +10,8 @@ import {
 // NOTIFICATION PROVIDERS REGISTRY
 // ============================================================================
 
-import { slackNotifier } from "./slack-notifier.js";
-import { resendNotifier } from "./resend-notifier.js";
+import { slackNotifier } from "./providers/slack-notifier.js";
+import { resendNotifier } from "./providers/resend-notifier.js";
 
 /**
  * Configuration registry for notification providers

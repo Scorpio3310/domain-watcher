@@ -5,7 +5,7 @@
  * @module DomainCardRemote
  */
 
-import * as whoisService from "$src/lib/server/whois";
+import * as whoisService from "$src/lib/server/infrastructure/whois-client";
 import { form } from "$app/server";
 import { domainIdSchema } from "$src/routes/validation";
 import {

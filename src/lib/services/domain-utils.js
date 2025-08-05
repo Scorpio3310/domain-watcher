@@ -7,9 +7,9 @@
 
 import { executeSql, executeQueryFirst } from "$src/lib/database/db";
 import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import * as whoisService from "$src/lib/server/whois";
+import * as whoisService from "$src/lib/server/infrastructure/whois-client";
 import { isDemo } from "$src/lib/utils/helpers";
-import { apiKey } from "$src/lib/server/api-key.js";
+import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
 import { DOMAIN_STATUS } from "$lib/constants/constants";
 
 // ========================================

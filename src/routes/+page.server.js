@@ -3,8 +3,8 @@ import { getRegistrar } from "$lib/utils/helpers";
 import { message, superValidate, fail } from "sveltekit-superforms";
 import { zod4 } from "sveltekit-superforms/adapters";
 import { addDomainSchema } from "./validation";
-import { domains } from "$src/lib/server/domains";
-import { ui } from "$src/lib/server/settings";
+import { domains } from "$src/lib/server/services/domain";
+import { ui } from "$src/lib/server/services/settings";
 
 // ========================================
 // PAGE LOAD
