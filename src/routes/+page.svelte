@@ -142,24 +142,48 @@
             </h2>
         </div>
 
-        <div class="grid gap-2">
-            {#each data?.domains as domain (domain.id)}
-                <div
-                    in:scale={{
-                        duration: 200,
-                        start: 0.7,
-                        opacity: 0,
-                        delay: 100,
-                    }}
-                    animate:flip={{ duration: 300 }}
-                >
-                    <DomainCard
-                        data={domain}
-                        superFormData={data?.formDomainId}
-                        uiView={data?.viewMode}
-                    />
+        <svelte:boundary>
+            <div class="grid gap-2">
+                {#each data?.domains as domain (domain.id)}
+                    <div
+                        in:scale={{
+                            duration: 200,
+                            start: 0.7,
+                            opacity: 0,
+                            delay: 100,
+                        }}
+                        animate:flip={{ duration: 300 }}
+                    >
+                        <DomainCard data={domain} uiView={data?.viewMode} />
+                    </div>
+                {/each}
+            </div>
+            {#snippet pending()}
+                <div class="space-y-2 opacity-50">
+                    {#each Array(4) as _, i}
+                        <div class="card card-domain">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-4">
+                                    <div
+                                        class="size-10 rounded-full bg-white/80 animate-pulse flex-none"
+                                    ></div>
+                                    <div
+                                        class="h-5 bg-white/80 animate-pulse rounded-2xl w-20 sm:w-52 lg:w-60 flex-none"
+                                    ></div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div
+                                        class="h-10 bg-white/80 animate-pulse rounded-full w-32"
+                                    ></div>
+                                    <div
+                                        class="size-10 bg-white/80 animate-pulse rounded-full"
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    {/each}
                 </div>
-            {/each}
-        </div>
+            {/snippet}
+        </svelte:boundary>
     </div>
 {/if}
