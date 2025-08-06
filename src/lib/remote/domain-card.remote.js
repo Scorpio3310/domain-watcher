@@ -13,9 +13,8 @@ import {
     validateDemoMode,
     findDomainById,
     executeDomainQuery,
-    createZodErrors,
     verificationEngine,
-} from "$src/lib/services/domain-utils.js";
+} from "$src/lib/server/utils/domain-utils.js";
 
 // ========================================
 // DOMAIN CARD REMOTE FUNCTIONS
@@ -54,12 +53,12 @@ export const ns = form(async (data) => {
     const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { 
-            status: 400, 
-            message: validateRes.error.issues.map(i => i.message) 
+        return {
+            status: 400,
+            message: validateRes.error.issues.map((i) => i.message),
         };
     }
-    
+
     const validDomainId = validateRes.data;
 
     const domain = await findDomainById(validDomainId);
@@ -138,12 +137,12 @@ export const ssl = form(async (data) => {
     const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { 
-            status: 400, 
-            message: validateRes.error.issues.map(i => i.message) 
+        return {
+            status: 400,
+            message: validateRes.error.issues.map((i) => i.message),
         };
     }
-    
+
     const validDomainId = validateRes.data;
 
     const domain = await findDomainById(validDomainId);
@@ -222,12 +221,12 @@ export const check = form(async (data) => {
     const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { 
-            status: 400, 
-            message: validateRes.error.issues.map(i => i.message) 
+        return {
+            status: 400,
+            message: validateRes.error.issues.map((i) => i.message),
         };
     }
-    
+
     const validDomainId = validateRes.data;
 
     try {
@@ -292,12 +291,12 @@ export const remove = form(async (data) => {
     const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { 
-            status: 400, 
-            message: validateRes.error.issues.map(i => i.message) 
+        return {
+            status: 400,
+            message: validateRes.error.issues.map((i) => i.message),
         };
     }
-    
+
     const validDomainId = validateRes.data;
 
     try {

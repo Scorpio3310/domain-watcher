@@ -11,7 +11,7 @@ import {
     validateDemoMode,
     executeDomainQuery,
     verificationEngine,
-} from "$src/lib/services/domain-utils.js";
+} from "$src/lib/server/utils/domain-utils.js";
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT
