@@ -1,12 +1,12 @@
 {
     // Cloudflare Worker application name
-    "name": "check-watcher",
+    "name": "check-watcher-private",
 
     // Main application entry point
     "main": ".svelte-kit/cloudflare/worker.mjs", // Changed due to adding Cron Job functionality - see lib/cron.js for details
 
     // Cloudflare Workers runtime API version
-    "compatibility_date": "2025-07-12",
+    "compatibility_date": "2025-08-03",
 
     // Configuration for serving static files (CSS, JS, images)
     "assets": {
@@ -53,15 +53,15 @@
             "d1_databases": [
                 {
                     "binding": "DB",
-                    "database_name": "prod-domain-watcher",
-                    "database_id": "2a131ec9-4d76-4bef-9fbd-63851e1ad919" // Replace with your actual production database ID. View README.md for details.
+                    "database_name": "prod-domain-watcher-private",
+                    "database_id": "86f55ae9-f448-496c-a17a-2ab9f8329a19" // Replace with your actual production database ID. View README.md for details.
                 }
             ],
             // Service bindings - allows worker to call itself
             "services": [
                 {
                     "binding": "SELF", // Binding name / in cron.js used as env.SELF (...if (env.SELF) {...)
-                    "service": "domain-watcher" // Service name (must match "name")
+                    "service": "check-watcher-private" // Service name (must match "name")
                 }
             ],
             // Cron Jobs - automated task scheduling - in lib/cloudflare/cron.js
@@ -69,7 +69,7 @@
                 "crons": ["* * * * *"] // Every minute
             },
             // Cloudflare Worker application name
-            "name": "domain-watcher"
+            "name": "check-watcher-private"
         }
     },
 
