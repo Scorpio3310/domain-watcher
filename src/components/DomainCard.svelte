@@ -7,95 +7,24 @@
     import { isDemo } from "$src/lib/utils/helpers";
     import Tooltip from "$components/Tooltip.svelte";
     import { toast } from "$src/lib/stores/toast.svelte.js";
-    import { superForm } from "sveltekit-superforms";
     import {
         formatHumanDate,
         formatExpirationDate,
         formatLastChecked,
         getExpirationStatus,
     } from "$src/lib/utils/helpers";
+    import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
 
     //// PROPS ////
-    let {
-        data, // Domain data object containing domain information
-        uiView, // Current view mode (compact/detailed)
-        superFormData,
-        ...restProps // Rest of props including deleteDomainEnhance, deleteDomainConstraints, etc.
-    } = $props();
-
-    //// SUPERFORMS ////
-    const {
-        form: deleteForm,
-        submitting: deleteSubmitting,
-        errors: deleteErrors,
-        constraints: deleteConstraints,
-        enhance: deleteEnhance,
-    } = superForm(superFormData, {
-        id: `delete-domain-${data.id}`,
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
-        },
-    });
-
-    const {
-        form: checkForm,
-        submitting: checkSubmitting,
-        constraints: checkConstraints,
-        enhance: checkEnhance,
-    } = superForm(superFormData, {
-        id: `check-domain-${data.id}`,
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
-        },
-    });
-
-    const {
-        form: sslForm,
-        submitting: sslSubmitting,
-        constraints: sslConstraints,
-        enhance: sslEnhance,
-    } = superForm(superFormData, {
-        id: `ssl-domain-${data.id}`,
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
-        },
-    });
-
-    const {
-        form: nsForm,
-        submitting: nsSubmitting,
-        constraints: nsConstraints,
-        enhance: nsEnhance,
-    } = superForm(superFormData, {
-        id: `ns-domain-${data.id}`,
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
-        },
-    });
-
-    // Set domain IDs
-    $effect(() => {
-        $deleteForm.domainId = data?.id;
-        $checkForm.domainId = data?.id;
-        $sslForm.domainId = data?.id;
-        $nsForm.domainId = data?.id;
-    });
+    let { data, uiView } = $props();
 
     //// STATES ////
     let isExpanded = $state(false);
     let showDeleteConfirmation = $state(false);
+    let nsSubmitting = $state(false);
+    let sslSubmitting = $state(false);
+    let checkSubmitting = $state(false);
+    let removeSubmitting = $state(false);
 
     /**
      * Toggle expansion state for showing more/less details
@@ -202,15 +131,21 @@
                     />
 
                     <form
-                        method="POST"
-                        action="?/deleteDomain"
-                        use:deleteEnhance
+                        {...remove.enhance(async ({ submit }) => {
+                            removeSubmitting = true;
+                            try {
+                                await submit();
+                                removeSubmitting = false;
+                                toast.show(remove?.result);
+                            } catch (error) {
+                                console.log(error);
+                            }
+                        })}
                     >
                         <input
                             type="hidden"
                             name="domainId"
-                            bind:value={$deleteForm.domainId}
-                            {...$deleteConstraints?.domainId}
+                            value={data?.id}
                             readonly
                         />
                         {#if isDemo()}
@@ -233,7 +168,7 @@
                                 color="black"
                                 class="button--red "
                                 ariaLabel="Delete domain"
-                                disabled={$deleteSubmitting ? true : false}
+                                disabled={removeSubmitting ? true : false}
                             />
                         {/if}
                     </form>
@@ -360,12 +295,22 @@
     <div class="other">
         <span class="opacity-50">Options:</span>
         <div class="buttons">
-            <form method="POST" action="?/checkNSInfo" use:nsEnhance>
+            <form
+                {...ns.enhance(async ({ submit }) => {
+                    nsSubmitting = true;
+                    try {
+                        await submit();
+                        nsSubmitting = false;
+                        toast.show(ns?.result);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                })}
+            >
                 <input
-                    type="hidden"
                     name="domainId"
-                    bind:value={$nsForm.domainId}
-                    {...$nsConstraints?.domainId}
+                    value={data?.id}
+                    type="hidden"
                     readonly
                 />
                 <Button
@@ -376,19 +321,29 @@
                     ariaLabel="NS Lookup - Check"
                     icon={isDemo()
                         ? "iconoir:dns"
-                        : $nsSubmitting
+                        : nsSubmitting
                           ? "iconoir:refresh-double"
                           : "iconoir:dns"}
-                    iconClass={$nsSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || $nsSubmitting}
+                    iconClass={nsSubmitting ? "animate-spin" : ""}
+                    disabled={isDemo() || nsSubmitting}
                 />
             </form>
-            <form method="POST" action="?/checkSSLInfo" use:sslEnhance>
+            <form
+                {...ssl.enhance(async ({ submit }) => {
+                    sslSubmitting = true;
+                    try {
+                        await submit();
+                        sslSubmitting = false;
+                        toast.show(ssl?.result);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                })}
+            >
                 <input
                     type="hidden"
                     name="domainId"
-                    bind:value={$sslForm.domainId}
-                    {...$sslConstraints?.domainId}
+                    value={data?.id}
                     readonly
                 />
 
@@ -400,19 +355,30 @@
                     ariaLabel="SSL Lookup - Check"
                     icon={isDemo()
                         ? "iconoir:security-pass"
-                        : $sslSubmitting
+                        : sslSubmitting
                           ? "iconoir:refresh-double"
                           : "iconoir:security-pass"}
-                    iconClass={$sslSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || $sslSubmitting}
+                    iconClass={sslSubmitting ? "animate-spin" : ""}
+                    disabled={isDemo() || sslSubmitting}
                 />
             </form>
-            <form method="POST" action="?/manuallyCheckDomain" use:checkEnhance>
+
+            <form
+                {...check.enhance(async ({ submit }) => {
+                    checkSubmitting = true;
+                    try {
+                        await submit();
+                        checkSubmitting = false;
+                        toast.show(check?.result);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                })}
+            >
                 <input
                     type="hidden"
                     name="domainId"
-                    bind:value={$checkForm.domainId}
-                    {...$checkConstraints?.domainId}
+                    value={data?.id}
                     readonly
                 />
 
@@ -424,11 +390,11 @@
                     ariaLabel="Scan domain for latest status and details"
                     icon={isDemo()
                         ? "iconoir:search"
-                        : $checkSubmitting
+                        : checkSubmitting
                           ? "iconoir:refresh-double"
                           : "iconoir:search"}
-                    iconClass={$checkSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || $checkSubmitting}
+                    iconClass={checkSubmitting ? "animate-spin" : ""}
+                    disabled={isDemo() || checkSubmitting}
                 />
             </form>
         </div>

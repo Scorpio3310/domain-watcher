@@ -9,4 +9,23 @@ export async function handle_db_connect({ event, resolve }) {
     return await resolve(event);
 }
 
+/**
+ * Basic error handler with simple logging
+ * @type {import('@sveltejs/kit').HandleServerError}
+ */
+export async function handleError({ error, event, status, message }) {
+    // Simple error logging
+    console.error("🚨 Server Error:", {
+        message: error?.message || message,
+        status,
+        url: event.url.pathname,
+        timestamp: new Date().toISOString(),
+    });
+
+    // Return clean error message
+    return {
+        message: status >= 500 ? "Something went wrong" : message,
+    };
+}
+
 export const handle = sequence(handle_db_connect);

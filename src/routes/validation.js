@@ -1,12 +1,10 @@
 import { z } from "zod/v4";
 
-export const domainIdSchema = z.object({
-    domainId: z
-        .number()
-        .int("ID must be an integer")
-        .positive("ID must be positive")
-        .max(9999999, "ID too large"),
-});
+export const domainIdSchema = z.coerce
+    .number()
+    .int("ID must be an integer")
+    .positive("ID must be positive")
+    .max(9999999, "ID too large");
 
 export const addDomainSchema = z.object({
     domainName: z

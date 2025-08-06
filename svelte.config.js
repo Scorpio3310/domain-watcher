@@ -12,6 +12,9 @@ const config = {
             $src: "src",
             $home: ".",
         },
+        experimental: {
+            remoteFunctions: true,
+        },
     },
     vitePlugin: {
         inspector: {
