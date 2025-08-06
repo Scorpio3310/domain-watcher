@@ -256,6 +256,7 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
     PUBLIC_TIMEZONE = Europe/Ljubljana         # Change to your timezone (e.g., America/New_York, UTC)
     CRON_SECRET = strong-secret-key-here       # Replace with a secure random string (32+ characters)
     PRODUCTION_DOMAIN = https://your-app.com   # Live application URL for email assets and robots.txt control
+    ALLOW_ROBOTS = false                       # Set to true ONLY when ready for search engine indexing
     ```
 
 > ⚠️ **Important**: The CRON_SECRET environment variable must be identical to the value set in your [`wrangler.jsonc`](wrangler.jsonc) configuration file under `env.production.vars.CRON_SECRET`!
@@ -271,7 +272,7 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
 **Set Environment Variables** in Cloudflare Worker Dashboard:
 
 -   Go to **Settings > Build > Variables and Secrets**
--   Add `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE`, `PRODUCTION_DOMAIN` and `CRON_SECRET`
+-   Add `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE`, `PRODUCTION_DOMAIN`, `CRON_SECRET` and `ALLOW_ROBOTS`
 
 ---
 
@@ -302,7 +303,7 @@ For detailed table structure and relationships, see [schema.sql](schema.sql)
 ### Common Issues
 
 1. **"Database not found"**: Ensure you've created the database and updated the `database_id` in `wrangler.jsonc`
-2. **"Environment variables missing"**: Set `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE` and `CRON_SECRET` in Cloudflare Dashboard
+2. **"Environment variables missing"**: Set `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE`, `CRON_SECRET` and `ALLOW_ROBOTS` in Cloudflare Dashboard
 3. **Cron jobs not working**: Ensure `CRON_SECRET` values are identical in `wrangler.toml` and Cloudflare Dashboard **Variables and Secrets**
 4. **Cron jobs not working locally**: Use `npx wrangler dev --test-scheduled` and test via the `/__scheduled` endpoint
 
