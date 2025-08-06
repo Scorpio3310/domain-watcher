@@ -7,6 +7,7 @@
     import { enhance } from "$app/forms";
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import { isDemo } from "$src/lib/utils/helpers";
+    import { batchCheck } from "$src/lib/remote/check-domains.remote";
 
     let { type = "default", isApiConfigured = false } = $props();
     let isChecking = $state(false);
@@ -112,21 +113,16 @@
             </div>
 
             <form
-                action="?/checkDomains"
-                method="POST"
-                use:enhance={() => {
+                {...batchCheck.enhance(async ({ submit }) => {
                     isChecking = true;
-                    return async ({ result, update }) => {
-                        await update();
+                    try {
+                        await submit();
                         isChecking = false;
-
-                        if (result.type === "success") {
-                            toast.show(result?.data);
-                        } else if (result.type === "failure") {
-                            toast.error(result?.data);
-                        }
-                    };
-                }}
+                        toast.show(batchCheck?.result);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                })}
             >
                 {#if isDemo()}
                     <Tooltip

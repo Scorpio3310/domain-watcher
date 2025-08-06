@@ -9,7 +9,7 @@ export const slackNotifier = {
      * @param {Object} domainUpdates - Domain update data
      * @returns {Promise<Object>} Send result
      */
-    async sendDomainReport(settings, domainUpdates) {
+    async sendDomainReport(settings, domainUpdates, origin = "") {
         try {
             if (!settings?.webhook_url) {
                 return {
@@ -164,8 +164,47 @@ export const slackNotifier = {
             addedSection = true;
         });
 
+        // If no domains to report, add a fun "all quiet" message
+        if (totalCount === 0) {
+            const quietMessages = [
+                "🧘‍♂️ *Zen mode activated* - All your domains are chilling like champions today!",
+                "🏖️ *Beach vibes only* - Your domains are soaking up the sun, nothing to worry about!",  
+                "😴 *Sleepy Sunday energy* - Even your domains decided to take a nap today!",
+                "🕶️ *Cool as a cucumber* - Your domain portfolio is looking smooth and unbothered!",
+                "🎭 *Plot twist:* Sometimes no news IS the best news! Your domains are behaving perfectly.",
+                "🏆 *Achievement unlocked:* Zero drama domains! Time to celebrate with a coffee ☕",
+                "🦄 *Unicorn status* - Your domains are so well-behaved, they're basically mythical today!",
+                "🎪 *The show must NOT go on* - Because there's literally nothing dramatic happening! 🎉"
+            ];
+
+            // Pick a random message based on the day to keep it fresh
+            const messageIndex = new Date().getDay() % quietMessages.length;
+            const selectedMessage = quietMessages[messageIndex];
+
+            blocks.push({ type: "divider" });
+            blocks.push({
+                type: "section", 
+                text: {
+                    type: "mrkdwn",
+                    text: selectedMessage
+                }
+            });
+
+            blocks.push({
+                type: "context",
+                elements: [
+                    {
+                        type: "mrkdwn", 
+                        text: "💡 _Pro tip: This is exactly what you want to see! No expired domains, no urgent renewals, just peaceful domain harmony._"
+                    }
+                ]
+            });
+        }
+
         return {
-            text: `🌐 Domain Watcher: ${totalCount} updates`,
+            text: totalCount === 0 
+                ? `🌐 Domain Watcher: All quiet on the western front! 🤠`
+                : `🌐 Domain Watcher: ${totalCount} updates`,
             blocks,
         };
     },

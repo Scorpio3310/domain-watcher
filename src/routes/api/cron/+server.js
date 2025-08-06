@@ -141,7 +141,7 @@ export async function POST({ request, url }) {
         }
 
         // Execute smart cron job (only verifies when needed)
-        const result = await cronNotifications.checkAndSend(isManual);
+        const result = await cronNotifications.checkAndSend(isManual, url.origin);
 
         const executionTime = Date.now() - startTime;
         console.log(`⏱️ Cron job completed in ${executionTime}ms`);

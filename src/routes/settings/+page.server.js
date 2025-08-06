@@ -12,10 +12,10 @@ import {
     slackWebhookSchema,
     resendSchema,
 } from "./validation";
-import { apiKey } from "$src/lib/server/api-key";
-import { ui } from "$src/lib/server/settings";
-import { slack } from "$src/lib/server/slack";
-import { resend } from "$src/lib/server/resend";
+import { apiKey } from "$src/lib/server/infrastructure/api-key";
+import { ui } from "$src/lib/server/services/settings";
+import { slack } from "$src/lib/server/infrastructure/slack-client";
+import { resend } from "$src/lib/server/infrastructure/resend-client";
 
 // ========================================
 // PAGE LOAD

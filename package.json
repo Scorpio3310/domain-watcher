@@ -35,7 +35,7 @@
     "devDependencies": {
         "@iconify/svelte": "^5.0.1",
         "@sveltejs/adapter-cloudflare": "^7.1.2",
-        "@sveltejs/kit": "^2.27.0",
+        "@sveltejs/kit": "^2.27.1",
         "@sveltejs/vite-plugin-svelte": "^6.1.0",
         "@tailwindcss/vite": "^4.1.11",
         "svelte": "^5.37.3",
@@ -44,8 +44,8 @@
         "tailwindcss": "^4.1.11",
         "typescript": "^5.9.2",
         "vite": "^7.0.6",
-        "wrangler": "^4.27.0",
-        "zod": "^4.0.14"
+        "wrangler": "^4.28.0",
+        "zod": "^4.0.15"
     },
     "pnpm": {
         "onlyBuiltDependencies": [

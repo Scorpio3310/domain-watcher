@@ -8,7 +8,7 @@ import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { WHOIS_JSON_API_STATUS } from "$lib/constants/constants";
 import { isDemo } from "$src/lib/utils/helpers";
 import { maskApiKey } from "$lib/utils/helpers";
-import { testApiKeyConnection } from "./whois";
+import { testApiKeyConnection } from "./whois-client";
 
 // ========================================
 // TYPES & INTERFACES
