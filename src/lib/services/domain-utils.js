@@ -383,33 +383,46 @@ export const verificationEngine = {
                 return this.verifyDomain(domain);
             });
 
-            const batchResults = await Promise.all(batchPromises);
+            const batchResults = await Promise.allSettled(batchPromises);
 
-            // Collect results
-            batchResults.forEach((verifyResult) => {
-                if (verifyResult.success) {
-                    if (verifyResult.wasAvailable) {
-                        results.available.push(
-                            domains.find(
+            // Collect results using allSettled pattern
+            batchResults.forEach((settledResult, index) => {
+                if (settledResult.status === 'fulfilled') {
+                    const verifyResult = settledResult.value;
+                    
+                    if (verifyResult.success) {
+                        if (verifyResult.wasAvailable) {
+                            const domain = domains.find(
                                 (d) => d.domain_name === verifyResult.domain
-                            )
-                        );
-                    } else if (verifyResult.isStillRegistered) {
-                        const domain = domains.find(
-                            (d) => d.domain_name === verifyResult.domain
-                        );
-                        const isExpired =
-                            domain.expires &&
-                            new Date(domain.expires) < new Date();
-                        if (isExpired) {
-                            results.stillRegistered.push(domain);
+                            );
+                            if (domain) results.available.push(domain);
+                        } else if (verifyResult.isStillRegistered) {
+                            const domain = domains.find(
+                                (d) => d.domain_name === verifyResult.domain
+                            );
+                            if (domain) {
+                                const isExpired = domain.expires && 
+                                    new Date(domain.expires) < new Date();
+                                if (isExpired) {
+                                    results.stillRegistered.push(domain);
+                                }
+                            }
                         }
+                    } else {
+                        // Handle verification errors
+                        results.errors++;
+                        results.errorMessages.push(
+                            `${verifyResult.domain}: ${verifyResult.error}`
+                        );
                     }
                 } else {
+                    // Handle promise rejection
+                    const domainName = batch[index]?.domain_name || 'unknown';
                     results.errors++;
                     results.errorMessages.push(
-                        `${verifyResult.domain}: ${verifyResult.error}`
+                        `${domainName}: Promise rejected - ${settledResult.reason}`
                     );
+                    console.error(`🚨 Promise rejected for ${domainName}:`, settledResult.reason);
                 }
             });
 
