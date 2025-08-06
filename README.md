@@ -255,7 +255,7 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
     PUBLIC_ENVIRONMENT = production
     PUBLIC_TIMEZONE = Europe/Ljubljana         # Change to your timezone (e.g., America/New_York, UTC)
     CRON_SECRET = strong-secret-key-here       # Replace with a secure random string (32+ characters)
-    PRODUCTION_DOMAIN = https://your-app.com   # Set to your live application URL for robots.txt control
+    PRODUCTION_DOMAIN = https://your-app.com   # Live application URL for email assets and robots.txt control
     ```
 
 > ⚠️ **Important**: The CRON_SECRET environment variable must be identical to the value set in your [`wrangler.jsonc`](wrangler.jsonc) configuration file under `env.production.vars.CRON_SECRET`!
