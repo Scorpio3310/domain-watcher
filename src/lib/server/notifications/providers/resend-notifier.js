@@ -251,7 +251,7 @@ export const resendNotifier = {
          <div style="background-color: #1A1A1A; padding: 12px; border-radius: 100px; max-width: 218px; margin: 0 auto; margin-bottom: 24px;">
             <img src="${origin}/img_logo.png" 
                  alt="Domain Watcher Logo" 
-                 style="width: 218px; "
+                 style="width: 218px; display: block;"
                  width="218">
         </div>
         <div style="background-color: #FFFFFF; padding: 20px; border-radius: 32px; max-width: 768px; margin: 0 auto; width: 100%;">
