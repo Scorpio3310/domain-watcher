@@ -47,13 +47,6 @@
     // It is only used when deploying to Cloudflare Workers.
     "env": {
         "production": {
-            "d1_databases": [
-                {
-                    "binding": "DB",
-                    "database_name": "prod-domain-watcher-private",
-                    "database_id": "86f55ae9-f448-496c-a17a-2ab9f8329a19" // Replace with your actual production database ID. View README.md for details.
-                }
-            ],
             // Service bindings - allows worker to call itself
             "services": [
                 {
