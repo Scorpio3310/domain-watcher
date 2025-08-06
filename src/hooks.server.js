@@ -15,16 +15,16 @@ export async function handle_db_connect({ event, resolve }) {
  */
 export async function handleError({ error, event, status, message }) {
     // Simple error logging
-    console.error('🚨 Server Error:', {
+    console.error("🚨 Server Error:", {
         message: error?.message || message,
         status,
         url: event.url.pathname,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     });
 
     // Return clean error message
     return {
-        message: status >= 500 ? 'Something went wrong' : message
+        message: status >= 500 ? "Something went wrong" : message,
     };
 }
 
