@@ -158,38 +158,6 @@ export const executeDomainQuery = async (queryKey, params) => {
 };
 
 // ========================================
-// ERROR HANDLING UTILITIES
-// ========================================
-
-/**
- * Parses a Zod validation error and formats its issues into human-readable messages.
- * Transforms validation errors into user-friendly format for API responses.
- *
- * @function createZodErrors
- * @memberof module:DomainUtils
- * @param {import("zod").ZodError} error - The ZodError containing validation issues
- * @returns {string[]} An array of formatted error messages, each in the form "<field>: <message>"
- * @throws {SyntaxError} When error.message is not valid JSON
- *
- * @example
- * ```javascript
- * try {
- *   const result = schema.parse(data);
- * } catch (error) {
- *   if (error instanceof ZodError) {
- *     const errorMessages = createZodErrors(error);
- *     return { status: 400, message: errorMessages };
- *   }
- * }
- * ```
- *
- */
-export const createZodErrors = (error) => {
-    const messages = JSON.parse(error.message);
-    return messages.map((message) => `${message.path[0]}: ${message.message}`);
-};
-
-// ========================================
 // DOMAIN VERIFICATION ENGINE
 // ========================================
 
@@ -387,9 +355,9 @@ export const verificationEngine = {
 
             // Collect results using allSettled pattern
             batchResults.forEach((settledResult, index) => {
-                if (settledResult.status === 'fulfilled') {
+                if (settledResult.status === "fulfilled") {
                     const verifyResult = settledResult.value;
-                    
+
                     if (verifyResult.success) {
                         if (verifyResult.wasAvailable) {
                             const domain = domains.find(
@@ -401,7 +369,8 @@ export const verificationEngine = {
                                 (d) => d.domain_name === verifyResult.domain
                             );
                             if (domain) {
-                                const isExpired = domain.expires && 
+                                const isExpired =
+                                    domain.expires &&
                                     new Date(domain.expires) < new Date();
                                 if (isExpired) {
                                     results.stillRegistered.push(domain);
@@ -417,12 +386,15 @@ export const verificationEngine = {
                     }
                 } else {
                     // Handle promise rejection
-                    const domainName = batch[index]?.domain_name || 'unknown';
+                    const domainName = batch[index]?.domain_name || "unknown";
                     results.errors++;
                     results.errorMessages.push(
                         `${domainName}: Promise rejected - ${settledResult.reason}`
                     );
-                    console.error(`🚨 Promise rejected for ${domainName}:`, settledResult.reason);
+                    console.error(
+                        `🚨 Promise rejected for ${domainName}:`,
+                        settledResult.reason
+                    );
                 }
             });
 

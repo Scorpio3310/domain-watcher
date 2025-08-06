@@ -51,15 +51,18 @@ export const ns = form(async (data) => {
 
     const domainId = data.get("domainId");
 
-    const validateRes = domainIdSchema.safeParse({
-        domainId: parseInt(domainId, 10),
-    });
+    const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { status: 400, message: createZodErrors(validateRes.error) };
+        return { 
+            status: 400, 
+            message: validateRes.error.issues.map(i => i.message) 
+        };
     }
+    
+    const validDomainId = validateRes.data;
 
-    const domain = await findDomainById(domainId);
+    const domain = await findDomainById(validDomainId);
     if (!domain)
         return {
             status: 404,
@@ -81,7 +84,7 @@ export const ns = form(async (data) => {
 
         const saved = await executeDomainQuery("UPDATE_DOMAIN_NS", [
             JSON.stringify(apiResult.data),
-            domainId,
+            validDomainId,
         ]);
         return saved
             ? {
@@ -132,15 +135,18 @@ export const ssl = form(async (data) => {
 
     const domainId = data.get("domainId");
 
-    const validateRes = domainIdSchema.safeParse({
-        domainId: parseInt(domainId, 10),
-    });
+    const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { status: 400, message: createZodErrors(validateRes.error) };
+        return { 
+            status: 400, 
+            message: validateRes.error.issues.map(i => i.message) 
+        };
     }
+    
+    const validDomainId = validateRes.data;
 
-    const domain = await findDomainById(domainId);
+    const domain = await findDomainById(validDomainId);
     if (!domain)
         return {
             status: 404,
@@ -162,7 +168,7 @@ export const ssl = form(async (data) => {
 
         const saved = await executeDomainQuery("UPDATE_DOMAIN_SSL", [
             JSON.stringify(apiResult.data),
-            domainId,
+            validDomainId,
         ]);
         return saved
             ? {
@@ -213,19 +219,22 @@ export const check = form(async (data) => {
 
     const domainId = data.get("domainId");
 
-    const validateRes = domainIdSchema.safeParse({
-        domainId: parseInt(domainId, 10),
-    });
+    const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { status: 400, message: createZodErrors(validateRes.error) };
+        return { 
+            status: 400, 
+            message: validateRes.error.issues.map(i => i.message) 
+        };
     }
+    
+    const validDomainId = validateRes.data;
 
     try {
         const accessError = await validateAccess();
         if (accessError) return accessError;
 
-        const domain = await findDomainById(domainId);
+        const domain = await findDomainById(validDomainId);
         if (!domain)
             return {
                 status: 404,
@@ -280,19 +289,22 @@ export const remove = form(async (data) => {
 
     const domainId = data.get("domainId");
 
-    const validateRes = domainIdSchema.safeParse({
-        domainId: parseInt(domainId, 10),
-    });
+    const validateRes = domainIdSchema.safeParse(domainId);
 
     if (!validateRes.success) {
-        return { status: 400, message: createZodErrors(validateRes.error) };
+        return { 
+            status: 400, 
+            message: validateRes.error.issues.map(i => i.message) 
+        };
     }
+    
+    const validDomainId = validateRes.data;
 
     try {
         const demoError = validateDemoMode();
         if (demoError) return demoError;
 
-        const domain = await findDomainById(domainId);
+        const domain = await findDomainById(validDomainId);
         if (!domain)
             return {
                 status: 404,
@@ -301,7 +313,7 @@ export const remove = form(async (data) => {
             };
 
         const wasRemoved = await executeDomainQuery("DELETE_DOMAIN", [
-            domainId,
+            validDomainId,
         ]);
 
         return wasRemoved
