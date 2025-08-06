@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { PRODUCTION_DOMAIN } from "$env/static/private";
 
 /**
  * Resend Email notification service for formatting and sending messages
@@ -13,7 +14,7 @@ export const resendNotifier = {
      * @param {Object} domainUpdates - Domain update data
      * @returns {Promise<Object>} Send result
      */
-    async sendDomainReport(settings, domainUpdates, origin = "") {
+    async sendDomainReport(settings, domainUpdates) {
         try {
             if (!settings?.api_key || !settings?.to_email) {
                 return {
@@ -25,7 +26,7 @@ export const resendNotifier = {
             // Initialize Resend client
             const resend = new Resend(settings.api_key);
 
-            const emailContent = this.formatEmailContent(domainUpdates, origin);
+            const emailContent = this.formatEmailContent(domainUpdates);
 
             const emailData = {
                 from: settings.from_email || null,
@@ -107,7 +108,7 @@ export const resendNotifier = {
     /**
      * Format domain updates into email content (HTML + Text)
      */
-    formatEmailContent(domainUpdates, origin = "") {
+    formatEmailContent(domainUpdates) {
         const {
             available = [],
             expiring = [],
@@ -117,16 +118,11 @@ export const resendNotifier = {
         const timestamp = new Date().toLocaleString();
 
         // Generate HTML version
-        const html = this.generateHtmlContent(
-            timestamp,
-            totalCount,
-            {
-                available,
-                expiring,
-                expired,
-            },
-            origin
-        );
+        const html = this.generateHtmlContent(timestamp, totalCount, {
+            available,
+            expiring,
+            expired,
+        });
 
         // Generate text version
         const text = this.generateTextContent(timestamp, totalCount, {
@@ -144,8 +140,7 @@ export const resendNotifier = {
     generateHtmlContent(
         timestamp,
         totalCount,
-        { available, expiring, expired },
-        origin = ""
+        { available, expiring, expired }
     ) {
         const sections = [
             {
@@ -249,7 +244,7 @@ export const resendNotifier = {
 <body style="background-color: #F0F0F0; margin: 0; font-family: Figtree, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <div style="padding: 32px 16px;">
          <div style="background-color: #1A1A1A; padding: 12px; border-radius: 100px; max-width: 218px; margin: 0 auto; margin-bottom: 24px;">
-            <img src="${origin}/img_logo.png" 
+            <img src="${PRODUCTION_DOMAIN}/img_logo.png" 
                  alt="Domain Watcher Logo" 
                  style="width: 218px; display: block;"
                  width="218">
