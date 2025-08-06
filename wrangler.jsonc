@@ -47,9 +47,6 @@
     // It is only used when deploying to Cloudflare Workers.
     "env": {
         "production": {
-            "vars": {
-                "CRON_SECRET": "strong-secret-key-here" // Replace with a secure random string (32+ characters)
-            },
             "d1_databases": [
                 {
                     "binding": "DB",
