@@ -76,7 +76,7 @@ export const cronNotifications = {
      *
      * @throws {Error} Domain verification or notification sending failures
      */
-    async checkAndSend(force = false) {
+    async checkAndSend(force = false, origin = "") {
         const currentTime = getCurrentTimeInTimezone();
         console.log(`🕐 Check at: ${currentTime} ${force ? "(FORCED)" : ""}`);
 
@@ -105,7 +105,8 @@ export const cronNotifications = {
             const notifications = await this.sendNotifications(
                 providersToSend,
                 domains,
-                force
+                force,
+                origin
             );
 
             return {
@@ -285,15 +286,15 @@ export const cronNotifications = {
      *
      * @throws {Error} Individual provider failures are captured and returned in results.errors
      */
-    async sendNotifications(providers, domains, forced = false) {
+    async sendNotifications(providers, domains, forced = false, origin = "") {
         const totalCount =
             domains.available.length +
             domains.expiring.length +
             domains.expired.length;
 
-        if (totalCount === 0 && !forced) {
-            console.log("⏭️ No domains to report");
-            return { sent: 0, providers: [] };
+        // Always send notifications, even if no domains to report
+        if (totalCount === 0) {
+            console.log("📭 No domain updates today - sending 'all quiet' notification");
         }
 
         const results = { sent: 0, providers: [], errors: [] };
@@ -315,7 +316,8 @@ export const cronNotifications = {
                         expiring: domains.expiring,
                         expired: domains.expired,
                         totalCount,
-                    }
+                    },
+                    origin
                 );
 
                 if (result.success) {

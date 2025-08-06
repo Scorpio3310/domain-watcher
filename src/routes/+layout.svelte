@@ -88,10 +88,6 @@
 <!-- Global Toast System -->
 {#if toast.current}
     {#key toast.current.id}
-        <Toast
-            message={toast.current.text}
-            type={toast.current.type || "info"}
-            onClose={toast.clear}
-        />
+        <Toast message={toast.current.text} onClose={toast.clear} />
     {/key}
 {/if}
