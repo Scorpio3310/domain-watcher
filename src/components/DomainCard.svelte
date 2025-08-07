@@ -76,9 +76,10 @@
                     position="bottom"
                 >
                     <div
-                        class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max"
+                        class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
                     >
                         Run check
+                        <Icon icon="iconoir:info-circle" />
                     </div>
                 </Tooltip>
             {/if}
