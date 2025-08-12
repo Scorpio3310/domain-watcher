@@ -473,7 +473,8 @@ export const getExpirationStatus = (expirationDate, assumeUTC = true) => {
 
     const daysUntilExpiration = differenceInDays(date, new Date());
     const isExpired = isPast(date);
-    const isExpiringSoon = daysUntilExpiration <= 30 && daysUntilExpiration > 0;
+    const isExpiringSoon =
+        daysUntilExpiration <= 30 && daysUntilExpiration >= 0;
 
     return {
         status: isExpired
