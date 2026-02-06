@@ -34,7 +34,7 @@
     const config = $derived(headerConfigs[type] || headerConfigs.default);
 </script>
 
-<header class={config.justify === "center" ? "!justify-center" : ""}>
+<header class={config.justify === "center" ? "justify-center!" : ""}>
     {#if config.showBackButton}
         {@render headerBackButton()}
     {:else if config.showLogo}
@@ -58,7 +58,7 @@
             <img src="/logo.svg" alt="Domain Watcher Logo" class="logo" />
             <div
                 class="title {PUBLIC_ENVIRONMENT === 'production'
-                    ? '!block'
+                    ? 'block!'
                     : ''}"
             >
                 Domain Watcher
@@ -82,7 +82,7 @@
             <Icon icon="iconoir:arrow-left" class="icon" />
             <div
                 class="title {PUBLIC_ENVIRONMENT === 'production'
-                    ? '!block'
+                    ? 'block!'
                     : ''}"
             >
                 Go Back
@@ -132,7 +132,7 @@
                             size="lg"
                             icon="iconoir:search"
                             color="white"
-                            class="!hidden sm:!flex"
+                            class="hidden! sm:flex!"
                             disabled={isDemo()}
                         />
                         <Button
@@ -140,16 +140,18 @@
                             size="lg"
                             icon="iconoir:search"
                             color="white"
-                            class="!flex sm:!hidden"
+                            class="flex! sm:hidden!"
                             disabled={isDemo()}
                         />
                     </Tooltip>
                 {:else}
                     <Button
                         type="submit"
-                        text={batchCheck.pending ? "Checking..." : "Check Domains"}
+                        text={batchCheck.pending
+                            ? "Checking..."
+                            : "Check Domains"}
                         size="lg"
-                        class="!hidden sm:!flex"
+                        class="hidden! sm:flex!"
                         icon={batchCheck.pending
                             ? "iconoir:refresh-double"
                             : "iconoir:search"}
@@ -165,7 +167,7 @@
                             : "iconoir:search"}
                         iconClass={batchCheck.pending ? "animate-spin" : ""}
                         color="white"
-                        class="!flex sm:!hidden"
+                        class="flex! sm:hidden!"
                         disabled={!!batchCheck.pending}
                     />
                 {/if}

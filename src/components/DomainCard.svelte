@@ -138,22 +138,31 @@
                             try {
                                 await submit();
 
-                                const issues = removeForm.fields.allIssues() ?? [];
+                                const issues =
+                                    removeForm.fields.allIssues() ?? [];
                                 if (issues.length > 0) {
                                     toast.show({
                                         status: 400,
-                                        message: issues.map((i) => i.message).join(", "),
+                                        message: issues
+                                            .map((i) => i.message)
+                                            .join(", "),
                                     });
                                 } else {
                                     toast.show(removeForm?.result);
                                 }
                             } catch (error) {
-                                toast.show({ status: 500, message: "Something went wrong" });
+                                toast.show({
+                                    status: 500,
+                                    message: "Something went wrong",
+                                });
                             }
                         })}
                     >
                         <input
-                            {...removeForm.fields.domainId.as("hidden", data?.id)}
+                            {...removeForm.fields.domainId.as(
+                                "hidden",
+                                data?.id,
+                            )}
                             readonly
                         />
                         {#if isDemo()}
@@ -246,7 +255,7 @@
 {/snippet}
 
 {#snippet expandedInfo()}
-    <hr class="!mt-2.5" />
+    <hr class="mt-2.5!" />
     <p class="inline">
         <span class="opacity-50">ID:</span>
         {data?.id || "/"}
@@ -312,7 +321,9 @@
                         if (issues.length > 0) {
                             toast.show({
                                 status: 400,
-                                message: issues.map((i) => i.message).join(", "),
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
                             });
                         } else {
                             toast.show(nsForm?.result);
@@ -353,13 +364,18 @@
                         if (issues.length > 0) {
                             toast.show({
                                 status: 400,
-                                message: issues.map((i) => i.message).join(", "),
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
                             });
                         } else {
                             toast.show(sslForm?.result);
                         }
                     } catch (error) {
-                        toast.show({ status: 500, message: "Something went wrong" });
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
@@ -393,13 +409,18 @@
                         if (issues.length > 0) {
                             toast.show({
                                 status: 400,
-                                message: issues.map((i) => i.message).join(", "),
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
                             });
                         } else {
                             toast.show(checkForm?.result);
                         }
                     } catch (error) {
-                        toast.show({ status: 500, message: "Something went wrong" });
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >

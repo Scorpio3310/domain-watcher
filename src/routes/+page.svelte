@@ -25,7 +25,7 @@
                     toast.show(result.data?.form?.message);
                 }
             },
-        }
+        },
     );
 </script>
 
@@ -80,7 +80,7 @@
                 placeholder="Enter a domain name...."
                 disabled={false}
                 bind:value={$form.domainName}
-                class="!pr-40"
+                class="pr-40!"
                 variant={$errors.domainName ? "error" : "default"}
                 helperText={$errors.domainName ? $errors.domainName[0] : ""}
                 {...$constraints.domainName}

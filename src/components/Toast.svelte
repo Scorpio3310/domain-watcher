@@ -112,7 +112,7 @@
                 color="black"
                 onclick={handleCloseClick}
                 aria-label="Close notification"
-                class="hover:!bg-white/10"
+                class="hover:bg-white/10!"
             />
         </div>
     </div>

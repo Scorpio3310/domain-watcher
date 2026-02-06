@@ -46,7 +46,7 @@
                     toast.show(result.data?.form?.message);
                 }
             },
-        }
+        },
     );
 
     const {
@@ -226,7 +226,7 @@
                         <p class="text">
                             Last verified: <span class="italic">
                                 {formatLastChecked(
-                                    data?.apiKeyConfig?.connection_verified_at
+                                    data?.apiKeyConfig?.connection_verified_at,
                                 ) || "Never"}</span
                             >
                         </p>
@@ -346,7 +346,7 @@
                         size="md"
                         color="black-outline"
                         ariaLabel="Reset to Default"
-                        class="!hidden md:!flex"
+                        class="hidden! md:flex!"
                         disabled={isDemo() || $apiKeySubmitting}
                         onclick={() => {
                             $UIViewForm.viewMode = UI_DOMAIN_VIEW.COMPACT;
@@ -425,7 +425,7 @@
                         class="grid gap-3"
                         transition:slide={{ duration: 600 }}
                     >
-                        <hr class="!mt-5" />
+                        <hr class="mt-5!" />
 
                         <Input
                             type="text"
@@ -508,7 +508,7 @@
                                             Last verified: <span class="italic">
                                                 {formatLastChecked(
                                                     data?.slackWebhookConfig
-                                                        ?.connection_verified_at
+                                                        ?.connection_verified_at,
                                                 ) || "Never"}</span
                                             >
                                         </p>
@@ -606,7 +606,7 @@
                         class="grid gap-3"
                         transition:slide={{ duration: 600 }}
                     >
-                        <hr class="!mt-5" />
+                        <hr class="mt-5!" />
 
                         <Input
                             type="text"
@@ -728,7 +728,7 @@
                                             Last verified: <span class="italic">
                                                 {formatLastChecked(
                                                     data?.resendConfig
-                                                        ?.connection_verified_at
+                                                        ?.connection_verified_at,
                                                 ) || "Never"}</span
                                             >
                                         </p>
