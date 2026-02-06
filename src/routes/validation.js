@@ -1,10 +1,12 @@
 import { z } from "zod/v4";
 
-export const domainIdSchema = z.coerce
-    .number()
-    .int("ID must be an integer")
-    .positive("ID must be positive")
-    .max(9999999, "ID too large");
+export const domainIdFormSchema = z.object({
+    domainId: z.coerce
+        .number({ message: "Oops! That doesn't look like a valid ID - numbers only, please! 🔢" })
+        .int("Hmm, decimals aren't allowed here - whole numbers only! 🎯")
+        .positive("IDs need to be positive - no negativity allowed! ✨")
+        .max(9999999, "Whoa, that ID is way too big - keep it under 9,999,999! 📏"),
+});
 
 export const addDomainSchema = z.object({
     domainName: z

@@ -4,13 +4,11 @@
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
     import Tooltip from "./Tooltip.svelte";
-    import { enhance } from "$app/forms";
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import { isDemo } from "$src/lib/utils/helpers";
     import { batchCheck } from "$src/lib/remote/check-domains.remote";
 
     let { type = "default", isApiConfigured = false } = $props();
-    let isChecking = $state(false);
 
     const headerConfigs = {
         main: {
@@ -114,10 +112,8 @@
 
             <form
                 {...batchCheck.enhance(async ({ submit }) => {
-                    isChecking = true;
                     try {
                         await submit();
-                        isChecking = false;
                         toast.show(batchCheck?.result);
                     } catch (error) {
                         console.log(error);
@@ -151,26 +147,26 @@
                 {:else}
                     <Button
                         type="submit"
-                        text={isChecking ? "Checking..." : "Check Domains"}
+                        text={batchCheck.pending ? "Checking..." : "Check Domains"}
                         size="lg"
                         class="!hidden sm:!flex"
-                        icon={isChecking
+                        icon={batchCheck.pending
                             ? "iconoir:refresh-double"
                             : "iconoir:search"}
-                        iconClass={isChecking ? "animate-spin" : ""}
+                        iconClass={batchCheck.pending ? "animate-spin" : ""}
                         color="white"
-                        disabled={isChecking}
+                        disabled={!!batchCheck.pending}
                     />
                     <Button
                         type="submit"
                         size="lg"
-                        icon={isChecking
+                        icon={batchCheck.pending
                             ? "iconoir:refresh-double"
                             : "iconoir:search"}
-                        iconClass={isChecking ? "animate-spin" : ""}
+                        iconClass={batchCheck.pending ? "animate-spin" : ""}
                         color="white"
                         class="!flex sm:!hidden"
-                        disabled={isChecking}
+                        disabled={!!batchCheck.pending}
                     />
                 {/if}
             </form>

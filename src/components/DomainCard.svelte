@@ -18,13 +18,15 @@
     //// PROPS ////
     let { data, uiView } = $props();
 
+    //// FORM INSTANCES (isolated per domain) ////
+    const nsForm = $derived(ns.for(data?.id));
+    const sslForm = $derived(ssl.for(data?.id));
+    const checkForm = $derived(check.for(data?.id));
+    const removeForm = $derived(remove.for(data?.id));
+
     //// STATES ////
     let isExpanded = $state(false);
     let showDeleteConfirmation = $state(false);
-    let nsSubmitting = $state(false);
-    let sslSubmitting = $state(false);
-    let checkSubmitting = $state(false);
-    let removeSubmitting = $state(false);
 
     /**
      * Toggle expansion state for showing more/less details
@@ -57,7 +59,7 @@
      */
     const buttonIcon = $derived("iconoir:nav-arrow-up");
     const buttonIconClass = $derived(
-        `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`
+        `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`,
     );
 </script>
 
@@ -132,21 +134,26 @@
                     />
 
                     <form
-                        {...remove.enhance(async ({ submit }) => {
-                            removeSubmitting = true;
+                        {...removeForm.enhance(async ({ submit }) => {
                             try {
                                 await submit();
-                                removeSubmitting = false;
-                                toast.show(remove?.result);
+
+                                const issues = removeForm.fields.allIssues() ?? [];
+                                if (issues.length > 0) {
+                                    toast.show({
+                                        status: 400,
+                                        message: issues.map((i) => i.message).join(", "),
+                                    });
+                                } else {
+                                    toast.show(removeForm?.result);
+                                }
                             } catch (error) {
-                                console.log(error);
+                                toast.show({ status: 500, message: "Something went wrong" });
                             }
                         })}
                     >
                         <input
-                            type="hidden"
-                            name="domainId"
-                            value={data?.id}
+                            {...removeForm.fields.domainId.as("hidden", data?.id)}
                             readonly
                         />
                         {#if isDemo()}
@@ -169,7 +176,7 @@
                                 color="black"
                                 class="button--red "
                                 ariaLabel="Delete domain"
-                                disabled={removeSubmitting ? true : false}
+                                disabled={!!removeForm.pending}
                             />
                         {/if}
                     </form>
@@ -297,21 +304,29 @@
         <span class="opacity-50">Options:</span>
         <div class="buttons">
             <form
-                {...ns.enhance(async ({ submit }) => {
-                    nsSubmitting = true;
+                {...nsForm.enhance(async ({ submit }) => {
                     try {
                         await submit();
-                        nsSubmitting = false;
-                        toast.show(ns?.result);
+
+                        const issues = nsForm.fields.allIssues() ?? [];
+                        if (issues.length > 0) {
+                            toast.show({
+                                status: 400,
+                                message: issues.map((i) => i.message).join(", "),
+                            });
+                        } else {
+                            toast.show(nsForm?.result);
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
                 <input
-                    name="domainId"
-                    value={data?.id}
-                    type="hidden"
+                    {...nsForm.fields.domainId.as("hidden", data?.id)}
                     readonly
                 />
                 <Button
@@ -322,29 +337,34 @@
                     ariaLabel="NS Lookup - Check"
                     icon={isDemo()
                         ? "iconoir:dns"
-                        : nsSubmitting
+                        : nsForm.pending
                           ? "iconoir:refresh-double"
                           : "iconoir:dns"}
-                    iconClass={nsSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || nsSubmitting}
+                    iconClass={nsForm.pending ? "animate-spin" : ""}
+                    disabled={isDemo() || !!nsForm.pending}
                 />
             </form>
             <form
-                {...ssl.enhance(async ({ submit }) => {
-                    sslSubmitting = true;
+                {...sslForm.enhance(async ({ submit }) => {
                     try {
                         await submit();
-                        sslSubmitting = false;
-                        toast.show(ssl?.result);
+
+                        const issues = sslForm.fields.allIssues() ?? [];
+                        if (issues.length > 0) {
+                            toast.show({
+                                status: 400,
+                                message: issues.map((i) => i.message).join(", "),
+                            });
+                        } else {
+                            toast.show(sslForm?.result);
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({ status: 500, message: "Something went wrong" });
                     }
                 })}
             >
                 <input
-                    type="hidden"
-                    name="domainId"
-                    value={data?.id}
+                    {...sslForm.fields.domainId.as("hidden", data?.id)}
                     readonly
                 />
 
@@ -356,30 +376,35 @@
                     ariaLabel="SSL Lookup - Check"
                     icon={isDemo()
                         ? "iconoir:security-pass"
-                        : sslSubmitting
+                        : sslForm.pending
                           ? "iconoir:refresh-double"
                           : "iconoir:security-pass"}
-                    iconClass={sslSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || sslSubmitting}
+                    iconClass={sslForm.pending ? "animate-spin" : ""}
+                    disabled={isDemo() || !!sslForm.pending}
                 />
             </form>
 
             <form
-                {...check.enhance(async ({ submit }) => {
-                    checkSubmitting = true;
+                {...checkForm.enhance(async ({ submit }) => {
                     try {
                         await submit();
-                        checkSubmitting = false;
-                        toast.show(check?.result);
+
+                        const issues = checkForm.fields.allIssues() ?? [];
+                        if (issues.length > 0) {
+                            toast.show({
+                                status: 400,
+                                message: issues.map((i) => i.message).join(", "),
+                            });
+                        } else {
+                            toast.show(checkForm?.result);
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({ status: 500, message: "Something went wrong" });
                     }
                 })}
             >
                 <input
-                    type="hidden"
-                    name="domainId"
-                    value={data?.id}
+                    {...checkForm.fields.domainId.as("hidden", data?.id)}
                     readonly
                 />
 
@@ -391,11 +416,11 @@
                     ariaLabel="Scan domain for latest status and details"
                     icon={isDemo()
                         ? "iconoir:search"
-                        : checkSubmitting
+                        : checkForm.pending
                           ? "iconoir:refresh-double"
                           : "iconoir:search"}
-                    iconClass={checkSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || checkSubmitting}
+                    iconClass={checkForm.pending ? "animate-spin" : ""}
+                    disabled={isDemo() || !!checkForm.pending}
                 />
             </form>
         </div>

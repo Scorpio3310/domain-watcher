@@ -305,7 +305,7 @@ const verificationEngine = {
  * }
  */
 
-export const batchCheck = form(async (data) => {
+export const batchCheck = form(async () => {
     try {
         const accessError = await validateAccess();
         if (accessError) return accessError;

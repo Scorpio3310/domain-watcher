@@ -7,7 +7,7 @@
 
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
 import { form } from "$app/server";
-import { domainIdSchema } from "$src/routes/validation";
+import { domainIdFormSchema } from "$src/routes/validation";
 import {
     validateAccess,
     validateDemoMode,
@@ -28,40 +28,14 @@ import {
  * @async
  * @function ns
  * @memberof module:DomainCardRemote
- * @param {FormData} data - Form data containing domainId
  * @returns {Promise<ServiceResponse>} Response object with NS lookup results
  * @throws {Error} Database or network connectivity errors
- *
- * @example
- * ```javascript
- * // In a SvelteKit form action
- * export const actions = {
- *   ns: async ({ request }) => {
- *     const data = await request.formData();
- *     return await ns(data);
- *   }
- * };
- * ```
- *
  */
-export const ns = form(async (data) => {
+export const ns = form(domainIdFormSchema, async ({ domainId }) => {
     const accessError = await validateAccess();
     if (accessError) return accessError;
 
-    const domainId = data.get("domainId");
-
-    const validateRes = domainIdSchema.safeParse(domainId);
-
-    if (!validateRes.success) {
-        return {
-            status: 400,
-            message: validateRes.error.issues.map((i) => i.message),
-        };
-    }
-
-    const validDomainId = validateRes.data;
-
-    const domain = await findDomainById(validDomainId);
+    const domain = await findDomainById(domainId);
     if (!domain)
         return {
             status: 404,
@@ -83,7 +57,7 @@ export const ns = form(async (data) => {
 
         const saved = await executeDomainQuery("UPDATE_DOMAIN_NS", [
             JSON.stringify(apiResult.data),
-            validDomainId,
+            domainId,
         ]);
         return saved
             ? {
@@ -112,40 +86,14 @@ export const ns = form(async (data) => {
  * @async
  * @function ssl
  * @memberof module:DomainCardRemote
- * @param {FormData} data - Form data containing domainId
  * @returns {Promise<ServiceResponse>} Response object with SSL certificate information
  * @throws {Error} Database or network connectivity errors
- *
- * @example
- * ```javascript
- * // In a SvelteKit form action
- * export const actions = {
- *   ssl: async ({ request }) => {
- *     const data = await request.formData();
- *     return await ssl(data);
- *   }
- * };
- * ```
- *
  */
-export const ssl = form(async (data) => {
+export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
     const accessError = await validateAccess();
     if (accessError) return accessError;
 
-    const domainId = data.get("domainId");
-
-    const validateRes = domainIdSchema.safeParse(domainId);
-
-    if (!validateRes.success) {
-        return {
-            status: 400,
-            message: validateRes.error.issues.map((i) => i.message),
-        };
-    }
-
-    const validDomainId = validateRes.data;
-
-    const domain = await findDomainById(validDomainId);
+    const domain = await findDomainById(domainId);
     if (!domain)
         return {
             status: 404,
@@ -167,7 +115,7 @@ export const ssl = form(async (data) => {
 
         const saved = await executeDomainQuery("UPDATE_DOMAIN_SSL", [
             JSON.stringify(apiResult.data),
-            validDomainId,
+            domainId,
         ]);
         return saved
             ? {
@@ -196,44 +144,15 @@ export const ssl = form(async (data) => {
  * @async
  * @function check
  * @memberof module:DomainCardRemote
- * @param {FormData} data - Form data containing domainId
  * @returns {Promise<ServiceResponse>} Response object with verification results
  * @throws {Error} Database or network connectivity errors
- *
- * @example
- * ```javascript
- * // In a SvelteKit form action
- * export const actions = {
- *   check: async ({ request }) => {
- *     const data = await request.formData();
- *     return await check(data);
- *   }
- * };
- * ```
- *
  */
-export const check = form(async (data) => {
+export const check = form(domainIdFormSchema, async ({ domainId }) => {
     const accessError = await validateAccess();
     if (accessError) return accessError;
 
-    const domainId = data.get("domainId");
-
-    const validateRes = domainIdSchema.safeParse(domainId);
-
-    if (!validateRes.success) {
-        return {
-            status: 400,
-            message: validateRes.error.issues.map((i) => i.message),
-        };
-    }
-
-    const validDomainId = validateRes.data;
-
     try {
-        const accessError = await validateAccess();
-        if (accessError) return accessError;
-
-        const domain = await findDomainById(validDomainId);
+        const domain = await findDomainById(domainId);
         if (!domain)
             return {
                 status: 404,
@@ -266,44 +185,18 @@ export const check = form(async (data) => {
  * @async
  * @function remove
  * @memberof module:DomainCardRemote
- * @param {FormData} data - Form data containing domainId
  * @returns {Promise<ServiceResponse>} Response object with removal status
  * @throws {Error} Database connectivity errors
- *
- * @example
- * ```javascript
- * // In a SvelteKit form action
- * export const actions = {
- *   remove: async ({ request }) => {
- *     const data = await request.formData();
- *     return await remove(data);
- *   }
- * };
- * ```
- *
  */
-export const remove = form(async (data) => {
+export const remove = form(domainIdFormSchema, async ({ domainId }) => {
     const accessError = await validateAccess();
     if (accessError) return accessError;
-
-    const domainId = data.get("domainId");
-
-    const validateRes = domainIdSchema.safeParse(domainId);
-
-    if (!validateRes.success) {
-        return {
-            status: 400,
-            message: validateRes.error.issues.map((i) => i.message),
-        };
-    }
-
-    const validDomainId = validateRes.data;
 
     try {
         const demoError = validateDemoMode();
         if (demoError) return demoError;
 
-        const domain = await findDomainById(validDomainId);
+        const domain = await findDomainById(domainId);
         if (!domain)
             return {
                 status: 404,
@@ -312,7 +205,7 @@ export const remove = form(async (data) => {
             };
 
         const wasRemoved = await executeDomainQuery("DELETE_DOMAIN", [
-            validDomainId,
+            domainId,
         ]);
 
         return wasRemoved
