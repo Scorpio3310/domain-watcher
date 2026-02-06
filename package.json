@@ -1,7 +1,7 @@
 {
     "name": "domain-watcher",
     "private": true,
-    "version": "1.0.",
+    "version": "1.0.1",
     "type": "module",
     "description": "Domain availability watcher built with SvelteKit",
     "author": {
