@@ -8,8 +8,17 @@
     import { isDemo } from "$src/lib/utils/helpers";
     import { batchCheck } from "$src/lib/remote/check-domains.remote";
 
+    /**
+     * App header with per-page layout configuration and batch check action
+     * @typedef {Object} Props
+     * @property {string} [type="default"] - Header layout type (main, settings, default)
+     * @property {boolean} [isApiConfigured=false] - Whether the WHOIS API key is configured
+     */
+
+    /** @type {Props} */
     let { type = "default", isApiConfigured = false } = $props();
 
+    /** @type {Record<string, {showActions: boolean, showBackButton: boolean, showLogo: boolean, justify: string}>} */
     const headerConfigs = {
         main: {
             showActions: true,
@@ -92,7 +101,7 @@
     </div>
 {/snippet}
 
-{#snippet headerActions(actionType)}
+{#snippet headerActions(actionType = "default")}
     {#if actionType === "main"}
         <div class="flex gap-2 items-center">
             <div class="relative">
@@ -114,7 +123,7 @@
                 {...batchCheck.enhance(async ({ submit }) => {
                     try {
                         await submit();
-                        toast.show(batchCheck?.result);
+                        if (batchCheck.result) toast.show(batchCheck.result);
                     } catch (error) {
                         console.log(error);
                     }

@@ -2,7 +2,9 @@
     import RadioButton from "$components/RadioButton.svelte";
 
     // All possible prop combinations
+    /** @type {('sm'|'md'|'lg')[]} */
     const sizes = ["sm", "md", "lg"];
+    /** @type {('primary'|'secondary')[]} */
     const variants = ["primary", "secondary"];
     const iconCombinations = [
         { checked: "iconoir:check", unchecked: "" },
@@ -53,8 +55,38 @@
         ],
     };
 
+    /**
+     * Single radio option inside a test group
+     * @typedef {Object} RadioOption
+     * @property {string} id - Unique radio identifier
+     * @property {string} value - Radio value
+     * @property {string} label - Display label
+     * @property {string} checkedIcon - Icon when checked
+     * @property {string} uncheckedIcon - Icon when unchecked (empty for none)
+     * @property {string} ariaLabel - Accessibility label
+     * @property {boolean} disabled - Disabled state
+     * @property {('sm'|'md'|'lg')} [size] - Per-option size override (mixed-sizes groups)
+     * @property {('primary'|'secondary')} [variant] - Per-option variant override (variants groups)
+     */
+
+    /**
+     * Generated radio button group
+     * @typedef {Object} RadioGroup
+     * @property {string} name - Radio group name
+     * @property {('primary'|'secondary'|'mixed')} variant - Group variant ("mixed" when per-option variants are used)
+     * @property {('sm'|'md'|'lg'|'mixed')} size - Group size ("mixed" when per-option sizes are used)
+     * @property {RadioOption[]} options - Radio options in this group
+     */
+
+    /**
+     * Full test group with identity and description
+     * @typedef {RadioGroup & {groupId: string, description: string}} RadioGroupCombo
+     */
+
     // Generate radio button groups organized by type and variant
+    /** @type {Record<string, Record<string, RadioGroupCombo[]>>} */
     let groupsByTypeAndVariant = {};
+    /** @type {Record<string, string>} */
     let groupValues = {}; // Store selected values for each group
 
     for (let radioType of radioTypes) {
@@ -84,6 +116,13 @@
         }
     }
 
+    /**
+     * @param {string} radioTypeKey - Radio test type key (basic, with-icons, ...)
+     * @param {('primary'|'secondary')} variant - Group variant
+     * @param {('sm'|'md'|'lg')} size - Group size
+     * @param {string} groupSuffix - Suffix for the generated group name
+     * @returns {RadioGroup} Generated radio group
+     */
     function generateRadioGroup(radioTypeKey, variant, size, groupSuffix) {
         const baseGroupName = `${groupSuffix}-${variant}-${size}-${Math.random().toString(36).substr(2, 5)}`;
 
@@ -198,6 +237,10 @@
         }
     }
 
+    /**
+     * @param {RadioGroup} group - Radio group to describe
+     * @returns {string} Additional props description suffix
+     */
     function getAdditionalPropsDescription(group) {
         const props = [];
         if (group.options[0]?.uncheckedIcon) props.push("custom icons");
@@ -208,6 +251,10 @@
         return props.length > 0 ? `, ${props.join(", ")}` : "";
     }
 
+    /**
+     * @param {string} groupName - Radio group name
+     * @param {string} value - Newly selected value
+     */
     function handleGroupChange(groupName, value) {
         groupValues[groupName] = value;
         console.log(`Radio group ${groupName} changed:`, value);
@@ -254,6 +301,11 @@
     }
 
     // Split into groups of 2 for better layout
+    /**
+     * @param {RadioGroupCombo[]} array - Items to split
+     * @param {number} size - Chunk size
+     * @returns {RadioGroupCombo[][]} Chunked groups
+     */
     function chunkArray(array, size) {
         const chunks = [];
         for (let i = 0; i < array.length; i += size) {
@@ -352,13 +404,19 @@
                                                             }
                                                             checkedIcon={option.checkedIcon}
                                                             uncheckedIcon={option.uncheckedIcon}
-                                                            size={option.size ||
-                                                                group.size}
-                                                            variant={option.variant ||
-                                                                group.variant}
+                                                            size={/** @type {('sm'|'md'|'lg')} */ (
+                                                                option.size ||
+                                                                    group.size
+                                                            )}
+                                                            variant={/** @type {('primary'|'secondary')} */ (
+                                                                option.variant ||
+                                                                    group.variant
+                                                            )}
                                                             disabled={option.disabled}
                                                             ariaLabel={option.ariaLabel}
-                                                            onchange={(value) =>
+                                                            onchange={(
+                                                                value = ""
+                                                            ) =>
                                                                 handleGroupChange(
                                                                     group.name,
                                                                     value

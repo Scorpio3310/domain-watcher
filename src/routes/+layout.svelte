@@ -7,6 +7,7 @@
     import NoJavascript from "$components/NoJavascript.svelte";
     import { dev } from "$app/environment";
 
+    /** @type {import('./$types').LayoutProps} */
     let { children, data } = $props();
 
     /**

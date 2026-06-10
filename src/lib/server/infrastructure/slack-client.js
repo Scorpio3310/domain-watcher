@@ -1,14 +1,17 @@
+/** @import { ServiceResult, SlackConfig } from '$lib/types' */
+
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { isDemo } from "$src/lib/utils/helpers";
 import { SLACK_CONNECTION_STATUS } from "$lib/constants/constants";
-import { maskApiKey } from "$lib/utils/helpers";
+import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 
 // ========================================
 // CORE UTILITIES
 // ========================================
 /**
  * Validates demo mode for write operations
+ * @returns {ServiceResult|null} Error result if demo mode, null if allowed
  */
 const validateDemoAccess = () =>
     isDemo()
@@ -17,6 +20,13 @@ const validateDemoAccess = () =>
 
 /**
  * Creates Slack configuration object
+ * @param {Object} [values={}] - Configuration values
+ * @param {string} [values.webhookUrl] - Slack webhook URL
+ * @param {string} [values.notificationTime] - Notification time (HH:mm)
+ * @param {string} [values.connectionStatus] - Connection test status
+ * @param {string|null} [values.verifiedAt] - When the connection was verified
+ * @param {number} [values.version] - Config schema version
+ * @returns {SlackConfig} Slack configuration object
  */
 const createSlackConfiguration = ({
     webhookUrl = "",
@@ -42,7 +52,7 @@ const createSlackConfiguration = ({
  * @function testSlackWebhook
  * @param {string} webhook - Slack webhook URL
  * @param {string} notificationTime - Notification time in HH:MM format
- * @returns {Promise<Object>} Success object or error object
+ * @returns {Promise<ServiceResult>} Success object or error object
  * @example
  * const result = await testSlackWebhook(
  *   "https://hooks.slack.com/services/...",
@@ -105,7 +115,7 @@ export async function testSlackWebhook(webhook, notificationTime) {
         console.error("❌ Failed to test Slack webhook:", error);
         return {
             status: 500,
-            message: `Failed to test webhook: ${error.message}`,
+            message: `Failed to test webhook: ${getErrorMessage(error)}`,
         };
     }
 }
@@ -145,7 +155,7 @@ export const slack = {
      * Gets Slack webhook configuration with demo mode masking
      * @async
      * @memberof slack
-     * @returns {Promise<Object>} Webhook settings (masked in demo mode)
+     * @returns {Promise<SlackConfig|null>} Webhook settings (masked in demo mode) or null
      *
      * @example
      * const getWebhookConfig = await slack.getWebhookConfig();
@@ -160,8 +170,12 @@ export const slack = {
             const slackSettings = queryResult?.results?.[0];
 
             const config = slackSettings?.json_config_data
-                ? JSON.parse(slackSettings.json_config_data || "{}") || {}
-                : {};
+                ? /** @type {SlackConfig|null} */ (
+                      JSON.parse(slackSettings.json_config_data || "{}")
+                  )
+                : null;
+
+            if (!config) return null;
 
             // Apply demo mode masking directly in service
             if (isDemo() && config.webhook_url) {
@@ -174,7 +188,7 @@ export const slack = {
                 "❌ Failed to get Slack webhook configuration:",
                 error
             );
-            return {};
+            return null;
         }
     },
 
@@ -183,7 +197,7 @@ export const slack = {
      * @async
      * @memberof slack
      * @param {boolean} isEnabled - Whether notifications should be enabled
-     * @returns {Promise<Object>} Operation result
+     * @returns {Promise<ServiceResult>} Operation result
      *
      * @example
      * const result = await slack.saveNotificationStatus(true);
@@ -201,7 +215,7 @@ export const slack = {
                 [enabledValue]
             );
 
-            if (updateResult?.meta?.changes > 0) {
+            if ((updateResult?.meta?.changes ?? 0) > 0) {
                 const statusMessage = isEnabled
                     ? "Slack notifications are now live and kicking! 🚀"
                     : "Slack notifications chilled out - no more pings 😴";
@@ -222,7 +236,7 @@ export const slack = {
             console.error("❌ Failed to set Slack notification status:", error);
             return {
                 status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
             };
         }
     },
@@ -235,7 +249,7 @@ export const slack = {
      * @param {string} notificationTime - Notification time in HH:MM format
      * @param {Object} [options={}] - Configuration options
      * @param {boolean} [options.shouldTestConnection=true] - Whether to test the webhook
-     * @returns {Promise<Object>} Operation result
+     * @returns {Promise<ServiceResult>} Operation result
      *
      * @example
      * // Test connection (default behavior)
@@ -312,7 +326,7 @@ export const slack = {
             );
             return {
                 status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
             };
         }
     },

@@ -12,10 +12,12 @@
     import { page } from "$app/state";
 
     //// PROPS ////
+    /** @type {import('./$types').PageProps} */
     let { data } = $props();
 
     //// SUPERFORMS ////
     const { form, errors, constraints, enhance } = superForm(
+        // svelte-ignore state_referenced_locally
         data?.formAddDomain,
         {
             id: "add-domain",
@@ -123,7 +125,7 @@
 {#if data?.domains?.length === 0}
     <div
         class="card card--error max-w-3xl mx-auto"
-        in:fly={{ y: 100, duration: 400, start: 0.8 }}
+        in:fly={{ y: 100, duration: 400 }}
     >
         <Icon icon="iconoir:globe" class="icon" />
 
@@ -134,7 +136,7 @@
         </p>
     </div>
 {:else}
-    <div class="mt-16" in:fly={{ y: 100, duration: 400, start: 0.8 }}>
+    <div class="mt-16" in:fly={{ y: 100, duration: 400 }}>
         <div class="hero-domain-title">
             <h2>
                 Domain{data?.domains?.length === 1 ? "" : "s"} ({data?.domains

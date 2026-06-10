@@ -45,6 +45,36 @@ const parseDate = (dateInput, assumeUTC = true) => {
 export const isDemo = () => PUBLIC_ENVIRONMENT === "demo";
 
 /**
+ * Extract a human-readable message from an unknown error value
+ * @param {unknown} error - Caught error of unknown shape
+ * @param {string} [fallback="Unknown error"] - Message when none can be extracted
+ * @returns {string} Extracted error message or the fallback
+ */
+export const getErrorMessage = (error, fallback = "Unknown error") => {
+    if (error instanceof Error) return error.message;
+    if (error && typeof error === "object") {
+        const obj = /** @type {Record<string, unknown>} */ (error);
+        if (typeof obj.originalMessage === "string") return obj.originalMessage;
+        if (typeof obj.message === "string") return obj.message;
+    }
+    return typeof error === "string" ? error : fallback;
+};
+
+/**
+ * Extract an HTTP status code from an unknown error value
+ * @param {unknown} error - Caught error of unknown shape
+ * @param {number} [fallback=500] - Status when none can be extracted
+ * @returns {number} Extracted status code or the fallback
+ */
+export const getHttpStatus = (error, fallback = 500) =>
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    typeof (/** @type {Record<string, unknown>} */ (error).status) === "number"
+        ? /** @type {{status: number}} */ (error).status
+        : fallback;
+
+/**
  * Get current time in configured timezone as HH:mm string
  * @returns {string} Current time in HH:mm format (24-hour) in configured timezone
  * @example
@@ -55,6 +85,7 @@ export const isDemo = () => PUBLIC_ENVIRONMENT === "demo";
  * getCurrentTimeInTimezone() // "14:30"
  */
 export const getCurrentTimeInTimezone = () => {
+    /** @type {Intl.DateTimeFormatOptions} */
     const options = {
         hour: "2-digit",
         minute: "2-digit",
@@ -113,7 +144,7 @@ export const getRegistrar = (rawDomainData) => {
         return JSON.parse(rawDomainData).registrar?.name || null;
     } catch (error) {
         console.error("❌ Error parsing registrar data:", error);
-        return error?.message || "Invalid JSON";
+        return getErrorMessage(error, "Invalid JSON");
     }
 };
 
@@ -183,6 +214,7 @@ export const formatHumanDate = (dateInput, options = {}) => {
     if (!date || !isValid(date)) return null;
 
     try {
+        /** @type {Intl.DateTimeFormatOptions} */
         const formatOptions = {
             timeZone: getTimezone(),
             ...(showTime ? { dateStyle, timeStyle } : { dateStyle }),
@@ -382,12 +414,7 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * @function getExpirationStatus
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC
- * @returns {Object} Comprehensive status object with expiration analysis and UI styling
- * @returns {('expired'|'expiring_soon'|'unknown'|undefined)} returns.status - Current expiration status category
- * @returns {number|null} returns.daysRemaining - Absolute days until/since expiration (always positive)
- * @returns {boolean} returns.isExpired - True if domain has already expired
- * @returns {boolean} returns.isExpiringSoon - True if expires within 30 days (and not expired)
- * @returns {string} returns.className - CSS class name for conditional styling based on status
+ * @returns {import('$lib/types').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
  * @example
  * // Expired domain (assuming today is 2025-07-29)
  * getExpirationStatus('2025-07-20')

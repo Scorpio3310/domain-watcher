@@ -1,14 +1,12 @@
 import { CRON_SECRET } from "$env/static/private";
 import { json } from "@sveltejs/kit";
 import { cronNotifications } from "$lib/server/notifications/cron-notifications.js";
-import { isDemo } from "$src/lib/utils/helpers";
+import { getErrorMessage, isDemo } from "$src/lib/utils/helpers";
 
 /**
  * Validates if the application is not in demo mode
  * @function validateDemoMode
- * @returns {Object|null} Error object if in demo mode, null otherwise
- * @returns {number} returns.status - HTTP status code (403)
- * @returns {string} returns.message - Human-readable error message
+ * @returns {{status: number, message: string}|null} Error object if in demo mode, null otherwise
  */
 const validateDemoMode = () =>
     isDemo()
@@ -24,8 +22,6 @@ const validateDemoMode = () =>
  *
  * @param {Request} request - The incoming HTTP request object
  * @returns {{success: boolean, reason?: string}} Authentication result
- * @returns {boolean} returns.success - Whether authentication passed
- * @returns {string} [returns.reason] - Failure reason if success is false
  *
  * @example
  * const authResult = authenticateRequest(request);
@@ -50,17 +46,13 @@ function authenticateRequest(request) {
  * notification schedules before running domain verification.
  *
  * @route POST /api/cron
- * @param {Request} request - HTTP request with required headers and optional body
- * @param {string} request.headers.x-cron-secret - Required authentication secret
- * @param {Object} [request.body] - Optional JSON body for configuration
- * @param {boolean} [request.body.manual=false] - Force execution bypass time checking
+ *
+ * Requires the `x-cron-secret` request header for authentication. Accepts an
+ * optional JSON body `{ manual?: boolean }` to force execution bypassing time
+ * checking. Responds with JSON execution details (success, executionTime,
+ * manual, and notification results from cronNotifications.checkAndSend).
  *
  * @returns {Promise<Response>} JSON response with execution results
- * @returns {Object} response.body - Execution details
- * @returns {boolean} response.body.success - Whether execution succeeded
- * @returns {string} response.body.executionTime - Time taken in milliseconds
- * @returns {boolean} response.body.manual - Whether manual trigger was used
- * @returns {Object} response.body.result - Notification results from cronNotifications.checkAndSend
  *
  * @description
  * **Regular Operation:**
@@ -106,7 +98,8 @@ function authenticateRequest(request) {
  * @throws {401} Unauthorized - Invalid or missing x-cron-secret header
  * @throws {500} Internal Server Error - Cron execution failure
  */
-export async function POST({ request, url }) {
+/** @type {import('./$types').RequestHandler} */
+export async function POST({ request }) {
     const startTime = Date.now();
 
     try {
@@ -159,7 +152,7 @@ export async function POST({ request, url }) {
         return json(
             {
                 success: false,
-                error: error.message,
+                error: getErrorMessage(error),
                 executionTime: `${executionTime}ms`,
             },
             { status: 500 }
@@ -171,8 +164,9 @@ export async function POST({ request, url }) {
  * Health check endpoint for cron service monitoring
  *
  * @route GET /api/cron
- * @returns {Object} Service status and basic info
+ * @returns {Promise<Response>} Service status and basic info
  */
+/** @type {import('./$types').RequestHandler} */
 export async function GET() {
     return json({
         status: "healthy",

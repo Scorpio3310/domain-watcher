@@ -5,7 +5,7 @@
 
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { isDemo } from "$src/lib/utils/helpers";
+import { isDemo, getErrorMessage } from "$src/lib/utils/helpers";
 import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
 
 // ========================================
@@ -22,6 +22,8 @@ const validateDemoAccess = () =>
 
 /**
  * Safely parses JSON with fallback
+ * @param {string} jsonString - JSON string to parse
+ * @param {Object} [fallback={}] - Fallback value when parsing fails
  */
 const parseJsonSafely = (jsonString, fallback = {}) => {
     try {
@@ -44,7 +46,7 @@ export const ui = {
      * Gets current UI view mode
      * @async
      * @memberof ui
-     * @returns {Promise<string|Object>} UI view mode or error object
+     * @returns {Promise<string>} UI view mode (falls back to compact view on errors)
      *
      * @example
      * const viewMode = await ui.getViewMode();
@@ -63,10 +65,7 @@ export const ui = {
             return parsedSettings.ui_view ?? UI_DOMAIN_VIEW.COMPACT;
         } catch (error) {
             console.error("❌ Failed to get UI view mode:", error);
-            return {
-                status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
-            };
+            return UI_DOMAIN_VIEW.COMPACT;
         }
     },
 
@@ -115,7 +114,7 @@ export const ui = {
             console.error("❌ Failed to save UI view mode:", error);
             return {
                 status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
             };
         }
     },

@@ -12,9 +12,10 @@
      * @property {string} [ariaLabel] - Accessibility label
      * @property {string} [checkedIcon=""] - Icon when checked (empty for no icon)
      * @property {string} [uncheckedIcon=""] - Icon when unchecked (empty for no icon)
-     * @property {Function} [onchange] - Change handler
+     * @property {(checked: boolean) => void} [onchange] - Change handler
      */
 
+    /** @type {Props & Record<string, any>} */
     let {
         name = undefined,
         id,
@@ -59,9 +60,10 @@
     );
 
     // Handle change
+    /** @param {Event & { currentTarget: EventTarget & HTMLInputElement }} event */
     function handleChange(event) {
         if (!disabled) {
-            onchange?.(event.target.checked);
+            onchange?.(event.currentTarget.checked);
         }
     }
 </script>

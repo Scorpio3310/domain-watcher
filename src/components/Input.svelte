@@ -4,24 +4,27 @@
 
     /**
      * Flexible input component with tooltip and icon support
-     * @param {string} [type='text'] - Input type (text, password, email, number, etc.)
-     * @param {string} [placeholder=''] - Input placeholder text
-     * @param {string} [value=''] - Input value (bindable)
-     * @param {string} [label=''] - Label text
-     * @param {string} [tooltip=''] - Tooltip text
-     * @param {string} [tooltipIcon=''] - Icon for the tooltip (Iconify icon name)
-     * @param {boolean} [disabled=false] - Disable the input
-     * @param {boolean} [required=false] - Mark input as required
-     * @param {string} [id=''] - Input ID for accessibility
-     * @param {string} [name=''] - Input name attribute
-     * @param {string} [variant='default'] - Input variant (default, error, success)
-     * @param {string} [helperText=''] - Helper/error text below input
-     * @param {string} [class=''] - Additional CSS classes for the input
-     * @param {Function} [oninput] - Input event handler
-     * @param {Function} [onchange] - Change event handler
-     * @param {Function} [onfocus] - Focus event handler
-     * @param {Function} [onblur] - Blur event handler
+     * @typedef {Object} Props
+     * @property {string} [type='text'] - Input type (text, password, email, number, etc.)
+     * @property {string} [placeholder=''] - Input placeholder text
+     * @property {string} [value=''] - Input value (bindable)
+     * @property {string} [label=''] - Label text
+     * @property {string} [tooltip=''] - Tooltip text
+     * @property {string} [tooltipIcon=''] - Icon for the tooltip (Iconify icon name)
+     * @property {boolean} [disabled=false] - Disable the input
+     * @property {boolean} [required=false] - Mark input as required
+     * @property {string} [id=''] - Input ID for accessibility
+     * @property {string} [name=''] - Input name attribute
+     * @property {string} [variant='default'] - Input variant (default, error, success)
+     * @property {string} [helperText=''] - Helper/error text below input
+     * @property {string} [class=''] - Additional CSS classes for the input
+     * @property {import('svelte/elements').FormEventHandler<HTMLInputElement>} [oninput] - Input event handler
+     * @property {import('svelte/elements').ChangeEventHandler<HTMLInputElement>} [onchange] - Change event handler
+     * @property {import('svelte/elements').FocusEventHandler<HTMLInputElement>} [onfocus] - Focus event handler
+     * @property {import('svelte/elements').FocusEventHandler<HTMLInputElement>} [onblur] - Blur event handler
      */
+
+    /** @type {Props & Record<string, any>} */
     let {
         type = "text",
         placeholder = "",

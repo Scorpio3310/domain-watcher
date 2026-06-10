@@ -5,20 +5,22 @@
 
     /**
      * Toast notification component with auto-hide and manual close functionality
-     * @param {Object} message - Toast message object
-     * @param {number} message.status - HTTP status code (200-299 = success, others = error)
-     * @param {string} message.message - Text message to display
-     * @param {Function} [onClose] - Optional callback when toast is closed
-     * @param {number} [autoHideDelay=4000] - Auto-hide delay in milliseconds (0 = no auto-hide)
+     * @typedef {Object} Props
+     * @property {{status: number, message: string}} message - Toast message object (status 200-299 = success, others = error)
+     * @property {(() => void)|null} [onClose] - Optional callback when toast is closed
+     * @property {number} [autoHideDelay=4000] - Auto-hide delay in milliseconds (0 = no auto-hide)
      *
      * @example
      * <Toast message={{ status: 201, message: "Domain added successfully!" }} />
      * <Toast message={{ status: 400, message: "Failed to save" }} onClose={handleClose} />
      */
+
+    /** @type {Props} */
     let { message, onClose = null, autoHideDelay = 4000 } = $props();
 
     // Component state
     let visible = $state(false);
+    /** @type {ReturnType<typeof setTimeout>|null} */
     let timeoutId = null;
 
     // Computed properties for better readability

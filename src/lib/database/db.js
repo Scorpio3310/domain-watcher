@@ -1,3 +1,5 @@
+import { getErrorMessage } from "$src/lib/utils/helpers";
+
 // ========================================
 // TYPE DEFINITIONS
 // ========================================
@@ -7,14 +9,14 @@
  * @typedef {Object} D1PreparedStatement
  * @property {function(Array<any>=): Promise<D1Result>} run - Execute statement and return result metadata
  * @property {function(Array<any>=): Promise<D1Result>} all - Execute statement and return all results
- * @property {function(Array<any>=): Promise<Object|null>} first - Execute statement and return first result only
+ * @property {function(Array<any>=): Promise<Record<string, any>|null>} first - Execute statement and return first result only
  * @property {function(...any): D1PreparedStatement} bind - Bind parameters to prepared statement
  */
 
 /**
  * Cloudflare D1 query result object
  * @typedef {Object} D1Result
- * @property {Array<Object>} [results] - Array of result rows (for SELECT queries)
+ * @property {Array<Record<string, any>>} [results] - Array of result rows (for SELECT queries)
  * @property {boolean} [success] - Whether the operation was successful
  * @property {Object} [meta] - Result metadata
  * @property {number} [meta.changes] - Number of rows affected (INSERT/UPDATE/DELETE)
@@ -62,7 +64,7 @@ class DatabaseError extends Error {
         this.details = details;
 
         // Maintain proper stack trace for where error was thrown (V8 only)
-        if (Error.captureStackTrace) {
+        if ("captureStackTrace" in Error) {
             Error.captureStackTrace(this, DatabaseError);
         }
     }
@@ -117,7 +119,7 @@ export function getDatabase() {
  * Execute any SQL query (SELECT, INSERT, UPDATE, DELETE) and return the result
  * @param {string} sql - SQL query or command
  * @param {Array<any>} params - Query parameters for prepared statement
- * @returns {Promise<any>} Query or command result
+ * @returns {Promise<D1Result>} Query or command result
  * @example
  * // Get all domains
  * const data = await executeSql("SELECT * FROM domains");
@@ -154,7 +156,7 @@ export async function executeSql(sql, params = []) {
         return result;
     } catch (error) {
         console.error("❌ Database query failed:", error);
-        throw new DatabaseError(error?.message || "Database query failed", 503);
+        throw new DatabaseError(getErrorMessage(error, "Database query failed"), 503);
     }
 }
 
@@ -162,7 +164,7 @@ export async function executeSql(sql, params = []) {
  * Execute a SELECT query and return only the first result
  * @param {string} sql - SQL SELECT query
  * @param {Array<any>} params - Query parameters for prepared statement
- * @returns {Promise<Object|null>} First result or null if no results
+ * @returns {Promise<Record<string, any>|null>} First result or null if no results
  * @example
  * // Get single domain by ID
  * const domain = await executeQueryFirst("SELECT * FROM domains WHERE id = ?", [123]);
@@ -181,14 +183,14 @@ export async function executeQueryFirst(sql, params = []) {
         return result;
     } catch (error) {
         console.error("❌ Database query failed:", error);
-        throw new DatabaseError(error?.message || "Database query failed", 503);
+        throw new DatabaseError(getErrorMessage(error, "Database query failed"), 503);
     }
 }
 
 /**
  * Execute multiple statements in a batch transaction
  * @param {Array<{sql: string, params?: Array<any>}>} statements - Array of SQL statements with optional parameters
- * @returns {Promise<Array<any>>} Array of results for each statement
+ * @returns {Promise<Array<D1Result>>} Array of results for each statement
  * @example
  * // Insert multiple domains at once
  * const results = await executeBatch([
@@ -216,6 +218,6 @@ export async function executeBatch(statements) {
         return results;
     } catch (error) {
         console.error("❌ Database batch failed:", error);
-        throw new DatabaseError(error?.message || "Database query failed", 503);
+        throw new DatabaseError(getErrorMessage(error, "Database query failed"), 503);
     }
 }

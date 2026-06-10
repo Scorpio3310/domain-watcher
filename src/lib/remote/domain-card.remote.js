@@ -5,8 +5,11 @@
  * @module DomainCardRemote
  */
 
+/** @import { ServiceResult } from '$lib/types' */
+
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
 import { form } from "$app/server";
+import { getErrorMessage } from "$src/lib/utils/helpers";
 import { domainIdFormSchema } from "$src/routes/validation";
 import {
     validateAccess,
@@ -28,7 +31,7 @@ import {
  * @async
  * @function ns
  * @memberof module:DomainCardRemote
- * @returns {Promise<ServiceResponse>} Response object with NS lookup results
+ * @returns {Promise<ServiceResult>} Response object with NS lookup results
  * @throws {Error} Database or network connectivity errors
  */
 export const ns = form(domainIdFormSchema, async ({ domainId }) => {
@@ -73,7 +76,7 @@ export const ns = form(domainIdFormSchema, async ({ domainId }) => {
         console.error("❌ Failed to perform NS Lookup:", error);
         return {
             status: 500,
-            message: `Houston, we have a problem: ${error.message}`,
+            message: `Houston, we have a problem: ${getErrorMessage(error)}`,
         };
     }
 });
@@ -86,7 +89,7 @@ export const ns = form(domainIdFormSchema, async ({ domainId }) => {
  * @async
  * @function ssl
  * @memberof module:DomainCardRemote
- * @returns {Promise<ServiceResponse>} Response object with SSL certificate information
+ * @returns {Promise<ServiceResult>} Response object with SSL certificate information
  * @throws {Error} Database or network connectivity errors
  */
 export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
@@ -131,7 +134,7 @@ export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
         console.error("❌ Failed to perform SSL Lookup:", error);
         return {
             status: 500,
-            message: `Houston, we have a problem: ${error.message}`,
+            message: `Houston, we have a problem: ${getErrorMessage(error)}`,
         };
     }
 });
@@ -144,7 +147,7 @@ export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
  * @async
  * @function check
  * @memberof module:DomainCardRemote
- * @returns {Promise<ServiceResponse>} Response object with verification results
+ * @returns {Promise<ServiceResult>} Response object with verification results
  * @throws {Error} Database or network connectivity errors
  */
 export const check = form(domainIdFormSchema, async ({ domainId }) => {
@@ -167,12 +170,12 @@ export const check = form(domainIdFormSchema, async ({ domainId }) => {
                   status: 200,
                   message: `"${domain.domain_name}" analyzed - all the juicy details are ready! 🔍`,
               }
-            : { status: 500, message: verifyResult.error };
+            : { status: 500, message: verifyResult.error ?? "Unknown error" };
     } catch (error) {
         console.error("❌ Failed to verify domain:", error);
         return {
             status: 500,
-            message: `Houston, we have a problem: ${error.message}`,
+            message: `Houston, we have a problem: ${getErrorMessage(error)}`,
         };
     }
 });
@@ -185,7 +188,7 @@ export const check = form(domainIdFormSchema, async ({ domainId }) => {
  * @async
  * @function remove
  * @memberof module:DomainCardRemote
- * @returns {Promise<ServiceResponse>} Response object with removal status
+ * @returns {Promise<ServiceResult>} Response object with removal status
  * @throws {Error} Database connectivity errors
  */
 export const remove = form(domainIdFormSchema, async ({ domainId }) => {
@@ -222,19 +225,7 @@ export const remove = form(domainIdFormSchema, async ({ domainId }) => {
         console.error("❌ Failed to remove domain from watchlist:", error);
         return {
             status: 500,
-            message: `Houston, we have a problem: ${error.message}`,
+            message: `Houston, we have a problem: ${getErrorMessage(error)}`,
         };
     }
 });
-
-// ========================================
-// TYPE DEFINITIONS FOR JSDOC
-// ========================================
-
-/**
- * @typedef {Object} ServiceResponse
- * @property {number} status - HTTP status code
- * @property {string} message - Human-readable status message
- * @property {Object} [data] - Optional response data
- * @memberof module:DomainCardRemote
- */

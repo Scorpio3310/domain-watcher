@@ -4,9 +4,12 @@
  * @module WhoIsDomainService
  */
 
+/** @import { ServiceResult } from '$lib/types' */
+
 import { apiKey } from "./api-key";
 import { WhoisJson } from "@whoisjson/whoisjson";
 import { DOMAIN_STATUS } from "$src/lib/constants/constants";
+import { getErrorMessage } from "$lib/utils/helpers";
 
 // ========================================
 // CONSTANTS & CONFIG
@@ -17,17 +20,10 @@ const TEST_DOMAIN = "example.com";
 // TYPES & INTERFACES
 // ========================================
 /**
- * @typedef {Object} ServiceResult
- * @property {number} status - HTTP status code
- * @property {string} message - Result message
- * @property {*} [data] - Optional data payload
- */
-
-/**
  * @typedef {Object} DomainAvailabilityData
  * @property {string} status - Domain availability status
  * @property {string|null} expires - Domain expiration date
- * @property {Object} rawDomainData - Raw data from WHOIS API
+ * @property {Record<string, any>} rawDomainData - Raw data from WHOIS API
  */
 
 /**
@@ -41,11 +37,11 @@ const TEST_DOMAIN = "example.com";
 // ========================================
 /**
  * Classifies WHOIS API errors into structured error types
- * @param {Error} error - The error object from WHOIS API
+ * @param {unknown} error - The error value from WHOIS API
  * @returns {WhoisError} Classified error with metadata
  */
 const classifyWhoisError = (error) => {
-    const errorMessage = error?.message || "Unknown error occurred";
+    const errorMessage = getErrorMessage(error, "Unknown error occurred");
     const lowerMessage = errorMessage.toLowerCase();
 
     // Network/Connection errors
@@ -106,7 +102,7 @@ const classifyWhoisError = (error) => {
 
 /**
  * Handles WHOIS operation errors with structured logging and response
- * @param {Error} error - The error object from WHOIS API
+ * @param {unknown} error - The error value from WHOIS API
  * @param {string} operation - The operation that failed
  * @param {string} domainName - Domain name that was being processed
  * @returns {ServiceResult} Standardized error response
@@ -115,7 +111,7 @@ const handleWhoisError = (error, operation, domainName) => {
     const classifiedError = classifyWhoisError(error);
 
     console.error(`❌ ${operation} failed for ${domainName}:`, {
-        originalMessage: error?.message,
+        originalMessage: getErrorMessage(error),
         domain: domainName,
     });
 
@@ -131,7 +127,7 @@ const handleWhoisError = (error, operation, domainName) => {
 
 /**
  * Create WhoisJson client with proper configuration
- * @param {string} [customApiKey] - Optional custom API key, otherwise uses stored key
+ * @param {string|null} [customApiKey] - Optional custom API key, otherwise uses stored key
  * @returns {Promise<WhoisJson>} Configured whois client
  * @throws {Error} If API key is not available
  */
@@ -154,7 +150,7 @@ const createWhoisClient = async (customApiKey = null) => {
 /**
  * Check domain availability with comprehensive error handling and validation
  * @param {string} domainName - Domain to check
- * @param {string} [customApiKey] - Optional custom API key for testing
+ * @param {string|null} [customApiKey] - Optional custom API key for testing
  * @returns {Promise<ServiceResult>} Domain availability result
  *
  * @example
@@ -204,7 +200,7 @@ export async function checkDomainAvailability(domainName, customApiKey = null) {
 /**
  * Perform NS lookup for a domain with proper validation
  * @param {string} domainName - Domain name to lookup
- * @param {string} [customApiKey] - Optional custom API key
+ * @param {string|null} [customApiKey] - Optional custom API key
  * @returns {Promise<ServiceResult>} DNS lookup result
  */
 export async function checkDomainNS(domainName, customApiKey = null) {
@@ -230,7 +226,7 @@ export async function checkDomainNS(domainName, customApiKey = null) {
 /**
  * Get SSL certificate information for a domain
  * @param {string} domainName - Domain name to check SSL certificate
- * @param {string} [customApiKey] - Optional custom API key
+ * @param {string|null} [customApiKey] - Optional custom API key
  * @returns {Promise<ServiceResult>} SSL certificate result
  */
 export async function checkDomainSSL(domainName, customApiKey = null) {
@@ -291,7 +287,7 @@ export async function testApiKeyConnection(
     } catch (error) {
         return {
             status: 500,
-            message: `${error.message}`,
+            message: getErrorMessage(error),
         };
     }
 }

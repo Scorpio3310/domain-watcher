@@ -1,13 +1,17 @@
+import { getErrorMessage } from "$lib/utils/helpers.js";
+
+/** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
+
 /**
  * Slack notification service for formatting and sending messages
  */
 export const slackNotifier = {
     /**
      * Send domain monitoring report to Slack
-     * @param {Object} settings - Slack settings object
-     * @param {string} settings.webhook_url - Slack webhook URL
-     * @param {Object} domainUpdates - Domain update data
-     * @returns {Promise<Object>} Send result
+     * @param {{webhook_url: string}} settings - Slack settings object
+     * @param {DomainUpdates} domainUpdates - Domain update data
+     * @param {string} [origin=""] - Optional origin URL for links
+     * @returns {Promise<NotifierResult>} Send result
      */
     async sendDomainReport(settings, domainUpdates, origin = "") {
         try {
@@ -43,13 +47,15 @@ export const slackNotifier = {
             console.error("❌ Failed to send Slack notification:", error);
             return {
                 success: false,
-                message: `Network error: ${error.message}`,
+                message: `Network error: ${getErrorMessage(error)}`,
             };
         }
     },
 
     /**
      * Format domain updates into Slack message blocks
+     * @param {DomainUpdates} domainUpdates - Domain update data
+     * @returns {{text: string, blocks: SlackBlock[]}} Slack message payload
      */
     formatDomainMessage(domainUpdates) {
         const {
@@ -60,6 +66,7 @@ export const slackNotifier = {
         } = domainUpdates;
         const timestamp = new Date().toLocaleString();
 
+        /** @type {SlackBlock[]} */
         const blocks = [
             {
                 type: "header",
@@ -211,6 +218,8 @@ export const slackNotifier = {
 
     /**
      * Format date for display
+     * @param {string} dateString - Date string to format
+     * @returns {string} Formatted date
      */
     formatDate(dateString) {
         return new Date(dateString).toLocaleDateString("en-US", {
@@ -222,10 +231,11 @@ export const slackNotifier = {
 
     /**
      * Get days until domain expiry (negative if expired)
+     * @param {string} expiryDate - Domain expiration date string
+     * @returns {number} Days until expiry (negative if expired)
      */
     getDaysUntilExpiry(expiryDate) {
-        const expiry = new Date(expiryDate);
-        const diffTime = expiry - new Date();
+        const diffTime = new Date(expiryDate).getTime() - Date.now();
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     },
 };

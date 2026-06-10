@@ -2,7 +2,10 @@
  * @fileoverview Settings page server load and actions
  */
 
+/** @import { ServiceResult, SlackConfig, ResendConfig } from '$lib/types' */
+
 import { error } from "@sveltejs/kit";
+import { getErrorMessage, getHttpStatus } from "$src/lib/utils/helpers";
 import { message, superValidate, fail } from "sveltekit-superforms";
 import { zod4 } from "sveltekit-superforms/adapters";
 import {
@@ -27,11 +30,11 @@ export async function load() {
         // Fetch all settings data in parallel
         const [
             apiKeyConfig,
-            currentViewMode,
+            rawViewMode,
             isSlackNotificationEnabled,
-            slackWebhookConfig,
+            rawSlackWebhookConfig,
             isResendNotificationEnabled,
-            resendConfig,
+            rawResendConfig,
         ] = await Promise.all([
             apiKey.getConfig(),
             ui.getViewMode(),
@@ -40,6 +43,14 @@ export async function load() {
             resend.getNotificationStatus(),
             resend.getResendConfig(),
         ]);
+
+        const currentViewMode = /** @type {string} */ (rawViewMode);
+        const slackWebhookConfig = /** @type {SlackConfig | null} */ (
+            rawSlackWebhookConfig
+        );
+        const resendConfig = /** @type {ResendConfig | null} */ (
+            rawResendConfig
+        );
 
         // Create form instances with current values
         const formApiKey = await superValidate(
@@ -95,8 +106,8 @@ export async function load() {
         };
     } catch (err) {
         console.error("❌ Settings page load failed:", err);
-        throw error(err?.status || 500, {
-            message: `${err?.message}`,
+        throw error(getHttpStatus(err), {
+            message: getErrorMessage(err),
         });
     }
 }
@@ -134,7 +145,9 @@ export const actions = {
             return fail(400, { form: form });
         }
 
-        const result = await ui.saveViewMode(form.data.viewMode);
+        const result = /** @type {ServiceResult} */ (
+            await ui.saveViewMode(form.data.viewMode)
+        );
 
         return message(form, {
             status: result.status,
@@ -152,7 +165,9 @@ export const actions = {
             return fail(400, { form: form });
         }
 
-        const result = await slack.saveNotificationStatus(form.data.enabled);
+        const result = /** @type {ServiceResult} */ (
+            await slack.saveNotificationStatus(form.data.enabled)
+        );
 
         return message(form, {
             status: result.status,
@@ -171,9 +186,11 @@ export const actions = {
         }
 
         const { webhook, notificationTime, sendTestMessage } = form.data;
-        const result = await slack.saveWebhook(webhook, notificationTime, {
-            shouldTestConnection: sendTestMessage,
-        });
+        const result = /** @type {ServiceResult} */ (
+            await slack.saveWebhook(webhook, notificationTime, {
+                shouldTestConnection: sendTestMessage,
+            })
+        );
 
         return message(form, {
             status: result.status,
@@ -191,7 +208,9 @@ export const actions = {
             return fail(400, { form: form });
         }
 
-        const result = await resend.saveNotificationStatus(form.data.enabled);
+        const result = /** @type {ServiceResult} */ (
+            await resend.saveNotificationStatus(form.data.enabled)
+        );
 
         return message(form, {
             status: result.status,
@@ -216,12 +235,10 @@ export const actions = {
             notificationTime,
             sendTestMessage,
         } = form.data;
-        const result = await resend.saveConfig(
-            apiKey,
-            fromEmail,
-            toEmail,
-            notificationTime,
-            { shouldTestConnection: sendTestMessage }
+        const result = /** @type {ServiceResult} */ (
+            await resend.saveConfig(apiKey, fromEmail, toEmail, notificationTime, {
+                shouldTestConnection: sendTestMessage,
+            })
         );
 
         return message(form, {

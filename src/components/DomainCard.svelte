@@ -16,6 +16,7 @@
     import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
 
     //// PROPS ////
+    /** @type {{data: import('$lib/types').DomainRecord, uiView?: string}} */
     let { data, uiView } = $props();
 
     //// FORM INSTANCES (isolated per domain) ////
@@ -68,7 +69,7 @@
         <div class="main-info">
             <div class="icon-status">
                 <Icon icon="iconoir:globe" class="icon-globe" />
-                {@render showStatus(data?.status ?? 4)}
+                {@render showStatus(data?.status ?? "")}
             </div>
 
             <h3>{data?.domain_name || "Error"}</h3>
@@ -136,19 +137,18 @@
                     <form
                         {...removeForm.enhance(async ({ submit }) => {
                             try {
-                                await submit();
-
-                                const issues =
-                                    removeForm.fields.allIssues() ?? [];
-                                if (issues.length > 0) {
+                                if (await submit()) {
+                                    if (removeForm.result)
+                                        toast.show(removeForm.result);
+                                } else {
+                                    const issues =
+                                        removeForm.fields.allIssues() ?? [];
                                     toast.show({
                                         status: 400,
                                         message: issues
                                             .map((i) => i.message)
                                             .join(", "),
                                     });
-                                } else {
-                                    toast.show(removeForm?.result);
                                 }
                             } catch (error) {
                                 toast.show({
@@ -163,7 +163,6 @@
                                 "hidden",
                                 data?.id,
                             )}
-                            readonly
                         />
                         {#if isDemo()}
                             <Button
@@ -239,7 +238,7 @@
     <hr />
     <p class="inline">
         <span class="opacity-50">Expiration Date:</span>
-        {formatExpirationDate(data?.expires, {
+        {formatExpirationDate(data?.expires ?? null, {
             showRemaining: false,
         }) || "/"}
         {#if data?.expires}
@@ -263,12 +262,12 @@
     <hr />
     <p class="inline">
         <span class="opacity-50">Last Checked:</span>
-        {formatLastChecked(data?.last_domain_checked) || "Never"}
+        {formatLastChecked(data?.last_domain_checked ?? null) || "Never"}
     </p>
     <hr />
     <p class="inline">
         <span class="opacity-50">Added At:</span>
-        {formatHumanDate(data?.created_at) || "/"}
+        {formatHumanDate(data?.created_at ?? null) || "/"}
     </p>
     <hr />
     <div>
@@ -315,18 +314,16 @@
             <form
                 {...nsForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-
-                        const issues = nsForm.fields.allIssues() ?? [];
-                        if (issues.length > 0) {
+                        if (await submit()) {
+                            if (nsForm.result) toast.show(nsForm.result);
+                        } else {
+                            const issues = nsForm.fields.allIssues() ?? [];
                             toast.show({
                                 status: 400,
                                 message: issues
                                     .map((i) => i.message)
                                     .join(", "),
                             });
-                        } else {
-                            toast.show(nsForm?.result);
                         }
                     } catch (error) {
                         toast.show({
@@ -336,10 +333,7 @@
                     }
                 })}
             >
-                <input
-                    {...nsForm.fields.domainId.as("hidden", data?.id)}
-                    readonly
-                />
+                <input {...nsForm.fields.domainId.as("hidden", data?.id)} />
                 <Button
                     type={isDemo() ? "button" : "submit"}
                     text="NS Lookup"
@@ -358,18 +352,16 @@
             <form
                 {...sslForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-
-                        const issues = sslForm.fields.allIssues() ?? [];
-                        if (issues.length > 0) {
+                        if (await submit()) {
+                            if (sslForm.result) toast.show(sslForm.result);
+                        } else {
+                            const issues = sslForm.fields.allIssues() ?? [];
                             toast.show({
                                 status: 400,
                                 message: issues
                                     .map((i) => i.message)
                                     .join(", "),
                             });
-                        } else {
-                            toast.show(sslForm?.result);
                         }
                     } catch (error) {
                         toast.show({
@@ -379,10 +371,7 @@
                     }
                 })}
             >
-                <input
-                    {...sslForm.fields.domainId.as("hidden", data?.id)}
-                    readonly
-                />
+                <input {...sslForm.fields.domainId.as("hidden", data?.id)} />
 
                 <Button
                     type={isDemo() ? "button" : "submit"}
@@ -403,18 +392,16 @@
             <form
                 {...checkForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-
-                        const issues = checkForm.fields.allIssues() ?? [];
-                        if (issues.length > 0) {
+                        if (await submit()) {
+                            if (checkForm.result) toast.show(checkForm.result);
+                        } else {
+                            const issues = checkForm.fields.allIssues() ?? [];
                             toast.show({
                                 status: 400,
                                 message: issues
                                     .map((i) => i.message)
                                     .join(", "),
                             });
-                        } else {
-                            toast.show(checkForm?.result);
                         }
                     } catch (error) {
                         toast.show({
@@ -424,10 +411,7 @@
                     }
                 })}
             >
-                <input
-                    {...checkForm.fields.domainId.as("hidden", data?.id)}
-                    readonly
-                />
+                <input {...checkForm.fields.domainId.as("hidden", data?.id)} />
 
                 <Button
                     type={isDemo() ? "button" : "submit"}
@@ -448,14 +432,14 @@
     </div>
 {/snippet}
 
-{#snippet showStatus(domainStatus)}
+{#snippet showStatus(domainStatus = "")}
     {#if domainStatus === DOMAIN_STATUS.AVAILABLE}
         <div class="status status--available">
             <Icon icon="iconoir:check" class="icon" />
         </div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.REGISTERED}
-        {#if getExpirationStatus(data?.expires)?.isExpired || getExpirationStatus(data?.expires)?.isExpiringSoon}
+        {#if getExpirationStatus(data?.expires ?? null)?.isExpired || getExpirationStatus(data?.expires ?? null)?.isExpiringSoon}
             <div class="status-expiring-soon">
                 <Icon icon="iconoir:warning-triangle-solid" class="icon" />
             </div>
@@ -478,7 +462,7 @@
     {/if}
 {/snippet}
 
-{#snippet statusTextFormat(domainStatus)}
+{#snippet statusTextFormat(domainStatus = "")}
     {#if domainStatus === DOMAIN_STATUS.AVAILABLE}
         <div class="text-green">Available</div>
     {/if}

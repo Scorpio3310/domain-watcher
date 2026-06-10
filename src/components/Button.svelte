@@ -2,22 +2,25 @@
     import Icon from "@iconify/svelte";
     /**
      * Flexible button component with support for text, icons, or both
-     * @param {('lg'|'md'|'sm')} size - Button size
-     * @param {('white'|'black'|'white-outline'|'black-outline')} color - Button color variant
-     * @param {string} [icon] - Icon name for Iconify (e.g., 'mdi:plus', 'heroicons:search')
-     * @param {string} [iconClass] - Icon color class (Tailwind class like 'text-green-500' or 'text-red-600')
-     * @param {string} [text] - Button text content
-     * @param {string} [children] - Slot content (alternative to text prop)
-     * @param {boolean} [disabled] - Disable button
-     * @param {Function} [onclick] - Click handler
-     * @param {string} [href] - URL for link mode (makes it an <a> tag instead of button)
-     * @param {string} [target] - Link target (e.g., '_blank', '_self')
-     * @param {string} [title] - Button title for accessibility
-     * @param {string} [type] - Button type when in button mode (e.g., 'submit', 'button')
-     * @param {number} [tabindex] - Tab index for keyboard navigation
+     * @typedef {Object} Props
+     * @property {('lg'|'md'|'sm')} [size] - Button size
+     * @property {('white'|'black'|'white-outline'|'black-outline')} [color] - Button color variant
+     * @property {string} [icon] - Icon name for Iconify (e.g., 'mdi:plus', 'heroicons:search')
+     * @property {string} [iconClass] - Icon color class (Tailwind class like 'text-green-500' or 'text-red-600')
+     * @property {string} [text] - Button text content
+     * @property {import('svelte').Snippet} [children] - Slot content (alternative to text prop)
+     * @property {boolean} [disabled] - Disable button
+     * @property {(event: Event) => void} [onclick] - Click handler
+     * @property {string} [href] - URL for link mode (makes it an <a> tag instead of button)
+     * @property {string} [target] - Link target (e.g., '_blank', '_self')
+     * @property {string} [title] - Button title for accessibility
+     * @property {string} [type] - Button type when in button mode (e.g., 'submit', 'button')
+     * @property {number} [tabindex] - Tab index for keyboard navigation
      * @property {string} [ariaLabel] - Accessibility label
-     * @param {string} [class] - Additional CSS classes for the button
+     * @property {string} [class] - Additional CSS classes for the button
      */
+
+    /** @type {Props & Record<string, any>} */
     let {
         size = "md",
         color = "white",
@@ -32,7 +35,7 @@
         title = "",
         type = "button",
         tabindex = undefined,
-        ariaLabel,
+        ariaLabel = undefined,
         class: customClass = "",
         ...restProps
     } = $props();
@@ -46,7 +49,7 @@
     const iconOnly = $derived(hasIcon && !hasText);
 
     // Build CSS classes - combine component classes with custom classes
-    const buttonClasses = $derived(() => {
+    const buttonClasses = $derived.by(() => {
         const classes = ["button", `button--${size}`, `button--${color}`];
 
         // Add icon-only specific styling if needed
@@ -68,7 +71,7 @@
     });
 
     // Icon size based on button size
-    const iconSize = $derived(() => {
+    const iconSize = $derived.by(() => {
         switch (size) {
             case "lg":
                 return "text-2xl";
@@ -82,8 +85,8 @@
     });
 
     // Icon classes - combine size, color and spacing
-    const iconClasses = $derived(() => {
-        const classes = [iconSize()];
+    const iconClasses = $derived.by(() => {
+        const classes = [iconSize];
 
         // Add custom color class if provided
         if (iconClass) {
@@ -94,6 +97,7 @@
     });
 
     // Handle click only if not disabled
+    /** @param {Event} event */
     const handleClick = (event) => {
         if (disabled) {
             event.preventDefault();
@@ -104,6 +108,7 @@
     };
 
     // Handle keyboard events
+    /** @param {KeyboardEvent} event */
     const handleKeyDown = (event) => {
         if (disabled) {
             event.preventDefault();
@@ -125,11 +130,12 @@
                 }
             } else {
                 // Check if this is a submit button in a form
-                const form = event.target.closest("form");
+                const target = /** @type {HTMLElement} */ (event.target);
+                const form = target.closest("form");
 
                 if (type === "submit" && form) {
                     // Use requestSubmit to trigger form validation and submission
-                    form.requestSubmit(event.target);
+                    form.requestSubmit(/** @type {HTMLElement} */ (target));
                 } else {
                     // For regular buttons or buttons not in forms
                     handleClick(event);
@@ -139,14 +145,14 @@
     };
 
     // Determine tabindex value
-    const effectiveTabindex = $derived(() => {
+    const effectiveTabindex = $derived.by(() => {
         if (disabled) return -1;
         if (tabindex !== undefined) return tabindex;
         return 0; // Default focusable
     });
 
     // Remove 'class' from restProps to avoid conflicts
-    const filteredRestProps = $derived(() => {
+    const filteredRestProps = $derived.by(() => {
         const { class: _, ...filtered } = restProps;
         return filtered;
     });
@@ -159,18 +165,18 @@
     title={title || (iconOnly && text ? text : undefined)}
     type={isLink ? undefined : type}
     disabled={isLink ? undefined : disabled}
-    tabindex={effectiveTabindex()}
+    tabindex={effectiveTabindex}
     aria-disabled={disabled ? "true" : "false"}
     aria-label={ariaLabel ? ariaLabel : text}
     role={isLink ? "link" : "button"}
-    class={buttonClasses()}
+    class={buttonClasses}
     onclick={handleClick}
     onkeydown={handleKeyDown}
     {...filteredRestProps}
 >
     {#if hasIcon}
-        <span class="icon {iconSize()}" aria-hidden="true">
-            <Icon {icon} class={iconClasses()} />
+        <span class="icon {iconSize}" aria-hidden="true">
+            <Icon {icon} class={iconClasses} />
         </span>
     {/if}
     {#if text}

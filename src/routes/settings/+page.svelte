@@ -18,6 +18,7 @@
     import { formatLastChecked } from "$src/lib/utils/helpers.js";
 
     //// PROPS ////
+    /** @type {import('./$types').PageProps} */
     let { data } = $props();
 
     //// SUPERFORMS ////
@@ -28,16 +29,21 @@
         message: apiKeyMessage,
         enhance: apiKeyEnhance,
         submitting: apiKeySubmitting,
-    } = superForm(data?.formApiKey, {
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
+    } = superForm(
+        // svelte-ignore state_referenced_locally
+        data?.formApiKey,
+        {
+            resetForm: false,
+            onResult: ({ result }) => {
+                if (result.type === "success" && result.data?.form?.message) {
+                    toast.show(result.data?.form?.message);
+                }
+            },
         },
-    });
+    );
 
     const { form: UIViewForm, enhance: UIViewEnhance } = superForm(
+        // svelte-ignore state_referenced_locally
         data?.formUiView,
         {
             resetForm: false,
@@ -54,15 +60,19 @@
         enhance: formSlackEnabledEnhance,
         submitting: formSlackEnabledSubmitting,
         submit: formSlackEnabledSubmit,
-    } = superForm(data?.formSlackEnabled, {
-        resetForm: false,
-        id: "slack-form-toggle",
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
+    } = superForm(
+        // svelte-ignore state_referenced_locally
+        data?.formSlackEnabled,
+        {
+            resetForm: false,
+            id: "slack-form-toggle",
+            onResult: ({ result }) => {
+                if (result.type === "success" && result.data?.form?.message) {
+                    toast.show(result.data?.form?.message);
+                }
+            },
         },
-    });
+    );
 
     const {
         form: slackWebHookForm,
@@ -70,30 +80,38 @@
         constraints: slackWebHookConstraints,
         enhance: slackWebHookEnhance,
         submitting: slackWebHookSubmitting,
-    } = superForm(data?.formSlackWebhook, {
-        resetForm: false,
-        invalidateAll: true,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
+    } = superForm(
+        // svelte-ignore state_referenced_locally
+        data?.formSlackWebhook,
+        {
+            resetForm: false,
+            invalidateAll: true,
+            onResult: ({ result }) => {
+                if (result.type === "success" && result.data?.form?.message) {
+                    toast.show(result.data?.form?.message);
+                }
+            },
         },
-    });
+    );
 
     const {
         form: formResendEnabledForm,
         enhance: formResendEnabledEnhance,
         submitting: formResendEnabledSubmitting,
         submit: formResendEnabledSubmit,
-    } = superForm(data?.formResendEnabled, {
-        resetForm: false,
-        id: "resend-form-toggle",
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
+    } = superForm(
+        // svelte-ignore state_referenced_locally
+        data?.formResendEnabled,
+        {
+            resetForm: false,
+            id: "resend-form-toggle",
+            onResult: ({ result }) => {
+                if (result.type === "success" && result.data?.form?.message) {
+                    toast.show(result.data?.form?.message);
+                }
+            },
         },
-    });
+    );
 
     const {
         form: formResendForm,
@@ -101,14 +119,18 @@
         constraints: formResendConstraints,
         enhance: formResendEnhance,
         submitting: formResendSubmitting,
-    } = superForm(data?.formResend, {
-        resetForm: false,
-        onResult: ({ result }) => {
-            if (result.type === "success" && result.data?.form?.message) {
-                toast.show(result.data?.form?.message);
-            }
+    } = superForm(
+        // svelte-ignore state_referenced_locally
+        data?.formResend,
+        {
+            resetForm: false,
+            onResult: ({ result }) => {
+                if (result.type === "success" && result.data?.form?.message) {
+                    toast.show(result.data?.form?.message);
+                }
+            },
         },
-    });
+    );
 </script>
 
 <svelte:head>
@@ -226,7 +248,8 @@
                         <p class="text">
                             Last verified: <span class="italic">
                                 {formatLastChecked(
-                                    data?.apiKeyConfig?.connection_verified_at,
+                                    data?.apiKeyConfig
+                                        ?.connection_verified_at ?? null,
                                 ) || "Never"}</span
                             >
                         </p>
@@ -508,7 +531,8 @@
                                             Last verified: <span class="italic">
                                                 {formatLastChecked(
                                                     data?.slackWebhookConfig
-                                                        ?.connection_verified_at,
+                                                        ?.connection_verified_at ??
+                                                        null,
                                                 ) || "Never"}</span
                                             >
                                         </p>
@@ -728,7 +752,8 @@
                                             Last verified: <span class="italic">
                                                 {formatLastChecked(
                                                     data?.resendConfig
-                                                        ?.connection_verified_at,
+                                                        ?.connection_verified_at ??
+                                                        null,
                                                 ) || "Never"}</span
                                             >
                                         </p>

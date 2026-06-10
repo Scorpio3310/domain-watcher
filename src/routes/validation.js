@@ -1,8 +1,15 @@
 import { z } from "zod/v4";
 
 export const domainIdFormSchema = z.object({
-    domainId: z.coerce
-        .number({ message: "Oops! That doesn't look like a valid ID - numbers only, please! 🔢" })
+    // Narrow zod 4's coerced-number input type from `unknown` to `string | number`
+    // so the schema satisfies SvelteKit form()'s StandardSchemaV1<RemoteFormInput, ...>
+    // constraint (equivalent to z.coerce.number<string | number>() in TS).
+    domainId: /** @type {import("zod/v4").ZodCoercedNumber<string | number>} */ (
+        z.coerce.number({
+            message:
+                "Oops! That doesn't look like a valid ID - numbers only, please! 🔢",
+        })
+    )
         .int("Hmm, decimals aren't allowed here - whole numbers only! 🎯")
         .positive("IDs need to be positive - no negativity allowed! ✨")
         .max(9999999, "Whoa, that ID is way too big - keep it under 9,999,999! 📏"),

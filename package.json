@@ -1,7 +1,7 @@
 {
     "name": "domain-watcher",
     "private": true,
-    "version": "1.0.1",
+    "version": "1.0.2",
     "type": "module",
     "description": "Domain availability watcher built with SvelteKit",
     "author": {
@@ -34,18 +34,19 @@
     },
     "devDependencies": {
         "@iconify/svelte": "^5.2.1",
-        "@sveltejs/adapter-cloudflare": "^7.2.6",
-        "@sveltejs/kit": "^2.50.2",
-        "@sveltejs/vite-plugin-svelte": "^6.2.4",
-        "@tailwindcss/vite": "^4.1.18",
-        "svelte": "^5.50.0",
-        "svelte-check": "^4.3.6",
-        "sveltekit-superforms": "^2.29.1",
-        "tailwindcss": "^4.1.18",
-        "typescript": "^5.9.3",
-        "vite": "^7.3.1",
-        "wrangler": "^4.63.0",
-        "zod": "^4.3.6"
+        "@sveltejs/adapter-cloudflare": "^7.2.8",
+        "@sveltejs/kit": "^2.64.0",
+        "@sveltejs/vite-plugin-svelte": "^7.1.2",
+        "@tailwindcss/vite": "^4.3.0",
+        "@types/node": "^25.9.2",
+        "svelte": "^5.56.3",
+        "svelte-check": "^4.6.0",
+        "sveltekit-superforms": "^2.30.1",
+        "tailwindcss": "^4.3.0",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.16",
+        "wrangler": "^4.99.0",
+        "zod": "^4.4.3"
     },
     "pnpm": {
         "onlyBuiltDependencies": [
@@ -53,9 +54,9 @@
         ]
     },
     "dependencies": {
-        "@fontsource/figtree": "^5.2.8",
+        "@fontsource/figtree": "^5.2.10",
         "@whoisjson/whoisjson": "^1.0.4",
-        "date-fns": "^4.1.0",
-        "resend": "^4.7.0"
+        "date-fns": "^4.4.0",
+        "resend": "^6.12.4"
     }
 }

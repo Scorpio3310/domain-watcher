@@ -2,7 +2,9 @@
     import Button from "$components/Button.svelte";
 
     // All possible prop combinations
+    /** @type {('lg'|'md'|'sm')[]} */
     const sizes = ["lg", "md", "sm"];
+    /** @type {('white'|'black'|'white-outline'|'black-outline')[]} */
     const colors = ["white", "black", "white-outline", "black-outline"];
     const icons = ["iconoir:search", "iconoir:plus"];
     const iconExampleClass = ["", "text-red", "text-lime"];
@@ -14,7 +16,19 @@
         { type: "icon-only", label: "Icon Only" },
     ];
 
+    /**
+     * Single button prop combination used for rendering test cases
+     * @typedef {Object} ButtonCombo
+     * @property {('lg'|'md'|'sm')} size - Button size
+     * @property {('white'|'black'|'white-outline'|'black-outline')} color - Button color variant
+     * @property {string} icon - Iconify icon name (empty for none)
+     * @property {string} iconClass - Icon color class
+     * @property {string} text - Button text content
+     * @property {string} description - Human-readable combination description
+     */
+
     // Generate combinations organized by size and type
+    /** @type {Record<string, Record<string, ButtonCombo[]>>} */
     let combinationsBySizeAndType = {};
 
     for (let size of sizes) {
@@ -59,6 +73,11 @@
     }
 
     // Split into groups of 4 for better layout
+    /**
+     * @param {ButtonCombo[]} array - Items to split
+     * @param {number} size - Chunk size
+     * @returns {ButtonCombo[][]} Chunked groups
+     */
     function chunkArray(array, size) {
         const chunks = [];
         for (let i = 0; i < array.length; i += size) {
@@ -67,6 +86,7 @@
         return chunks;
     }
 
+    /** @param {string} description - Combination description to log */
     function handleClick(description) {
         console.log(`Clicked: ${description}`);
         alert(`Button clicked: ${description}`);

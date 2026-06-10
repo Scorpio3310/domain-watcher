@@ -7,11 +7,14 @@
 
 import { executeSql } from "$src/lib/database/db";
 import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
+import { getErrorMessage } from "$src/lib/utils/helpers";
 import {
     validateDemoMode,
     executeDomainQuery,
     verificationEngine,
 } from "$src/lib/server/utils/domain-utils.js";
+
+/** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "$lib/types" */
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT
@@ -26,10 +29,7 @@ export const domains = {
      * Retrieves all domains from the watchlist
      * @async
      * @memberof domains
-     * @returns {Promise<Object>} Response object with domain list
-     * @returns {number} returns.status - HTTP status code (200 for success, 500 for error)
-     * @returns {string} returns.message - Human-readable status message
-     * @returns {Array<Object>} returns.data - Array of domain objects
+     * @returns {Promise<DomainListResponse>} Response object with domain list
      *
      * @example
      * const response = await domains.getAll();
@@ -39,7 +39,9 @@ export const domains = {
      */
     async getAll() {
         const queryResult = await executeSql(DOMAIN_QUERIES.SELECT_ALL_DOMAINS);
-        const domains = queryResult?.results || [];
+        const domains = /** @type {DomainRecord[]} */ (
+            queryResult?.results || []
+        );
         return {
             status: 200,
             message: `Retrieved ${domains.length} domain${
@@ -54,9 +56,7 @@ export const domains = {
      * @async
      * @memberof domains
      * @param {string} domainName - The domain name to add (e.g., 'example.com')
-     * @returns {Promise<Object>} Response object
-     * @returns {number} returns.status - HTTP status code (201 for created, 409 for conflict, 403 for demo mode, 500 for error)
-     * @returns {string} returns.message - Human-readable status message
+     * @returns {Promise<DomainAddResponse>} Response object
      *
      * @example
      * const response = await domains.add('example.com');
@@ -89,7 +89,7 @@ export const domains = {
             console.error("❌ Failed to add domain to watchlist:", error);
             return {
                 status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
             };
         }
     },
@@ -109,10 +109,7 @@ export const domainVerification = {
      * Retrieves all domains categorized by their verification and expiration status
      * @async
      * @memberof domainVerification
-     * @returns {Promise<Object>} Categorized domain lists
-     * @returns {Array<Object>} returns.needingVerification - Domains that need status verification
-     * @returns {Array<Object>} returns.expiredRegistered - Expired domains still showing as registered
-     * @returns {Array<Object>} returns.expiring - Domains expiring within 30 days
+     * @returns {Promise<CategorizedDomains>} Categorized domain lists
      *
      * @example
      * const categories = await domainVerification.getAllDomainsForVerification();
@@ -125,13 +122,16 @@ export const domainVerification = {
             const result = await executeSql(
                 DOMAIN_QUERIES.SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION
             );
-            const domains = result?.results || [];
+            const domains = /** @type {DomainRecord[]} */ (
+                result?.results || []
+            );
 
+            /** @type {CategorizedDomains} */
             const categorized = {
                 needingVerification: domains.filter(
                     (d) =>
                         ["available", "error", "not_checked"].includes(
-                            d.status
+                            d.status ?? ""
                         ) &&
                         !(
                             d.expires &&
@@ -173,7 +173,7 @@ export const domainVerification = {
      * Retrieves domains that need their availability status verified
      * @async
      * @memberof domainVerification
-     * @returns {Promise<Array<Object>>} Array of domain objects needing verification
+     * @returns {Promise<DomainRecord[]>} Array of domain objects needing verification
      *
      * @example
      * const domains = await domainVerification.getDomainsNeedingVerification();
@@ -191,7 +191,7 @@ export const domainVerification = {
      * These domains are high priority for re-checking availability
      * @async
      * @memberof domainVerification
-     * @returns {Promise<Array<Object>>} Array of expired registered domain objects
+     * @returns {Promise<DomainRecord[]>} Array of expired registered domain objects
      *
      * @example
      * const expiredDomains = await domainVerification.getExpiredRegisteredDomains();
@@ -208,7 +208,7 @@ export const domainVerification = {
      * Retrieves domains that will expire within the next 30 days
      * @async
      * @memberof domainVerification
-     * @returns {Promise<Array<Object>>} Array of soon-to-expire domain objects
+     * @returns {Promise<DomainRecord[]>} Array of soon-to-expire domain objects
      *
      * @example
      * const expiringDomains = await domainVerification.getExpiringDomains();
@@ -225,11 +225,9 @@ export const domainVerification = {
      * Performs batch verification of a list of domains using the verification engine
      * @async
      * @memberof domainVerification
-     * @param {Array<Object>} domains - Array of domain objects to verify
-     * @param {Object} [options={}] - Configuration options for batch processing
-     * @param {number} [options.delayBetweenDomains] - Delay between batches in milliseconds
-     * @param {number} [options.batchSize] - Number of domains to process per batch
-     * @returns {Promise<Object>} Batch verification results from verificationEngine.verifyBatch
+     * @param {DomainRecord[]} domains - Array of domain objects to verify
+     * @param {BatchOptions} [options={}] - Configuration options for batch processing
+     * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
      *
      * @example
      * const domains = await domainVerification.getDomainsNeedingVerification();
@@ -248,11 +246,9 @@ export const domainVerification = {
      * This is a specialized version of verifyDomainsBatch for high-priority expired domains
      * @async
      * @memberof domainVerification
-     * @param {Array<Object>} expiredDomains - Array of expired domain objects to verify
-     * @param {Object} [options={}] - Configuration options for batch processing
-     * @param {number} [options.delayBetweenDomains] - Delay between batches in milliseconds
-     * @param {number} [options.batchSize] - Number of domains to process per batch
-     * @returns {Promise<Object>} Batch verification results from verificationEngine.verifyBatch
+     * @param {DomainRecord[]} expiredDomains - Array of expired domain objects to verify
+     * @param {BatchOptions} [options={}] - Configuration options for batch processing
+     * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
      *
      * @example
      * const expiredDomains = await domainVerification.getExpiredRegisteredDomains();

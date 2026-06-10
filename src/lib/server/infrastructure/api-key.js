@@ -3,29 +3,25 @@
  * @module ApiKeyService
  */
 
+/** @import { ApiKeyConfig, ServiceResult } from '$lib/types' */
+
 import { executeQueryFirst, executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { WHOIS_JSON_API_STATUS } from "$lib/constants/constants";
 import { isDemo } from "$src/lib/utils/helpers";
-import { maskApiKey } from "$lib/utils/helpers";
+import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 import { testApiKeyConnection } from "./whois-client";
 
 // ========================================
 // TYPES & INTERFACES
 // ========================================
 /**
- * @typedef {Object} ApiKeyConfig
- * @property {string|null} api_key - The API key
+ * Fallback configuration state when no API key is stored yet
+ * @typedef {Object} EmptyApiKeyConfig
+ * @property {null} api_key - No API key configured
  * @property {string} connection_status - Connection status
- * @property {string|null} connection_verified_at - When connection was last verified
- * @property {number} version - Configuration version
- */
-
-/**
- * @typedef {Object} ServiceResult
- * @property {number} status - HTTP status code
- * @property {string} message - Result message
- * @property {*} [data] - Optional data payload
+ * @property {null} connection_verified_at - Never verified
+ * @property {number} version - Config schema version
  */
 
 // ========================================
@@ -51,7 +47,7 @@ const getApiSettings = async () => {
             SETTINGS_QUERIES.SELECT_API_SETTINGS
         );
         return result?.json_config_data
-            ? JSON.parse(result.json_config_data)
+            ? /** @type {ApiKeyConfig} */ (JSON.parse(result.json_config_data))
             : null;
     } catch (error) {
         console.error("❌ Failed to get API settings:", error);
@@ -71,7 +67,7 @@ const saveApiConfiguration = async (config) => {
         ]);
     } catch (error) {
         console.error("❌ Failed to save API configuration:", error);
-        throw new Error(`Database save failed: ${error.message}`);
+        throw new Error(`Database save failed: ${getErrorMessage(error)}`);
     }
 };
 
@@ -131,7 +127,7 @@ export const apiKey = {
     /**
      * Get full API configuration with proper error handling
      * @async
-     * @returns {Promise<ApiKeyConfig>} Complete API configuration
+     * @returns {Promise<ApiKeyConfig|EmptyApiKeyConfig>} Complete API configuration
      */
     async getConfig() {
         try {
@@ -227,7 +223,7 @@ export const apiKey = {
             console.error("❌ Failed to save API key:", error);
             return {
                 status: 500,
-                message: `Failed to save API key: ${error.message}`,
+                message: `Failed to save API key: ${getErrorMessage(error)}`,
             };
         }
     },

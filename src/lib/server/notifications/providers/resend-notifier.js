@@ -1,5 +1,8 @@
 import { Resend } from "resend";
 import { PRODUCTION_DOMAIN } from "$env/static/private";
+import { getErrorMessage } from "$lib/utils/helpers.js";
+
+/** @import { DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
 
 /**
  * Resend Email notification service for formatting and sending messages
@@ -7,12 +10,9 @@ import { PRODUCTION_DOMAIN } from "$env/static/private";
 export const resendNotifier = {
     /**
      * Send domain monitoring report via Resend Email
-     * @param {Object} settings - Resend settings object
-     * @param {string} settings.api_key - Resend API key
-     * @param {string} settings.from_email - Sender email address
-     * @param {string} settings.to_email - Recipient email address
-     * @param {Object} domainUpdates - Domain update data
-     * @returns {Promise<Object>} Send result
+     * @param {{api_key: string, from_email: string, to_email: string}} settings - Resend settings object
+     * @param {DomainUpdates} domainUpdates - Domain update data
+     * @returns {Promise<NotifierResult & {data?: {emailId: string, from: string, to: string, sentAt: string}}>} Send result
      */
     async sendDomainReport(settings, domainUpdates) {
         try {
@@ -29,7 +29,7 @@ export const resendNotifier = {
             const emailContent = this.formatEmailContent(domainUpdates);
 
             const emailData = {
-                from: settings.from_email || null,
+                from: settings.from_email,
                 to: [settings.to_email],
                 subject:
                     domainUpdates.totalCount === 0
@@ -90,7 +90,11 @@ export const resendNotifier = {
             console.error("❌ Failed to send Resend notification:", error);
 
             // Handle network/connection errors
-            if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+            const errorCode =
+                error && typeof error === "object" && "code" in error
+                    ? error.code
+                    : undefined;
+            if (errorCode === "ENOTFOUND" || errorCode === "ECONNREFUSED") {
                 return {
                     success: false,
                     message:
@@ -100,13 +104,15 @@ export const resendNotifier = {
 
             return {
                 success: false,
-                message: `Failed to send email: ${error.message}`,
+                message: `Failed to send email: ${getErrorMessage(error)}`,
             };
         }
     },
 
     /**
      * Format domain updates into email content (HTML + Text)
+     * @param {DomainUpdates} domainUpdates - Domain update data
+     * @returns {{html: string, text: string}} Email content in both formats
      */
     formatEmailContent(domainUpdates) {
         const {
@@ -136,6 +142,10 @@ export const resendNotifier = {
 
     /**
      * Generate modern HTML email content with new template
+     * @param {string} timestamp - Human-readable report timestamp
+     * @param {number} totalCount - Total number of domain updates
+     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[]}} domainGroups - Categorized domains
+     * @returns {string} HTML email content
      */
     generateHtmlContent(
         timestamp,
@@ -275,6 +285,10 @@ export const resendNotifier = {
 
     /**
      * Generate plain text email content
+     * @param {string} timestamp - Human-readable report timestamp
+     * @param {number} totalCount - Total number of domain updates
+     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[]}} domainGroups - Categorized domains
+     * @returns {string} Plain text email content
      */
     generateTextContent(
         timestamp,
@@ -351,6 +365,8 @@ This is an automated report from your Domain Watcher system.
 
     /**
      * Format date for display
+     * @param {string} dateString - Date string to format
+     * @returns {string} Formatted date
      */
     formatDate(dateString) {
         return new Date(dateString).toLocaleDateString("en-US", {
@@ -362,15 +378,17 @@ This is an automated report from your Domain Watcher system.
 
     /**
      * Get days until domain expiry (negative if expired)
+     * @param {string} expiryDate - Domain expiration date string
+     * @returns {number} Days until expiry (negative if expired)
      */
     getDaysUntilExpiry(expiryDate) {
-        const expiry = new Date(expiryDate);
-        const diffTime = expiry - new Date();
+        const diffTime = new Date(expiryDate).getTime() - Date.now();
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     },
 
     /**
      * Get a random fun message for quiet days
+     * @returns {string} Quiet day message
      */
     getRandomQuietMessage() {
         const messages = [

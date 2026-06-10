@@ -1,8 +1,10 @@
+/** @import { ServiceResult, ResendConfig } from '$lib/types' */
+
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { isDemo } from "$src/lib/utils/helpers";
 import { RESEND_CONNECTION_STATUS } from "$lib/constants/constants";
-import { maskApiKey } from "$lib/utils/helpers";
+import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 import { Resend } from "resend";
 
 // ========================================
@@ -10,6 +12,7 @@ import { Resend } from "resend";
 // ========================================
 /**
  * Validates demo mode for write operations
+ * @returns {ServiceResult|null} Error result if demo mode, null if allowed
  */
 const validateDemoAccess = () =>
     isDemo()
@@ -18,6 +21,15 @@ const validateDemoAccess = () =>
 
 /**
  * Creates Resend configuration object
+ * @param {Object} [values={}] - Configuration values
+ * @param {string} [values.apiKey] - Resend API key
+ * @param {string} [values.notificationTime] - Notification time (HH:mm)
+ * @param {string} [values.fromEmail] - Sender email address
+ * @param {string} [values.toEmail] - Recipient email address
+ * @param {string} [values.connectionStatus] - Connection test status
+ * @param {string|null} [values.verifiedAt] - When the connection was verified
+ * @param {number} [values.version] - Config schema version
+ * @returns {ResendConfig} Resend configuration object
  */
 const createResendConfiguration = ({
     apiKey = "",
@@ -49,7 +61,7 @@ const createResendConfiguration = ({
  * @param {string} fromEmail - From email address
  * @param {string} toEmail - To email address
  * @param {string} notificationTime - Notification time in HH:MM format
- * @returns {Promise<Object>} Success object or error object
+ * @returns {Promise<ServiceResult>} Success object or error object
  *
  * @example
  * const result = await testResendEmail(
@@ -179,18 +191,18 @@ This is an automated test email from Domain Watcher.
 
             // Handle specific Resend API errors
             let statusCode = 400;
-            let errorMessage = error.error || "Unknown error occurred";
+            let errorMessage = error.message || "Unknown error occurred";
 
-            if (error.error?.includes("API key")) {
+            if (error.message?.includes("API key")) {
                 statusCode = 401;
                 errorMessage = "Invalid API key";
-            } else if (error.error?.includes("rate limit")) {
+            } else if (error.message?.includes("rate limit")) {
                 statusCode = 429;
                 errorMessage = "Rate limit exceeded";
-            } else if (error.error?.includes("from_email")) {
+            } else if (error.message?.includes("from_email")) {
                 statusCode = 400;
                 errorMessage = "Invalid 'from_email' email address";
-            } else if (error.error?.includes("to_email")) {
+            } else if (error.message?.includes("to_email")) {
                 statusCode = 400;
                 errorMessage = "Invalid 'to_email' email address";
             }
@@ -225,7 +237,12 @@ This is an automated test email from Domain Watcher.
         console.error("❌ Failed to test Resend email:", error);
 
         // Handle network/connection errors
-        if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED")
+        ) {
             return {
                 status: 502,
                 message:
@@ -235,7 +252,7 @@ This is an automated test email from Domain Watcher.
 
         return {
             status: 500,
-            message: `Failed to test email: ${error.message}`,
+            message: `Failed to test email: ${getErrorMessage(error)}`,
         };
     }
 }
@@ -278,7 +295,7 @@ export const resend = {
      * Gets Resend webhook configuration with demo mode masking
      * @async
      * @memberof resend
-     * @returns {Promise<Object>} Webhook settings (masked in demo mode)
+     * @returns {Promise<ResendConfig|null>} Resend settings (masked in demo mode) or null
      *
      * @example
      * const getResendConfig = await resend.getResendConfig();
@@ -293,8 +310,12 @@ export const resend = {
             const resendSettings = queryResult?.results?.[0];
 
             const config = resendSettings?.json_config_data
-                ? JSON.parse(resendSettings.json_config_data || "{}") || {}
-                : {};
+                ? /** @type {ResendConfig|null} */ (
+                      JSON.parse(resendSettings.json_config_data || "{}")
+                  )
+                : null;
+
+            if (!config) return null;
 
             if (isDemo()) {
                 if (config.api_key) config.api_key = maskApiKey(config.api_key);
@@ -310,7 +331,7 @@ export const resend = {
                 "❌ Failed to get Resend webhook configuration:",
                 error
             );
-            return {};
+            return null;
         }
     },
 
@@ -319,7 +340,7 @@ export const resend = {
      * @async
      * @memberof resend
      * @param {boolean} isEnabled - Whether notifications should be enabled
-     * @returns {Promise<Object>} Operation result
+     * @returns {Promise<ServiceResult>} Operation result
      *
      * @example
      * const result = await resend.saveNotificationStatus(true);
@@ -337,7 +358,7 @@ export const resend = {
                 [enabledValue]
             );
 
-            if (updateResult?.meta?.changes > 0) {
+            if ((updateResult?.meta?.changes ?? 0) > 0) {
                 const statusMessage = isEnabled
                     ? "Resend notifications locked and loaded! 🚀"
                     : "Resend notifications taking a nap 😴";
@@ -361,7 +382,7 @@ export const resend = {
             );
             return {
                 status: 500,
-                message: `Failed to set Resend status: ${error.message}`,
+                message: `Failed to set Resend status: ${getErrorMessage(error)}`,
             };
         }
     },
@@ -376,7 +397,7 @@ export const resend = {
      * @param {string} notificationTime - Notification time in HH:MM format
      * @param {Object} [options={}] - Configuration options
      * @param {boolean} [options.shouldTestConnection=true] - Whether to test the email connection
-     * @returns {Promise<Object>} Operation result
+     * @returns {Promise<ServiceResult>} Operation result
      *
      * @example
      * // Test connection (default behavior)
@@ -478,7 +499,7 @@ export const resend = {
             );
             return {
                 status: 500,
-                message: `Houston, we have a problem: ${error.message}`,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
             };
         }
     },

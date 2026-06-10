@@ -52,7 +52,7 @@
     );
 
     // Get the actual component to render (Svelte 5 runes way)
-    const currentComponent = $derived(activeComponentData?.component);
+    const CurrentComponent = $derived(activeComponentData?.component);
 
     /**
      * Switch to different component
@@ -93,7 +93,7 @@
     <!-- Component Navigation -->
     <div class="mb-8">
         <div class="flex flex-wrap gap-3 justify-center">
-            {#each components as component}
+            {#each components as component (component.id)}
                 <button
                     type="button"
                     class="component-nav-button {isActive(component.id)
@@ -118,11 +118,11 @@
 
     <!-- Component Playground Area -->
     <div>
-        {#if currentComponent}
+        {#if CurrentComponent}
             {#key activeComponent}
                 <div in:fly={{ y: 100, duration: 300, opacity: 50 }}>
                     <!-- Svelte 5 runes way - direct component rendering -->
-                    {@render currentComponent()}
+                    <CurrentComponent />
                 </div>
             {/key}
         {:else}

@@ -3,16 +3,18 @@
 
     /**
      * Tooltip component with customizable positioning, keyboard accessibility, and automatic hover effects
-     * @param {string} text - Tooltip text content to display
-     * @param {('top'|'bottom'|'left'|'right')} position - Tooltip position relative to trigger element
-     * @param {number} [delay=300] - Show delay in milliseconds before tooltip appears
-     * @param {number} [duration=200] - Animation duration in milliseconds for show/hide transitions
-     * @param {boolean} [disabled=false] - Disable tooltip functionality completely
-     * @param {number} [tabindex=0] - Tab index for keyboard navigation accessibility
-     * @param {boolean} [hoverOpacity=true] - Automatically reduce opacity of child elements on hover
-     * @param {any} children - Child elements that trigger the tooltip
-     * @param {...any} restProps - Additional props passed to the tooltip container
+     * @typedef {Object} Props
+     * @property {string} [text] - Tooltip text content to display
+     * @property {('top'|'bottom'|'left'|'right')} [position] - Tooltip position relative to trigger element
+     * @property {number} [delay=300] - Show delay in milliseconds before tooltip appears
+     * @property {number} [duration=200] - Animation duration in milliseconds for show/hide transitions
+     * @property {boolean} [disabled=false] - Disable tooltip functionality completely
+     * @property {number} [tabindex=0] - Tab index for keyboard navigation accessibility
+     * @property {boolean} [hoverOpacity=true] - Automatically reduce opacity of child elements on hover
+     * @property {import('svelte').Snippet} children - Child elements that trigger the tooltip
      */
+
+    /** @type {Props & Record<string, any>} */
     let {
         text = "",
         position = "top",
@@ -26,20 +28,21 @@
     } = $props();
 
     let showTooltip = $state(false);
+    /** @type {ReturnType<typeof setTimeout>|null} */
     let timeoutId = null;
     let triggerElement = $state();
 
     const showTooltipWithDelay = () => {
         if (disabled || !text) return;
 
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
             showTooltip = true;
         }, delay);
     };
 
     const hideTooltip = () => {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         showTooltip = false;
     };
 
@@ -61,6 +64,7 @@
         hideTooltip();
     };
 
+    /** @param {KeyboardEvent} event */
     const handleKeyDown = (event) => {
         // Show tooltip on Enter or Space when focused
         if (event.key === "Enter" || event.key === " ") {

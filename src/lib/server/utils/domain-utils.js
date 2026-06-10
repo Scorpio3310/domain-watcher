@@ -8,9 +8,11 @@
 import { executeSql, executeQueryFirst } from "$src/lib/database/db";
 import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
-import { isDemo } from "$src/lib/utils/helpers";
+import { isDemo, getErrorMessage } from "$src/lib/utils/helpers";
 import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
 import { DOMAIN_STATUS } from "$lib/constants/constants";
+
+/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult } from "$lib/types" */
 
 // ========================================
 // CONFIGURATION CONSTANTS
@@ -125,7 +127,7 @@ export const findDomainById = async (domainId) => {
     const domain = await executeQueryFirst(DOMAIN_QUERIES.SELECT_DOMAIN_BY_ID, [
         domainId,
     ]);
-    return domain || null;
+    return /** @type {DomainRecord|null} */ (domain || null);
 };
 
 /**
@@ -135,8 +137,8 @@ export const findDomainById = async (domainId) => {
  * @async
  * @function executeDomainQuery
  * @memberof module:DomainUtils
- * @param {string} queryKey - Key from DOMAIN_QUERIES object
- * @param {Array} params - Parameters for the SQL query
+ * @param {keyof typeof DOMAIN_QUERIES} queryKey - Key from DOMAIN_QUERIES object
+ * @param {Array<any>} params - Parameters for the SQL query
  * @returns {Promise<boolean>} True if query affected at least one row, false otherwise
  * @throws {Error} Database connection or query errors
  *
@@ -154,7 +156,7 @@ export const findDomainById = async (domainId) => {
  */
 export const executeDomainQuery = async (queryKey, params) => {
     const result = await executeSql(DOMAIN_QUERIES[queryKey], params);
-    return result.meta?.changes > 0;
+    return (result.meta?.changes ?? 0) > 0;
 };
 
 // ========================================
@@ -178,9 +180,6 @@ export const verificationEngine = {
      * @async
      * @memberof module:DomainUtils.verificationEngine
      * @param {DomainRecord} domain - Domain object from database
-     * @param {number} domain.id - Unique domain identifier
-     * @param {string} domain.domain_name - The domain name to verify
-     * @param {string} [domain.expires] - Current expiration date if known
      * @returns {Promise<VerificationResult>} Verification result object
      * @throws {Error} Database or network connectivity errors
      *
@@ -239,8 +238,7 @@ export const verificationEngine = {
                     isStillRegistered,
                 };
             } else {
-                const errorMessage =
-                    result.originalMessage || result.message || "Unknown error";
+                const errorMessage = getErrorMessage(result, "Unknown error");
                 // Mark as error
                 await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
                     errorMessage,
@@ -261,8 +259,7 @@ export const verificationEngine = {
             // Mark as error
             await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [domain.id]);
 
-            const errorMessage =
-                error.originalMessage || error.message || "Unknown error";
+            const errorMessage = getErrorMessage(error, "Unknown error");
             console.error(`❌ ERROR: ${domain.domain_name} - ${errorMessage}`);
 
             return {
@@ -282,8 +279,6 @@ export const verificationEngine = {
      * @memberof module:DomainUtils.verificationEngine
      * @param {DomainRecord[]} domains - Array of domain objects to verify
      * @param {BatchOptions} [options={}] - Configuration options for batch processing
-     * @param {number} [options.delayBetweenDomains=CONFIG.DELAY_BETWEEN_DOMAINS] - Delay between batches in milliseconds
-     * @param {number} [options.batchSize=CONFIG.BATCH_SIZE] - Number of domains to process per batch
      * @returns {Promise<BatchVerificationResult>} Comprehensive batch verification results
      *
      * @example
@@ -330,6 +325,7 @@ export const verificationEngine = {
             `📊 Verifying ${domains.length} domains (delay: ${delayBetweenDomains}ms, batch: ${batchSize})...`
         );
 
+        /** @type {BatchVerificationResult} */
         const results = {
             checked: 0,
             available: [],
@@ -413,56 +409,3 @@ export const verificationEngine = {
         return results;
     },
 };
-
-// ========================================
-// TYPE DEFINITIONS FOR JSDOC
-// ========================================
-
-/**
- * @typedef {Object} ValidationError
- * @property {number} status - HTTP status code (403 for demo mode, 400 for missing API key)
- * @property {string} message - Human-readable error message
- * @memberof module:DomainUtils
- */
-
-/**
- * @typedef {Object} DomainRecord
- * @property {number} id - Unique domain identifier
- * @property {string} domain_name - The domain name
- * @property {string} [status] - Current domain status (available, registered, error, not_checked)
- * @property {string} [expires] - Domain expiration date in ISO format
- * @property {string} [created_at] - Record creation timestamp
- * @property {string} [updated_at] - Record last update timestamp
- * @property {Object} [whois_data] - Full WHOIS data as JSON object
- * @property {Object} [ssl_data] - SSL certificate data as JSON object
- * @property {Object} [ns_data] - Nameserver data as JSON object
- * @memberof module:DomainUtils
- */
-
-/**
- * @typedef {Object} VerificationResult
- * @property {boolean} success - Whether verification completed successfully
- * @property {string} domain - The domain name that was checked
- * @property {string} [status] - Domain status (available, registered, error)
- * @property {boolean} [wasAvailable] - True if domain is now available
- * @property {boolean} [isStillRegistered] - True if domain remains registered
- * @property {string} [error] - Error message if verification failed
- * @memberof module:DomainUtils
- */
-
-/**
- * @typedef {Object} BatchOptions
- * @property {number} [delayBetweenDomains] - Delay between batches in milliseconds
- * @property {number} [batchSize] - Number of domains to process per batch
- * @memberof module:DomainUtils
- */
-
-/**
- * @typedef {Object} BatchVerificationResult
- * @property {number} checked - Total number of domains processed
- * @property {DomainRecord[]} available - Domains that became available
- * @property {DomainRecord[]} stillRegistered - Expired domains still registered
- * @property {number} errors - Number of domains that failed verification
- * @property {string[]} errorMessages - Detailed error messages for failed verifications
- * @memberof module:DomainUtils
- */
