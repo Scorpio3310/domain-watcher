@@ -11,6 +11,7 @@ import { WHOIS_JSON_API_STATUS } from "$lib/constants/constants";
 import { isDemo } from "$src/lib/utils/helpers";
 import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 import { testApiKeyConnection } from "./whois-client";
+import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================
 // TYPES & INTERFACES
@@ -27,15 +28,6 @@ import { testApiKeyConnection } from "./whois-client";
 // ========================================
 // CORE UTILITIES
 // ========================================
-/**
- * Validates demo mode for write operations
- * @returns {ServiceResult|null} Error result if demo mode, null if allowed
- */
-const validateDemoAccess = () =>
-    isDemo()
-        ? { status: 403, message: "Demo mode: Look but don't touch 👀" }
-        : null;
-
 /**
  * Retrieves API settings from database with error handling
  * @async
@@ -175,7 +167,7 @@ export const apiKey = {
     async save(key, { version = 1 } = {}) {
         try {
             // Check demo mode first
-            const demoError = validateDemoAccess();
+            const demoError = validateDemoMode();
             if (demoError) return demoError;
 
             // Basic input validation

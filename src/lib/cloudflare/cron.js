@@ -29,6 +29,8 @@ worker_default.scheduled = async (event, env, ctx) => {
  *
  * @param {CronEnv} env - Environment object containing bindings and secrets
  * @returns {Promise<void>}
+ * @throws {Error} When the self-call fails, so the scheduled run shows up as
+ *   failed in the Cloudflare dashboard instead of silently "succeeding"
  */
 async function cron(env) {
     console.log("🚀 Starting cron...");
@@ -52,15 +54,12 @@ async function cron(env) {
             console.log("📡 Response:", response);
 
             if (!response.ok) {
-                console.error(
-                    "❌ Self-call failed with status:",
-                    response.status
-                );
-            } else {
-                console.log(
-                    "✅ Production - Self-call completed successfully!"
+                throw new Error(
+                    `Cron self-call failed with status ${response.status}`
                 );
             }
+
+            console.log("✅ Production - Self-call completed successfully!");
         }
 
         // Local development environment - use direct fetch
@@ -80,15 +79,16 @@ async function cron(env) {
             console.log("📡 Response:", response);
 
             if (!response.ok) {
-                console.error(
-                    "❌ Self-call failed with status:",
-                    response.status
+                throw new Error(
+                    `Cron self-call failed with status ${response.status}`
                 );
-            } else {
-                console.log("✅ Local - Self-call completed successfully!");
             }
+
+            console.log("✅ Local - Self-call completed successfully!");
         }
     } catch (error) {
         console.error("❌ Cron request failed with error:", error);
+        // Re-throw so ctx.waitUntil records the run as failed
+        throw error;
     }
 }

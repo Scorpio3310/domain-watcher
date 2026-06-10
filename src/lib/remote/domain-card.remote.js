@@ -13,7 +13,6 @@ import { getErrorMessage } from "$src/lib/utils/helpers";
 import { domainIdFormSchema } from "$src/routes/validation";
 import {
     validateAccess,
-    validateDemoMode,
     findDomainById,
     executeDomainQuery,
     verificationEngine,
@@ -196,9 +195,6 @@ export const remove = form(domainIdFormSchema, async ({ domainId }) => {
     if (accessError) return accessError;
 
     try {
-        const demoError = validateDemoMode();
-        if (demoError) return demoError;
-
         const domain = await findDomainById(domainId);
         if (!domain)
             return {

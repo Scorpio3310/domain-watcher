@@ -12,7 +12,9 @@ import {
     validateDemoMode,
     executeDomainQuery,
     verificationEngine,
+    CONFIG,
 } from "$src/lib/server/utils/domain-utils.js";
+import { EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
 
 /** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "$lib/types" */
 
@@ -110,6 +112,8 @@ export const domainVerification = {
      * @async
      * @memberof domainVerification
      * @returns {Promise<CategorizedDomains>} Categorized domain lists
+     * @throws {Error} Database errors propagate to the caller (cron endpoint
+     *   returns 500) instead of silently looking like "no domains"
      *
      * @example
      * const categories = await domainVerification.getAllDomainsForVerification();
@@ -150,7 +154,10 @@ export const domainVerification = {
                         d.expires &&
                         new Date(d.expires) > new Date() &&
                         new Date(d.expires) <=
-                            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) &&
+                            new Date(
+                                Date.now() +
+                                    EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000
+                            ) &&
                         d.status === "registered"
                 ),
             };
@@ -161,11 +168,7 @@ export const domainVerification = {
             return categorized;
         } catch (error) {
             console.error("❌ Error getting domains for verification:", error);
-            return {
-                needingVerification: [],
-                expiredRegistered: [],
-                expiring: [],
-            };
+            throw error;
         }
     },
 
@@ -239,6 +242,41 @@ export const domainVerification = {
      */
     async verifyDomainsBatch(domains, options = {}) {
         return verificationEngine.verifyBatch(domains, options);
+    },
+
+    /**
+     * Selects all domains needing a check and verifies them in one batch,
+     * capped at `limit` to respect WHOIS API rate limits
+     * @async
+     * @memberof domainVerification
+     * @param {number} [limit=CONFIG.LIMIT_DOMAIN_CHECKS] - Maximum number of domains to verify in this run
+     * @returns {Promise<{results: BatchVerificationResult, total: number, processed: number}>}
+     *   Batch results plus the total number of domains that needed a check and
+     *   how many were actually processed (processed < total means truncation)
+     * @throws {Error} Database errors propagate to the caller
+     *
+     * @example
+     * const { results, total, processed } = await domainVerification.checkDomainsNeedingCheck();
+     * if (total > processed) {
+     *   console.log(`${total - processed} domains left for the next run`);
+     * }
+     */
+    async checkDomainsNeedingCheck(limit = CONFIG.LIMIT_DOMAIN_CHECKS) {
+        const queryResult = await executeSql(
+            DOMAIN_QUERIES.SELECT_DOMAINS_NEEDING_CHECK
+        );
+        const domainsToCheck = /** @type {DomainRecord[]} */ (
+            queryResult?.results || []
+        );
+
+        const domainsToProcess = domainsToCheck.slice(0, limit);
+        const results = await verificationEngine.verifyBatch(domainsToProcess);
+
+        return {
+            results,
+            total: domainsToCheck.length,
+            processed: domainsToProcess.length,
+        };
     },
 
     /**

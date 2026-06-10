@@ -54,6 +54,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {string|null} timestampLocal - Human-readable local timestamp
  * @property {"skipped"|"executed"} action - Whether the run executed or was skipped
  * @property {string} [reason] - Reason for skipping (if action is "skipped")
+ * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
  * @property {{checked: number, available: number, expiring: number, expired: number}} [domains] - Domain verification counts (if executed)
  * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
  */
@@ -107,18 +108,23 @@ export const cronNotifications = {
 
         try {
             // Get providers to send to
-            const providersToSend = await this.getProviders(currentTime, force);
+            const { providers: providersToSend, settingsErrors } =
+                await this.getProviders(currentTime, force);
 
             const baseResponse = {
                 timestamp: new Date().toISOString(),
                 timestampLocal: formatHumanDate(new Date().toISOString()),
+                ...(settingsErrors.length > 0 && { settingsErrors }),
             };
 
             if (providersToSend.length === 0) {
                 return {
                     ...baseResponse,
                     action: "skipped",
-                    reason: "No providers scheduled",
+                    reason:
+                        settingsErrors.length > 0
+                            ? "No providers scheduled (some provider settings failed to load)"
+                            : "No providers scheduled",
                 };
             }
 
@@ -157,22 +163,32 @@ export const cronNotifications = {
      *
      * @param {string} currentTime - Current time in HH:MM format
      * @param {boolean} [force=false] - Bypass time checking for all enabled providers
-     * @returns {Promise<ActiveProvider[]>} Array of provider configurations to use
+     * @returns {Promise<{providers: ActiveProvider[], settingsErrors: Array<{provider: string, error: string}>}>} Providers to use plus any settings load failures
      *
      * @example
      * // Get providers for current time
-     * const providers = await cronNotifications.getProviders("14:30");
+     * const { providers } = await cronNotifications.getProviders("14:30");
      *
      * @example
      * // Get all enabled providers
-     * const providers = await cronNotifications.getProviders("14:30", true);
+     * const { providers } = await cronNotifications.getProviders("14:30", true);
      */
     async getProviders(currentTime, force = false) {
         /** @type {ActiveProvider[]} */
         const providers = [];
+        /** @type {Array<{provider: string, error: string}>} */
+        const settingsErrors = [];
 
         for (const [key, config] of Object.entries(PROVIDERS)) {
             const settings = await this.getSettings(key);
+
+            if (settings.error) {
+                console.error(
+                    `❌ ${config.name} settings failed to load: ${settings.error}`
+                );
+                settingsErrors.push({ provider: key, error: settings.error });
+                continue;
+            }
 
             if (!settings.enabled) {
                 console.log(`⏭️ ${config.name} disabled`);
@@ -195,7 +211,7 @@ export const cronNotifications = {
             }
         }
 
-        return providers;
+        return { providers, settingsErrors };
     },
 
     /**
@@ -391,7 +407,7 @@ export const cronNotifications = {
      *   // Slack is configured and ready
      * }
      *
-     * @throws {Error} Database or JSON parsing errors are logged and return {enabled: false}
+     * @throws {Error} Database or JSON parsing errors are logged and returned as {enabled: false, error} so callers can distinguish a failure from a disabled provider
      */
     async getSettings(providerKey) {
         try {
@@ -407,7 +423,7 @@ export const cronNotifications = {
             return { enabled: settings.enabled === 1, ...parsed };
         } catch (error) {
             console.error(`❌ Error getting ${providerKey} settings:`, error);
-            return { enabled: false };
+            return { enabled: false, error: getErrorMessage(error) };
         }
     },
 };

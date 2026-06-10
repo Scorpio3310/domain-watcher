@@ -1,5 +1,6 @@
 <script>
     import { PUBLIC_ENVIRONMENT } from "$env/static/public";
+    import { resolve } from "$app/paths";
     import Button from "./Button.svelte";
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
@@ -58,7 +59,7 @@
 {#snippet headerLogo(showEnvTag = true)}
     <div class="flex items-center gap-2">
         <a
-            href="/"
+            href={resolve("/")}
             class="link-logo"
             title="Home"
             aria-label="Home"
@@ -82,7 +83,7 @@
 {#snippet headerBackButton()}
     <div class="flex items-center gap-2">
         <a
-            href="/"
+            href={resolve("/")}
             class="link-go-back"
             title="Home"
             aria-label="Home"
@@ -111,7 +112,7 @@
                     ></div>
                 {/if}
                 <Button
-                    href="/settings"
+                    href={resolve("/settings")}
                     title="Settings"
                     size="lg"
                     icon="iconoir:settings"
@@ -125,7 +126,11 @@
                         await submit();
                         if (batchCheck.result) toast.show(batchCheck.result);
                     } catch (error) {
-                        console.log(error);
+                        console.error("❌ Batch check failed:", error);
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
@@ -136,7 +141,7 @@
                         hoverOpacity={false}
                     >
                         <Button
-                            type="button"
+                            type="submit"
                             text="Check Domains"
                             size="lg"
                             icon="iconoir:search"
@@ -145,7 +150,7 @@
                             disabled={isDemo()}
                         />
                         <Button
-                            type="button"
+                            type="submit"
                             size="lg"
                             icon="iconoir:search"
                             color="white"

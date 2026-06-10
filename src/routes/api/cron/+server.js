@@ -1,17 +1,8 @@
 import { CRON_SECRET } from "$env/static/private";
 import { json } from "@sveltejs/kit";
 import { cronNotifications } from "$lib/server/notifications/cron-notifications.js";
-import { getErrorMessage, isDemo } from "$src/lib/utils/helpers";
-
-/**
- * Validates if the application is not in demo mode
- * @function validateDemoMode
- * @returns {{status: number, message: string}|null} Error object if in demo mode, null otherwise
- */
-const validateDemoMode = () =>
-    isDemo()
-        ? { status: 403, message: "Demo mode: Look but don't touch 👀" }
-        : null;
+import { getErrorMessage } from "$src/lib/utils/helpers";
+import { validateDemoMode } from "$src/lib/server/utils/access";
 
 /**
  * Validates cron request authentication using secret header

@@ -6,19 +6,11 @@ import { isDemo } from "$src/lib/utils/helpers";
 import { RESEND_CONNECTION_STATUS } from "$lib/constants/constants";
 import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 import { Resend } from "resend";
+import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================
 // CORE UTILITIES
 // ========================================
-/**
- * Validates demo mode for write operations
- * @returns {ServiceResult|null} Error result if demo mode, null if allowed
- */
-const validateDemoAccess = () =>
-    isDemo()
-        ? { status: 403, message: "Demo mode: Look but don't touch 👀" }
-        : null;
-
 /**
  * Creates Resend configuration object
  * @param {Object} [values={}] - Configuration values
@@ -348,7 +340,7 @@ export const resend = {
      */
     async saveNotificationStatus(isEnabled) {
         try {
-            const demoAccessError = validateDemoAccess();
+            const demoAccessError = validateDemoMode();
             if (demoAccessError) return demoAccessError;
 
             const enabledValue = isEnabled ? 1 : 0;
@@ -437,7 +429,7 @@ export const resend = {
     ) {
         const { shouldTestConnection = true } = options;
         try {
-            const demoAccessError = validateDemoAccess();
+            const demoAccessError = validateDemoMode();
             if (demoAccessError) return demoAccessError;
 
             const initialResendConfiguration = createResendConfiguration({

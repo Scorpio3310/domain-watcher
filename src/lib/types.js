@@ -132,10 +132,11 @@
  * @property {string} [to_email] - Recipient email address
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
+ * @property {string} [error] - Set when loading/parsing the settings failed (provider is NOT just disabled)
  */
 
 /**
- * Payload shown by the global toast (superforms message shape)
+ * Payload shown by the global toast (remote form result shape)
  * @typedef {Object} ToastPayload
  * @property {number} status - HTTP-like status code (2xx renders as success)
  * @property {string} message - Message text to display

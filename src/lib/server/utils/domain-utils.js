@@ -8,9 +8,12 @@
 import { executeSql, executeQueryFirst } from "$src/lib/database/db";
 import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
-import { isDemo, getErrorMessage } from "$src/lib/utils/helpers";
+import { getErrorMessage } from "$src/lib/utils/helpers";
 import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
 import { DOMAIN_STATUS } from "$lib/constants/constants";
+import { validateDemoMode } from "$src/lib/server/utils/access";
+
+export { validateDemoMode };
 
 /** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult } from "$lib/types" */
 
@@ -61,11 +64,8 @@ export const CONFIG = {
  *
  */
 export const validateAccess = async () => {
-    if (isDemo())
-        return {
-            status: 403,
-            message: "Demo mode: Look but don't touch 👀",
-        };
+    const demoError = validateDemoMode();
+    if (demoError) return demoError;
     if (!(await apiKey.isConfigured()))
         return {
             status: 400,
@@ -74,29 +74,6 @@ export const validateAccess = async () => {
         };
     return null;
 };
-
-/**
- * Validates if the application is not in demo mode.
- * Used for operations that modify data but don't require API key validation.
- *
- * @function validateDemoMode
- * @memberof module:DomainUtils
- * @returns {ValidationError|null} Error object if in demo mode, null otherwise
- *
- * @example
- * ```javascript
- * const demoError = validateDemoMode();
- * if (demoError) {
- *   return demoError;
- * }
- * // Proceed with write operations...
- * ```
- *
- */
-export const validateDemoMode = () =>
-    isDemo()
-        ? { status: 403, message: "Demo mode: Look but don't touch 👀" }
-        : null;
 
 // ========================================
 // DATABASE UTILITY FUNCTIONS
@@ -256,10 +233,14 @@ export const verificationEngine = {
                 };
             }
         } catch (error) {
-            // Mark as error
-            await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [domain.id]);
-
             const errorMessage = getErrorMessage(error, "Unknown error");
+
+            // Mark as error
+            await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
+                errorMessage,
+                domain.id,
+            ]);
+
             console.error(`❌ ERROR: ${domain.domain_name} - ${errorMessage}`);
 
             return {

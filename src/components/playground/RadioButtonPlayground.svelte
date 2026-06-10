@@ -252,6 +252,28 @@
     }
 
     /**
+     * Resolve the effective size for an option ("mixed" groups always carry per-option sizes)
+     * @param {RadioOption} option - Radio option
+     * @param {RadioGroup} group - Its group
+     * @returns {('sm'|'md'|'lg')} Effective size
+     */
+    function resolveSize(option, group) {
+        return /** @type {('sm'|'md'|'lg')} */ (option.size || group.size);
+    }
+
+    /**
+     * Resolve the effective variant for an option ("mixed" groups always carry per-option variants)
+     * @param {RadioOption} option - Radio option
+     * @param {RadioGroup} group - Its group
+     * @returns {('primary'|'secondary')} Effective variant
+     */
+    function resolveVariant(option, group) {
+        return /** @type {('primary'|'secondary')} */ (
+            option.variant || group.variant
+        );
+    }
+
+    /**
      * @param {string} groupName - Radio group name
      * @param {string} value - Newly selected value
      */
@@ -404,13 +426,13 @@
                                                             }
                                                             checkedIcon={option.checkedIcon}
                                                             uncheckedIcon={option.uncheckedIcon}
-                                                            size={/** @type {('sm'|'md'|'lg')} */ (
-                                                                option.size ||
-                                                                    group.size
+                                                            size={resolveSize(
+                                                                option,
+                                                                group,
                                                             )}
-                                                            variant={/** @type {('primary'|'secondary')} */ (
-                                                                option.variant ||
-                                                                    group.variant
+                                                            variant={resolveVariant(
+                                                                option,
+                                                                group,
                                                             )}
                                                             disabled={option.disabled}
                                                             ariaLabel={option.ariaLabel}

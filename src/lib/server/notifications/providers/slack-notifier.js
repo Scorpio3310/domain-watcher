@@ -1,4 +1,5 @@
 import { getErrorMessage } from "$lib/utils/helpers.js";
+import { formatDate, getDaysUntilExpiry } from "./date-format.js";
 
 /** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
 
@@ -125,22 +126,22 @@ export const slackNotifier = {
                 .map((domain) => {
                     if (urgent && domain.expires) {
                         const daysExpired = Math.abs(
-                            this.getDaysUntilExpiry(domain.expires)
+                            getDaysUntilExpiry(domain.expires)
                         );
                         return `• \`${
                             domain.domain_name
-                        }\` - expired ${this.formatDate(
+                        }\` - expired ${formatDate(
                             domain.expires
                         )} (${daysExpired} days ago)`;
                     }
 
                     if (domain.expires) {
-                        const daysUntilExpiry = this.getDaysUntilExpiry(
+                        const daysUntilExpiry = getDaysUntilExpiry(
                             domain.expires
                         );
                         return `• \`${
                             domain.domain_name
-                        }\` - expires ${this.formatDate(
+                        }\` - expires ${formatDate(
                             domain.expires
                         )} (${daysUntilExpiry} days)`;
                     }
@@ -214,28 +215,5 @@ export const slackNotifier = {
                 : `🌐 Domain Watcher: ${totalCount} updates`,
             blocks,
         };
-    },
-
-    /**
-     * Format date for display
-     * @param {string} dateString - Date string to format
-     * @returns {string} Formatted date
-     */
-    formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        });
-    },
-
-    /**
-     * Get days until domain expiry (negative if expired)
-     * @param {string} expiryDate - Domain expiration date string
-     * @returns {number} Days until expiry (negative if expired)
-     */
-    getDaysUntilExpiry(expiryDate) {
-        const diffTime = new Date(expiryDate).getTime() - Date.now();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     },
 };

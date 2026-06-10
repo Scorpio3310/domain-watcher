@@ -96,25 +96,21 @@
         return classes.join(" ");
     });
 
-    // Handle click only if not disabled
+    // Skip the custom handler when the `disabled` prop is set. A natively
+    // disabled button never fires click - this branch is only reachable when
+    // the DOM attribute was tampered away (devtools), in which case we let
+    // the native default action proceed (form submit) so the server can
+    // answer (e.g. the demo-mode 403 toast).
     /** @param {Event} event */
     const handleClick = (event) => {
-        if (disabled) {
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-        }
+        if (disabled) return;
         onclick(event);
     };
 
-    // Handle keyboard events
+    // Handle keyboard events (disabled: same tamper-only reasoning as handleClick)
     /** @param {KeyboardEvent} event */
     const handleKeyDown = (event) => {
-        if (disabled) {
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-        }
+        if (disabled) return;
 
         // For both links and buttons, Enter and Space should trigger action
         if (event.key === "Enter" || event.key === " ") {

@@ -7,7 +7,7 @@
      * @typedef {Object} Props
      * @property {string} [type='text'] - Input type (text, password, email, number, etc.)
      * @property {string} [placeholder=''] - Input placeholder text
-     * @property {string} [value=''] - Input value (bindable)
+     * @property {string|number} [value=''] - Input value (bindable; remote form fields may supply numbers)
      * @property {string} [label=''] - Label text
      * @property {string} [tooltip=''] - Tooltip text
      * @property {string} [tooltipIcon=''] - Icon for the tooltip (Iconify icon name)
@@ -96,7 +96,7 @@
 <div class="input-field">
     <!-- Label -->
     {#if label}
-        <label for={name} class={labelClasses()}>
+        <label for={id || name} class={labelClasses()}>
             {label}
             {#if required}
                 <span class="input__required-mark">*</span>
@@ -112,7 +112,7 @@
 
     <!-- Input -->
     <input
-        {id}
+        id={id || name}
         {name}
         {type}
         {placeholder}

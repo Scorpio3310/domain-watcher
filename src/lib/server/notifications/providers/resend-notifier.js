@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { PRODUCTION_DOMAIN } from "$env/static/private";
 import { getErrorMessage } from "$lib/utils/helpers.js";
+import { formatDate, getDaysUntilExpiry } from "./date-format.js";
 
 /** @import { DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
 
@@ -183,22 +184,22 @@ export const resendNotifier = {
 
                         if (isUrgent && domain.expires) {
                             const daysExpired = Math.abs(
-                                this.getDaysUntilExpiry(domain.expires)
+                                getDaysUntilExpiry(domain.expires)
                             );
                             return `<li><strong>${
                                 domain.domain_name
-                            }</strong> - expired ${this.formatDate(
+                            }</strong> - expired ${formatDate(
                                 domain.expires
                             )} (${daysExpired} days ago)</li>`;
                         }
 
                         if (domain.expires) {
-                            const daysUntilExpiry = this.getDaysUntilExpiry(
+                            const daysUntilExpiry = getDaysUntilExpiry(
                                 domain.expires
                             );
                             return `<li><strong>${
                                 domain.domain_name
-                            }</strong> - expires ${this.formatDate(
+                            }</strong> - expires ${formatDate(
                                 domain.expires
                             )} (${daysUntilExpiry} days)</li>`;
                         }
@@ -311,22 +312,22 @@ export const resendNotifier = {
 
                         if (isUrgent && domain.expires) {
                             const daysExpired = Math.abs(
-                                this.getDaysUntilExpiry(domain.expires)
+                                getDaysUntilExpiry(domain.expires)
                             );
                             return `• ${
                                 domain.domain_name
-                            } - expired ${this.formatDate(
+                            } - expired ${formatDate(
                                 domain.expires
                             )} (${daysExpired} days ago)`;
                         }
 
                         if (domain.expires) {
-                            const daysUntilExpiry = this.getDaysUntilExpiry(
+                            const daysUntilExpiry = getDaysUntilExpiry(
                                 domain.expires
                             );
                             return `• ${
                                 domain.domain_name
-                            } - expires ${this.formatDate(
+                            } - expires ${formatDate(
                                 domain.expires
                             )} (${daysUntilExpiry} days)`;
                         }
@@ -361,29 +362,6 @@ ${"=".repeat(50)}
 
 This is an automated report from your Domain Watcher system.
         `.trim();
-    },
-
-    /**
-     * Format date for display
-     * @param {string} dateString - Date string to format
-     * @returns {string} Formatted date
-     */
-    formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        });
-    },
-
-    /**
-     * Get days until domain expiry (negative if expired)
-     * @param {string} expiryDate - Domain expiration date string
-     * @returns {number} Days until expiry (negative if expired)
-     */
-    getDaysUntilExpiry(expiryDate) {
-        const diffTime = new Date(expiryDate).getTime() - Date.now();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     },
 
     /**

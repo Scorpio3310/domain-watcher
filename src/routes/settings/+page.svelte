@@ -1,6 +1,5 @@
 <script>
     import Button from "$components/Button.svelte";
-    import { superForm } from "sveltekit-superforms";
     import Input from "$components/Input.svelte";
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import { slide } from "svelte/transition";
@@ -16,121 +15,86 @@
     import ToggleSwitch from "$components/ToggleSwitch.svelte";
     import { page } from "$app/state";
     import { formatLastChecked } from "$src/lib/utils/helpers.js";
+    import {
+        saveApiKey,
+        updateUiView,
+        updateSlackEnabled,
+        updateSlackWebhook,
+        updateResendEnabled,
+        updateResendConfig,
+    } from "$src/lib/remote/settings.remote";
+    import {
+        whoIsApiKeySchema,
+        slackWebhookSchema,
+        resendSchema,
+    } from "./validation";
 
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
 
-    //// SUPERFORMS ////
-    const {
-        form: apiKeyForm,
-        errors: apiKeyErrors,
-        constraints: apiKeyConstraints,
-        message: apiKeyMessage,
-        enhance: apiKeyEnhance,
-        submitting: apiKeySubmitting,
-    } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formApiKey,
-        {
-            resetForm: false,
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
+    //// REMOTE FORMS ////
+    // Seed the radio selection (as("radio") has no initial-value argument)
+    // svelte-ignore state_referenced_locally
+    updateUiView.fields.viewMode.set(data?.viewMode ?? UI_DOMAIN_VIEW.COMPACT);
+
+    // Section visibility follows the live toggle state, falling back to the loaded value
+    const slackEnabled = $derived(
+        updateSlackEnabled.fields.enabled.value() ?? data?.slackEnabled ?? false,
+    );
+    const resendEnabled = $derived(
+        updateResendEnabled.fields.enabled.value() ??
+            data?.resendEnabled ??
+            false,
     );
 
-    const { form: UIViewForm, enhance: UIViewEnhance } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formUiView,
-        {
-            resetForm: false,
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
-    );
+    /**
+     * Shared enhance handler: submit, then toast the result on success.
+     * Validation issues render inline below the inputs.
+     * @param {{ submit: () => Promise<boolean>, readonly result: {status: number, message: string} | undefined }} form
+     */
+    async function submitWithToast(form) {
+        try {
+            if (await form.submit()) {
+                if (form.result) toast.show(form.result);
+            }
+            // invalid data -> issues render inline
+        } catch {
+            toast.show({ status: 500, message: "Something went wrong" });
+        }
+    }
 
-    const {
-        form: formSlackEnabledForm,
-        enhance: formSlackEnabledEnhance,
-        submitting: formSlackEnabledSubmitting,
-        submit: formSlackEnabledSubmit,
-    } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formSlackEnabled,
-        {
-            resetForm: false,
-            id: "slack-form-toggle",
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
+    /**
+     * Submit handler for forms without inline issue rendering (toggles, uiView
+     * radios) — validation issues surface as a toast instead. The optional
+     * `revert` callback runs on any failure (validation, non-2xx result,
+     * exception) so the control can snap back to the last persisted state.
+     * @param {{ submit: () => Promise<boolean>, readonly result: {status: number, message: string} | undefined, fields: { allIssues: () => Array<{message: string}> | undefined } }} form
+     * @param {() => void} [revert] - Restores the field to its persisted value
+     */
+    async function submitWithIssueToast(form, revert = undefined) {
+        try {
+            if (await form.submit()) {
+                if (form.result) toast.show(form.result);
+                if (
+                    form.result &&
+                    (form.result.status < 200 || form.result.status >= 300)
+                ) {
+                    revert?.();
                 }
-            },
-        },
-    );
-
-    const {
-        form: slackWebHookForm,
-        errors: slackWebHookErrors,
-        constraints: slackWebHookConstraints,
-        enhance: slackWebHookEnhance,
-        submitting: slackWebHookSubmitting,
-    } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formSlackWebhook,
-        {
-            resetForm: false,
-            invalidateAll: true,
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
-    );
-
-    const {
-        form: formResendEnabledForm,
-        enhance: formResendEnabledEnhance,
-        submitting: formResendEnabledSubmitting,
-        submit: formResendEnabledSubmit,
-    } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formResendEnabled,
-        {
-            resetForm: false,
-            id: "resend-form-toggle",
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
-    );
-
-    const {
-        form: formResendForm,
-        errors: formResendErrors,
-        constraints: formResendConstraints,
-        enhance: formResendEnhance,
-        submitting: formResendSubmitting,
-    } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formResend,
-        {
-            resetForm: false,
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
-    );
+            } else {
+                const issues = form.fields.allIssues() ?? [];
+                toast.show({
+                    status: 400,
+                    message: issues.map((i) => i.message).join(", "),
+                });
+                revert?.();
+            }
+        } catch {
+            toast.show({ status: 500, message: "Something went wrong" });
+            revert?.();
+        }
+    }
 </script>
 
 <svelte:head>
@@ -173,9 +137,8 @@
     <section class="card">
         <form
             class="card--settings"
-            method="POST"
-            action="?/saveApiKey"
-            use:apiKeyEnhance
+            {...saveApiKey.preflight(whoIsApiKeySchema).enhance(submitWithToast)}
+            oninput={() => saveApiKey.validate({ preflightOnly: true })}
         >
             <h2>WhoIsJson.com</h2>
             <p>
@@ -192,16 +155,20 @@
             </p>
             <Input
                 type="text"
-                name="apiKey"
                 id="apiKey"
                 placeholder="Enter WhoIsJson API Key...."
                 label="API Key"
                 tooltip="Your WhoisJson API key enables domain verification and monitoring. Get your free API key at whoisjson.com"
-                disabled={isDemo() || $apiKeySubmitting}
-                bind:value={$apiKeyForm.apiKey}
-                variant={$apiKeyErrors.apiKey ? "error" : "default"}
-                helperText={$apiKeyErrors.apiKey ? $apiKeyErrors.apiKey[0] : ""}
-                {...$apiKeyConstraints.apiKey}
+                disabled={isDemo() || !!saveApiKey.pending}
+                variant={saveApiKey.fields.apiKey.issues()?.length
+                    ? "error"
+                    : "default"}
+                helperText={saveApiKey.fields.apiKey.issues()?.[0]?.message ??
+                    ""}
+                {...saveApiKey.fields.apiKey.as(
+                    "text",
+                    data?.apiKeyConfig?.api_key ?? "",
+                )}
             />
             <hr />
             <div class="grid gap-0.5">
@@ -257,18 +224,18 @@
                 </div>
 
                 <Button
-                    type={isDemo() ? "button" : "submit"}
+                    type="submit"
                     text="Test & Save API Key"
                     size="md"
                     color="white"
                     ariaLabel="Test & Save API Key"
                     icon={isDemo()
                         ? "iconoir:save-floppy-disk"
-                        : $apiKeySubmitting
+                        : saveApiKey.pending
                           ? "iconoir:refresh-double"
                           : "iconoir:save-floppy-disk"}
-                    iconClass={$apiKeySubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || $apiKeySubmitting}
+                    iconClass={saveApiKey.pending ? "animate-spin" : ""}
+                    disabled={isDemo() || !!saveApiKey.pending}
                 />
             </div>
         </form>
@@ -285,17 +252,22 @@
             </p>
             <form
                 class="card--settings"
-                method="POST"
-                action="?/updateUIView"
-                use:UIViewEnhance
+                {...updateUiView.enhance((form) =>
+                    submitWithIssueToast(form, () =>
+                        updateUiView.fields.viewMode.set(
+                            data?.viewMode ?? UI_DOMAIN_VIEW.COMPACT,
+                        ),
+                    ),
+                )}
             >
                 <label for="compact-view" class="ui-view">
                     <RadioButton
-                        name="viewMode"
                         id="compact-view"
-                        value={UI_DOMAIN_VIEW.COMPACT}
-                        bind:checked={$UIViewForm.viewMode}
-                        disabled={isDemo() || $apiKeySubmitting}
+                        {...updateUiView.fields.viewMode.as(
+                            "radio",
+                            UI_DOMAIN_VIEW.COMPACT,
+                        )}
+                        disabled={isDemo() || !!updateUiView.pending}
                         size="md"
                         variant="primary"
                         ariaLabel="Select compact view"
@@ -323,11 +295,12 @@
                 </label>
                 <label for="detailed-view" class="ui-view">
                     <RadioButton
-                        name="viewMode"
                         id="detailed-view"
-                        value={UI_DOMAIN_VIEW.DETAILED}
-                        bind:checked={$UIViewForm.viewMode}
-                        disabled={isDemo() || $apiKeySubmitting}
+                        {...updateUiView.fields.viewMode.as(
+                            "radio",
+                            UI_DOMAIN_VIEW.DETAILED,
+                        )}
+                        disabled={isDemo() || !!updateUiView.pending}
                         size="md"
                         variant="primary"
                         ariaLabel="Select detailed view"
@@ -350,7 +323,7 @@
                                     <div class="size-4"></div>
                                 </div>
                             </div>
-                            {#each Array(4) as _}
+                            {#each Array(4) as _, i (i)}
                                 <hr />
                                 <div class="row">
                                     <div class="left">
@@ -370,24 +343,26 @@
                         color="black-outline"
                         ariaLabel="Reset to Default"
                         class="hidden! md:flex!"
-                        disabled={isDemo() || $apiKeySubmitting}
+                        disabled={isDemo() || !!updateUiView.pending}
                         onclick={() => {
-                            $UIViewForm.viewMode = UI_DOMAIN_VIEW.COMPACT;
+                            updateUiView.fields.viewMode.set(
+                                UI_DOMAIN_VIEW.COMPACT,
+                            );
                         }}
                     />
                     <Button
-                        type={isDemo() ? "button" : "submit"}
+                        type="submit"
                         text="Save Changes"
                         size="md"
                         color="white"
                         ariaLabel="Save Changes"
                         icon={isDemo()
                             ? "iconoir:save-floppy-disk"
-                            : $apiKeySubmitting
+                            : updateUiView.pending
                               ? "iconoir:refresh-double"
                               : "iconoir:save-floppy-disk"}
-                        iconClass={$apiKeySubmitting ? "animate-spin" : ""}
-                        disabled={isDemo() || $apiKeySubmitting}
+                        iconClass={updateUiView.pending ? "animate-spin" : ""}
+                        disabled={isDemo() || !!updateUiView.pending}
                     />
                 </div>
             </form>
@@ -403,25 +378,25 @@
         </p>
 
         <div class="black-bg-card">
-            <form
-                method="POST"
-                action="?/updateSlackEnabled"
-                use:formSlackEnabledEnhance
-            >
+            <form {...updateSlackEnabled}>
                 <label for="slack" class="space-y-1">
                     <div class="flex justify-between items-center">
                         <h3>Slack</h3>
                         <ToggleSwitch
                             id="slack"
-                            name="enabled"
-                            bind:checked={$formSlackEnabledForm.enabled}
+                            {...updateSlackEnabled.fields.enabled.as(
+                                "checkbox",
+                                data?.slackEnabled ?? false,
+                            )}
                             ariaLabel="Enable notifications"
-                            disabled={isDemo() || $formSlackEnabledSubmitting}
-                            onchange={() => {
-                                $formSlackEnabledForm.enabled !==
-                                    $formSlackEnabledForm.enabled;
-                                formSlackEnabledSubmit();
-                            }}
+                            disabled={isDemo() ||
+                                !!updateSlackEnabled.pending}
+                            onchange={() =>
+                                submitWithIssueToast(updateSlackEnabled, () =>
+                                    updateSlackEnabled.fields.enabled.set(
+                                        data?.slackEnabled ?? false,
+                                    ),
+                                )}
                         />
                     </div>
                     <p>
@@ -438,11 +413,13 @@
                     </p>
                 </label>
             </form>
-            {#if $formSlackEnabledForm.enabled}
+            {#if slackEnabled}
                 <form
-                    method="POST"
-                    action="?/updateSlackWebhook"
-                    use:slackWebHookEnhance
+                    {...updateSlackWebhook
+                        .preflight(slackWebhookSchema)
+                        .enhance(submitWithToast)}
+                    oninput={() =>
+                        updateSlackWebhook.validate({ preflightOnly: true })}
                 >
                     <div
                         class="grid gap-3"
@@ -452,38 +429,42 @@
 
                         <Input
                             type="text"
-                            name="webhook"
                             id="webhook"
                             placeholder="Enter Slack Webhook Url...."
                             label="Webhook"
                             tooltip="Your Slack Webhook URL for sending notifications. Create one in your Slack app settings. Example: https://hooks.slack.com/services/T05Q..."
-                            disabled={isDemo() || $slackWebHookSubmitting}
-                            bind:value={$slackWebHookForm.webhook}
-                            variant={$slackWebHookErrors.webhook
+                            disabled={isDemo() ||
+                                !!updateSlackWebhook.pending}
+                            variant={updateSlackWebhook.fields.webhook.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
-                            helperText={$slackWebHookErrors.webhook
-                                ? $slackWebHookErrors.webhook[0]
-                                : ""}
-                            {...$slackWebHookConstraints.webhook}
+                            helperText={updateSlackWebhook.fields.webhook.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateSlackWebhook.fields.webhook.as(
+                                "text",
+                                data?.slackWebhookConfig?.webhook_url ?? "",
+                            )}
                         />
                         <Input
-                            type="time"
-                            name="notificationTime"
                             id="notificationTime"
                             placeholder="Enter Slack Webhook Url...."
                             label="Notification time"
                             tooltip="Time for daily domain alerts - available domains and those expiring within 30 days."
-                            disabled={isDemo() || $slackWebHookSubmitting}
-                            bind:value={$slackWebHookForm.notificationTime}
-                            variant={$slackWebHookErrors.notificationTime
+                            disabled={isDemo() ||
+                                !!updateSlackWebhook.pending}
+                            variant={updateSlackWebhook.fields.notificationTime.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
                             class="max-w-40"
-                            helperText={$slackWebHookErrors.notificationTime
-                                ? $slackWebHookErrors.notificationTime[0]
-                                : ""}
-                            {...$slackWebHookConstraints.notificationTime}
+                            helperText={updateSlackWebhook.fields.notificationTime.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateSlackWebhook.fields.notificationTime.as(
+                                "time",
+                                data?.slackWebhookConfig?.notification_time ??
+                                    "",
+                            )}
                         />
                         <div class="test">
                             <div class="grid gap-0.5">
@@ -541,41 +522,41 @@
 
                                 <ToggleSwitch
                                     id="sendSlackTestMessage"
-                                    name="sendTestMessage"
-                                    bind:checked={
-                                        $slackWebHookForm.sendTestMessage
-                                    }
+                                    {...updateSlackWebhook.fields.sendTestMessage.as(
+                                        "checkbox",
+                                    )}
                                     ariaLabel="Send Test Message"
                                     disabled={isDemo() ||
-                                        $formSlackEnabledSubmitting}
+                                        !!updateSlackWebhook.pending}
                                 />
                             </div>
                         </div>
                         <hr />
                         <div class="flex justify-end">
                             <Button
-                                type={isDemo() ? "button" : "submit"}
-                                text={$slackWebHookForm.sendTestMessage
+                                type="submit"
+                                text={updateSlackWebhook.fields.sendTestMessage.value()
                                     ? "Test & Save Slack Changes"
                                     : "Save Changes"}
                                 size="md"
                                 color="white"
-                                ariaLabel={$slackWebHookForm.sendTestMessage
+                                ariaLabel={updateSlackWebhook.fields.sendTestMessage.value()
                                     ? "Test & Save Slack Changes"
                                     : "Save Slack Changes"}
                                 icon={isDemo()
-                                    ? $slackWebHookForm.sendTestMessage
+                                    ? updateSlackWebhook.fields.sendTestMessage.value()
                                         ? "iconoir:send-diagonal"
                                         : "iconoir:save-floppy-disk"
-                                    : $slackWebHookSubmitting
+                                    : updateSlackWebhook.pending
                                       ? "iconoir:refresh-double"
-                                      : $slackWebHookForm.sendTestMessage
+                                      : updateSlackWebhook.fields.sendTestMessage.value()
                                         ? "iconoir:send-diagonal"
                                         : "iconoir:save-floppy-disk"}
-                                iconClass={$slackWebHookSubmitting
+                                iconClass={updateSlackWebhook.pending
                                     ? "animate-spin"
                                     : ""}
-                                disabled={isDemo() || $slackWebHookSubmitting}
+                                disabled={isDemo() ||
+                                    !!updateSlackWebhook.pending}
                             />
                         </div>
                     </div>
@@ -584,25 +565,25 @@
         </div>
 
         <div class="black-bg-card">
-            <form
-                method="POST"
-                action="?/updateResendEnabled"
-                use:formResendEnabledEnhance
-            >
+            <form {...updateResendEnabled}>
                 <label for="resend" class="space-y-1">
                     <div class="flex justify-between items-center">
                         <h3>Resend</h3>
                         <ToggleSwitch
                             id="resend"
-                            name="enabled"
-                            bind:checked={$formResendEnabledForm.enabled}
+                            {...updateResendEnabled.fields.enabled.as(
+                                "checkbox",
+                                data?.resendEnabled ?? false,
+                            )}
                             ariaLabel="Enable notifications"
-                            disabled={isDemo() || $formResendEnabledSubmitting}
-                            onchange={() => {
-                                $formResendEnabledForm.enabled !==
-                                    $formResendEnabledForm.enabled;
-                                formResendEnabledSubmit();
-                            }}
+                            disabled={isDemo() ||
+                                !!updateResendEnabled.pending}
+                            onchange={() =>
+                                submitWithIssueToast(updateResendEnabled, () =>
+                                    updateResendEnabled.fields.enabled.set(
+                                        data?.resendEnabled ?? false,
+                                    ),
+                                )}
                         />
                     </div>
                     <p>
@@ -620,11 +601,13 @@
                 </label>
             </form>
 
-            {#if $formResendEnabledForm.enabled}
+            {#if resendEnabled}
                 <form
-                    method="POST"
-                    action="?/updateResendKey"
-                    use:formResendEnhance
+                    {...updateResendConfig
+                        .preflight(resendSchema)
+                        .enhance(submitWithToast)}
+                    oninput={() =>
+                        updateResendConfig.validate({ preflightOnly: true })}
                 >
                     <div
                         class="grid gap-3"
@@ -634,76 +617,82 @@
 
                         <Input
                             type="text"
-                            name="apiKey"
-                            id="apiKey"
+                            id="resendApiKey"
                             placeholder="Enter Resend API Key...."
                             label="API Key"
                             tooltip="Your Resend API key for sending emails. Get one from your Resend dashboard at resend.com. Example: re_AbCdE******"
-                            disabled={isDemo() || $formResendSubmitting}
-                            bind:value={$formResendForm.apiKey}
-                            variant={$formResendErrors.apiKey
+                            disabled={isDemo() ||
+                                !!updateResendConfig.pending}
+                            variant={updateResendConfig.fields.apiKey.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
-                            helperText={$formResendErrors.apiKey
-                                ? $formResendErrors.apiKey[0]
-                                : ""}
-                            {...$formResendConstraints.apiKey}
+                            helperText={updateResendConfig.fields.apiKey.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateResendConfig.fields.apiKey.as(
+                                "text",
+                                data?.resendConfig?.api_key ?? "",
+                            )}
                         />
 
                         <Input
                             type="text"
-                            name="fromEmail"
                             id="fromEmail"
                             placeholder="Enter From Email..."
                             label="From Email"
                             tooltip="The sender email address that notifications will come from. Must be a verified domain in your Resend account. Example: notifications@yourdomain.com"
-                            disabled={isDemo() || $formResendSubmitting}
-                            bind:value={$formResendForm.fromEmail}
-                            variant={$formResendErrors.fromEmail
+                            disabled={isDemo() ||
+                                !!updateResendConfig.pending}
+                            variant={updateResendConfig.fields.fromEmail.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
-                            helperText={$formResendErrors.fromEmail
-                                ? $formResendErrors.fromEmail[0]
-                                : ""}
-                            {...$formResendConstraints.fromEmail}
+                            helperText={updateResendConfig.fields.fromEmail.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateResendConfig.fields.fromEmail.as(
+                                "text",
+                                data?.resendConfig?.from_email ?? "",
+                            )}
                         />
 
                         <Input
                             type="text"
-                            name="toEmail"
-                            Email
                             id="toEmail"
                             placeholder="Enter To Email..."
                             label="To Email"
                             tooltip="The recipient email address where domain monitoring notifications will be sent. This should be your admin or notification email. Example: admin@yourdomain.com"
-                            disabled={isDemo() || $formResendSubmitting}
-                            bind:value={$formResendForm.toEmail}
-                            variant={$formResendErrors.toEmail
+                            disabled={isDemo() ||
+                                !!updateResendConfig.pending}
+                            variant={updateResendConfig.fields.toEmail.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
-                            helperText={$formResendErrors.toEmail
-                                ? $formResendErrors.toEmail[0]
-                                : ""}
-                            {...$formResendConstraints.toEmail}
+                            helperText={updateResendConfig.fields.toEmail.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateResendConfig.fields.toEmail.as(
+                                "text",
+                                data?.resendConfig?.to_email ?? "",
+                            )}
                         />
 
                         <Input
-                            type="time"
-                            name="notificationTime"
-                            id="notificationTime"
-                            placeholder="Enter Slack Webhook Url...."
+                            id="resendNotificationTime"
+                            placeholder="Enter Notification Time...."
                             label="Notification time"
                             tooltip="Time for daily domain alerts - available domains and those expiring within 30 days."
-                            disabled={isDemo() || $formResendSubmitting}
-                            bind:value={$formResendForm.notificationTime}
-                            variant={$formResendErrors.notificationTime
+                            disabled={isDemo() ||
+                                !!updateResendConfig.pending}
+                            variant={updateResendConfig.fields.notificationTime.issues()
+                                ?.length
                                 ? "error"
                                 : "default"}
                             class="max-w-40"
-                            helperText={$formResendErrors.notificationTime
-                                ? $formResendErrors.notificationTime[0]
-                                : ""}
-                            {...$formResendConstraints.notificationTime}
+                            helperText={updateResendConfig.fields.notificationTime.issues()?.[0]
+                                ?.message ?? ""}
+                            {...updateResendConfig.fields.notificationTime.as(
+                                "time",
+                                data?.resendConfig?.notification_time ?? "",
+                            )}
                         />
 
                         <div class="test">
@@ -762,40 +751,41 @@
 
                                 <ToggleSwitch
                                     id="sendResendTestMessage"
-                                    name="sendTestMessage"
-                                    bind:checked={
-                                        $formResendForm.sendTestMessage
-                                    }
+                                    {...updateResendConfig.fields.sendTestMessage.as(
+                                        "checkbox",
+                                    )}
                                     ariaLabel="Send Test Message"
-                                    disabled={isDemo() || $formResendSubmitting}
+                                    disabled={isDemo() ||
+                                        !!updateResendConfig.pending}
                                 />
                             </div>
                         </div>
                         <hr />
                         <div class="flex justify-end">
                             <Button
-                                type={isDemo() ? "button" : "submit"}
-                                text={$formResendForm.sendTestMessage
+                                type="submit"
+                                text={updateResendConfig.fields.sendTestMessage.value()
                                     ? "Test & Save Resend Changes"
                                     : "Save Changes"}
                                 size="md"
                                 color="white"
-                                ariaLabel={$formResendForm.sendTestMessage
+                                ariaLabel={updateResendConfig.fields.sendTestMessage.value()
                                     ? "Test & Save Resend"
                                     : "Save Resend Changes"}
                                 icon={isDemo()
-                                    ? $formResendForm.sendTestMessage
+                                    ? updateResendConfig.fields.sendTestMessage.value()
                                         ? "iconoir:send-diagonal"
                                         : "iconoir:save-floppy-disk"
-                                    : $formResendSubmitting
+                                    : updateResendConfig.pending
                                       ? "iconoir:refresh-double"
-                                      : $formResendForm.sendTestMessage
+                                      : updateResendConfig.fields.sendTestMessage.value()
                                         ? "iconoir:send-diagonal"
                                         : "iconoir:save-floppy-disk"}
-                                iconClass={$formResendSubmitting
+                                iconClass={updateResendConfig.pending
                                     ? "animate-spin"
                                     : ""}
-                                disabled={isDemo() || $formResendSubmitting}
+                                disabled={isDemo() ||
+                                    !!updateResendConfig.pending}
                             />
                         </div>
                     </div>

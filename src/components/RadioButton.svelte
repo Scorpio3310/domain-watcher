@@ -5,8 +5,8 @@
      * @typedef {Object} Props
      * @property {string} name - Radio group name
      * @property {string} id - Unique identifier for this radio button
-     * @property {string|number} value - Value of this radio button
-     * @property {string|number} [checked] - Currently selected value
+     * @property {string|number} [value] - Value of this radio button (supplied by `field.as("radio", value)` when spread from a remote form)
+     * @property {string|number|boolean} [checked] - Currently selected group value, or boolean checked state when spread from a remote form field (`field.as("radio", value)`)
      * @property {string} [checkedIcon="iconoir:check"] - Icon when checked
      * @property {string} [uncheckedIcon=""] - Icon when unchecked (empty for no icon)
      * @property {'sm'|'md'|'lg'} [size="md"] - Button size
@@ -16,10 +16,11 @@
      * @property {Function} [onchange] - Change handler
      */
 
+    /** @type {Props & Record<string, any>} */
     let {
         name,
         id,
-        value,
+        value = undefined,
         checked = $bindable(),
         checkedIcon = "iconoir:check",
         uncheckedIcon = "",
@@ -31,8 +32,11 @@
         ...restProps
     } = $props();
 
-    // Computed values
-    const isChecked = $derived(checked === value);
+    // Computed values - `checked` is either the selected group value (legacy
+    // bind:checked usage) or a boolean coming from a remote form field spread
+    const isChecked = $derived(
+        typeof checked === "boolean" ? checked : checked === value
+    );
     const currentIcon = $derived(isChecked ? checkedIcon : uncheckedIcon);
     const showIcon = $derived(isChecked || uncheckedIcon !== "");
 
@@ -50,10 +54,24 @@
     );
 
     // Handle change
-    function handleChange() {
+    /** @param {Event & { currentTarget: EventTarget & HTMLInputElement }} event */
+    function handleChange(event) {
         if (!disabled) {
             checked = value;
             onchange?.(value);
+        } else {
+            event.currentTarget.checked = isChecked;
+        }
+    }
+
+    // If the `disabled` prop is set but the DOM attribute was tampered away
+    // (e.g. via devtools), cancel the click's default action - the browser
+    // reverts the radio selection and never fires input/change, so neither
+    // the remote-form field state nor the visuals can drift
+    /** @param {MouseEvent} event */
+    function handleClick(event) {
+        if (disabled) {
+            event.preventDefault();
         }
     }
 </script>
@@ -65,10 +83,11 @@
         {name}
         {id}
         {value}
-        bind:group={checked}
+        checked={isChecked}
         {disabled}
         class="radio-button__input sr-only"
         aria-label={ariaLabel}
+        onclick={handleClick}
         onchange={handleChange}
         {...restProps}
     />

@@ -30,6 +30,14 @@ export const DOMAIN_STATUS = Object.freeze({
 });
 
 /**
+ * Number of days before expiry within which a domain counts as "expiring soon".
+ * Must stay in sync with the hardcoded '+30 days' window in
+ * domain-queries.js (SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION).
+ * @constant {number}
+ */
+export const EXPIRY_WARNING_DAYS = 30;
+
+/**
  * UI domain view mode constants
  * @readonly
  * @enum {string}

@@ -4,7 +4,8 @@
     import Input from "$components/Input.svelte";
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import Icon from "@iconify/svelte";
-    import { superForm } from "sveltekit-superforms";
+    import { addDomain } from "$src/lib/remote/add-domain.remote";
+    import { addDomainSchema } from "./validation";
     import { flip } from "svelte/animate";
     import { scale, fly } from "svelte/transition";
     import Tooltip from "$components/Tooltip.svelte";
@@ -14,21 +15,6 @@
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
-
-    //// SUPERFORMS ////
-    const { form, errors, constraints, enhance } = superForm(
-        // svelte-ignore state_referenced_locally
-        data?.formAddDomain,
-        {
-            id: "add-domain",
-            resetForm: true,
-            onResult: ({ result }) => {
-                if (result.type === "success" && result.data?.form?.message) {
-                    toast.show(result.data?.form?.message);
-                }
-            },
-        },
-    );
 </script>
 
 <svelte:head>
@@ -73,19 +59,39 @@
         <p>Keep track of all your domains in one place.</p>
     </div>
 
-    <form class="mt-8" method="POST" action="?/addDomain" use:enhance>
+    <form
+        class="mt-8"
+        {...addDomain.preflight(addDomainSchema).enhance(
+            async ({ submit, element }) => {
+                try {
+                    if (await submit()) {
+                        element.reset();
+                        if (addDomain.result) toast.show(addDomain.result);
+                    }
+                    // invalid data -> issues render inline below the input
+                } catch {
+                    toast.show({
+                        status: 500,
+                        message: "Something went wrong",
+                    });
+                }
+            },
+        )}
+        oninput={() => addDomain.validate({ preflightOnly: true })}
+    >
         <div class="relative">
             <Input
                 type="text"
-                name="domainName"
                 id="domainName"
                 placeholder="Enter a domain name...."
                 disabled={false}
-                bind:value={$form.domainName}
                 class="pr-40!"
-                variant={$errors.domainName ? "error" : "default"}
-                helperText={$errors.domainName ? $errors.domainName[0] : ""}
-                {...$constraints.domainName}
+                variant={addDomain.fields.domainName.issues()?.length
+                    ? "error"
+                    : "default"}
+                helperText={addDomain.fields.domainName.issues()?.[0]
+                    ?.message ?? ""}
+                {...addDomain.fields.domainName.as("text")}
             />
 
             {#if isDemo()}
@@ -96,7 +102,7 @@
                         hoverOpacity={false}
                     >
                         <Button
-                            type="button"
+                            type="submit"
                             text="Add Domain"
                             size="md"
                             icon="iconoir:plus"
@@ -162,7 +168,7 @@
             </div>
             {#snippet pending()}
                 <div class="space-y-2 opacity-50">
-                    {#each Array(4) as _, i}
+                    {#each Array(4) as _, i (i)}
                         <div class="card card-domain">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-4">

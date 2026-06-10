@@ -166,7 +166,7 @@
                         />
                         {#if isDemo()}
                             <Button
-                                type="button"
+                                type="submit"
                                 text="Delete"
                                 size="md"
                                 icon="iconoir:trash"
@@ -335,7 +335,7 @@
             >
                 <input {...nsForm.fields.domainId.as("hidden", data?.id)} />
                 <Button
-                    type={isDemo() ? "button" : "submit"}
+                    type="submit"
                     text="NS Lookup"
                     size="sm"
                     color="white"
@@ -374,7 +374,7 @@
                 <input {...sslForm.fields.domainId.as("hidden", data?.id)} />
 
                 <Button
-                    type={isDemo() ? "button" : "submit"}
+                    type="submit"
                     text="SSL Lookup"
                     size="sm"
                     color="white"
@@ -414,7 +414,7 @@
                 <input {...checkForm.fields.domainId.as("hidden", data?.id)} />
 
                 <Button
-                    type={isDemo() ? "button" : "submit"}
+                    type="submit"
                     text="Scan Now"
                     size="sm"
                     color="white"

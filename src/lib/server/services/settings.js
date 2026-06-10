@@ -5,20 +5,13 @@
 
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { isDemo, getErrorMessage } from "$src/lib/utils/helpers";
+import { getErrorMessage } from "$src/lib/utils/helpers";
 import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
+import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================
 // CORE UTILITIES
 // ========================================
-
-/**
- * Validates demo mode for write operations
- */
-const validateDemoAccess = () =>
-    isDemo()
-        ? { status: 403, message: "Demo mode: Look but don't touch 👀" }
-        : null;
 
 /**
  * Safely parses JSON with fallback
@@ -83,7 +76,7 @@ export const ui = {
      */
     async saveViewMode(viewMode, additionalSettings = {}) {
         try {
-            const demoAccessError = validateDemoAccess();
+            const demoAccessError = validateDemoMode();
             if (demoAccessError) return demoAccessError;
 
             const queryResult = await executeSql(
