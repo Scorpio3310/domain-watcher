@@ -4,6 +4,7 @@
     import Icon from "@iconify/svelte";
 
     // Environment configuration
+    /** @type {Record<string, {label: string, modifier: string, icon: string|null, tooltip: string|null, showTooltip: boolean}>} */
     const environments = {
         demo: {
             label: "Demo",
@@ -38,7 +39,7 @@
 
 {#if shouldRender}
     {#if currentEnv.showTooltip}
-        <Tooltip text={currentEnv.tooltip} position="bottom">
+        <Tooltip text={currentEnv.tooltip ?? ""} position="bottom">
             <div
                 class="environment-tag environment-tag--{currentEnv.modifier} hover-fade"
             >

@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS domains (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Sample data with numeric status
+-- Sample data
 INSERT INTO domains (domain_name, status, check_count) VALUES
-('example.com', 'not_checked', 0), -- Not Checked (Registered)
-('example.org', 'not_checked', 0); -- Error
+('example.com', 'not_checked', 0),
+('example.org', 'not_checked', 0);
 
 -- Auto-update trigger for domains
 CREATE TRIGGER IF NOT EXISTS update_domains_timestamp 
@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- -- Notification settings (enabled = TRUE/FALSE)
 -- ('notifications', 'slack', '{}', FALSE, 'Slack - Notification Settings'),
+-- ('notifications', 'discord', '{}', FALSE, 'Discord - Notification Settings'),
 -- ('notifications', 'resend', '{}', FALSE, 'Resend - Notification Settings');
 
 -- Auto-update trigger for settings

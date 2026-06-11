@@ -7,6 +7,7 @@
     import NoJavascript from "$components/NoJavascript.svelte";
     import { dev } from "$app/environment";
 
+    /** @type {import('./$types').LayoutProps} */
     let { children, data } = $props();
 
     /**
@@ -72,7 +73,7 @@
 <NoJavascript />
 
 <div class="app-container max-w-5xl mx-auto">
-    <Header type={headerType} isApiConfigured={data.isApiConfigured} />
+    <Header type={headerType} isLookupReady={data.isLookupReady} />
 
     <main class="main-content">
         {@render children()}

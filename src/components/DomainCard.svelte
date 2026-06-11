@@ -3,7 +3,10 @@
     import Icon from "@iconify/svelte";
     import { slide, fly } from "svelte/transition";
     import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
-    import { DOMAIN_STATUS } from "$src/lib/constants/constants";
+    import {
+        DOMAIN_STATUS,
+        DOMAIN_PROVIDER,
+    } from "$src/lib/constants/constants";
     import { isDemo } from "$src/lib/utils/helpers";
     import Tooltip from "$components/Tooltip.svelte";
     import { toast } from "$src/lib/stores/toast.svelte.js";
@@ -16,15 +19,24 @@
     import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
 
     //// PROPS ////
-    let { data, uiView } = $props();
+    /** @type {{data: import('$lib/types').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */
+    let {
+        data,
+        uiView,
+        isApiConfigured = false,
+        lookupProvider = null,
+        whoisjsonFallback = true,
+    } = $props();
+
+    //// FORM INSTANCES (isolated per domain) ////
+    const nsForm = $derived(ns.for(data?.id));
+    const sslForm = $derived(ssl.for(data?.id));
+    const checkForm = $derived(check.for(data?.id));
+    const removeForm = $derived(remove.for(data?.id));
 
     //// STATES ////
     let isExpanded = $state(false);
     let showDeleteConfirmation = $state(false);
-    let nsSubmitting = $state(false);
-    let sslSubmitting = $state(false);
-    let checkSubmitting = $state(false);
-    let removeSubmitting = $state(false);
 
     /**
      * Toggle expansion state for showing more/less details
@@ -57,8 +69,37 @@
      */
     const buttonIcon = $derived("iconoir:nav-arrow-up");
     const buttonIconClass = $derived(
-        `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`
+        `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`,
     );
+
+    //// PROVIDER TRANSPARENCY ////
+    const tld = $derived(data?.domain_name?.split(".").pop() ?? "");
+    // willCheckVia === "none" means the next check would just error
+    const scanBlocked = $derived(data?.willCheckVia === "none");
+    const scanTooltip = $derived.by(() => {
+        switch (data?.willCheckVia) {
+            case DOMAIN_PROVIDER.RDAP:
+                return "Will check via RDAP";
+            case DOMAIN_PROVIDER.WHOIS_JSON:
+                return lookupProvider === DOMAIN_PROVIDER.RDAP
+                    ? `Will check via WhoisJSON (.${tld} has no RDAP)`
+                    : "Will check via WhoisJSON";
+            case "none":
+                if (lookupProvider === DOMAIN_PROVIDER.WHOIS_JSON) {
+                    return "WhoisJSON is selected but no API key is configured — add one in Settings";
+                }
+                // Mirror the server's branch order: fallback state first,
+                // then the key requirement
+                if (!whoisjsonFallback) {
+                    return `.${tld} has no RDAP server and WhoisJSON fallback is disabled — enable it in Settings${
+                        isApiConfigured ? "" : " and add a WhoisJSON API key"
+                    }`;
+                }
+                return `.${tld} has no RDAP server — add a WhoisJSON API key in Settings`;
+            default:
+                return ""; // unknown (bootstrap outage) — plain button, no tooltip
+        }
+    });
 </script>
 
 <div class="card card--domain">
@@ -66,7 +107,7 @@
         <div class="main-info">
             <div class="icon-status">
                 <Icon icon="iconoir:globe" class="icon-globe" />
-                {@render showStatus(data?.status ?? 4)}
+                {@render showStatus(data?.status ?? "")}
             </div>
 
             <h3>{data?.domain_name || "Error"}</h3>
@@ -74,6 +115,7 @@
                 <Tooltip
                     text="Domains added to watchlist aren't auto-checked. Click 'Check Domains' for batch verification or use 'Scan Now' for individual verification."
                     position="bottom"
+                    offset={8}
                 >
                     <div
                         class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
@@ -132,26 +174,38 @@
                     />
 
                     <form
-                        {...remove.enhance(async ({ submit }) => {
-                            removeSubmitting = true;
+                        {...removeForm.enhance(async ({ submit }) => {
                             try {
-                                await submit();
-                                removeSubmitting = false;
-                                toast.show(remove?.result);
+                                if (await submit()) {
+                                    if (removeForm.result)
+                                        toast.show(removeForm.result);
+                                } else {
+                                    const issues =
+                                        removeForm.fields.allIssues() ?? [];
+                                    toast.show({
+                                        status: 400,
+                                        message: issues
+                                            .map((i) => i.message)
+                                            .join(", "),
+                                    });
+                                }
                             } catch (error) {
-                                console.log(error);
+                                toast.show({
+                                    status: 500,
+                                    message: "Something went wrong",
+                                });
                             }
                         })}
                     >
                         <input
-                            type="hidden"
-                            name="domainId"
-                            value={data?.id}
-                            readonly
+                            {...removeForm.fields.domainId.as(
+                                "hidden",
+                                data?.id,
+                            )}
                         />
                         {#if isDemo()}
                             <Button
-                                type="button"
+                                type="submit"
                                 text="Delete"
                                 size="md"
                                 icon="iconoir:trash"
@@ -169,7 +223,7 @@
                                 color="black"
                                 class="button--red "
                                 ariaLabel="Delete domain"
-                                disabled={removeSubmitting ? true : false}
+                                disabled={!!removeForm.pending}
                             />
                         {/if}
                     </form>
@@ -223,7 +277,7 @@
     <hr />
     <p class="inline">
         <span class="opacity-50">Expiration Date:</span>
-        {formatExpirationDate(data?.expires, {
+        {formatExpirationDate(data?.expires ?? null, {
             showRemaining: false,
         }) || "/"}
         {#if data?.expires}
@@ -239,7 +293,7 @@
 {/snippet}
 
 {#snippet expandedInfo()}
-    <hr class="!mt-2.5" />
+    <hr class="mt-2.5!" />
     <p class="inline">
         <span class="opacity-50">ID:</span>
         {data?.id || "/"}
@@ -247,12 +301,19 @@
     <hr />
     <p class="inline">
         <span class="opacity-50">Last Checked:</span>
-        {formatLastChecked(data?.last_domain_checked) || "Never"}
+        {formatLastChecked(data?.last_domain_checked ?? null) || "Never"}
+    </p>
+    <hr />
+    <p class="inline">
+        <span class="opacity-50">Checked via:</span>
+        <!-- On error the stored source describes the last SUCCESSFUL check,
+             which would misattribute the just-failed attempt -->
+        {data?.status === DOMAIN_STATUS.ERROR ? "/" : data?.source || "/"}
     </p>
     <hr />
     <p class="inline">
         <span class="opacity-50">Added At:</span>
-        {formatHumanDate(data?.created_at) || "/"}
+        {formatHumanDate(data?.created_at ?? null) || "/"}
     </p>
     <hr />
     <div>
@@ -297,119 +358,192 @@
         <span class="opacity-50">Options:</span>
         <div class="buttons">
             <form
-                {...ns.enhance(async ({ submit }) => {
-                    nsSubmitting = true;
+                {...nsForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-                        nsSubmitting = false;
-                        toast.show(ns?.result);
+                        if (await submit()) {
+                            if (nsForm.result) toast.show(nsForm.result);
+                        } else {
+                            const issues = nsForm.fields.allIssues() ?? [];
+                            toast.show({
+                                status: 400,
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
+                            });
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
-                <input
-                    name="domainId"
-                    value={data?.id}
-                    type="hidden"
-                    readonly
-                />
-                <Button
-                    type={isDemo() ? "button" : "submit"}
-                    text="NS Lookup"
-                    size="sm"
-                    color="white"
-                    ariaLabel="NS Lookup - Check"
-                    icon={isDemo()
-                        ? "iconoir:dns"
-                        : nsSubmitting
-                          ? "iconoir:refresh-double"
-                          : "iconoir:dns"}
-                    iconClass={nsSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || nsSubmitting}
-                />
+                <input {...nsForm.fields.domainId.as("hidden", data?.id)} />
+                <Tooltip
+                    text="Via Cloudflare DNS — free, no API key"
+                    position="top"
+                    offset={8}
+                    hoverOpacity={false}
+                >
+                    <Button
+                        type="submit"
+                        text="NS Lookup"
+                        size="sm"
+                        color="white"
+                        ariaLabel="NS Lookup - Check"
+                        icon={isDemo()
+                            ? "iconoir:dns"
+                            : nsForm.pending
+                              ? "iconoir:refresh-double"
+                              : "iconoir:dns"}
+                        iconClass={nsForm.pending ? "animate-spin" : ""}
+                        disabled={isDemo() || !!nsForm.pending}
+                    />
+                </Tooltip>
             </form>
             <form
-                {...ssl.enhance(async ({ submit }) => {
-                    sslSubmitting = true;
+                {...sslForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-                        sslSubmitting = false;
-                        toast.show(ssl?.result);
+                        if (await submit()) {
+                            if (sslForm.result) toast.show(sslForm.result);
+                        } else {
+                            const issues = sslForm.fields.allIssues() ?? [];
+                            toast.show({
+                                status: 400,
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
+                            });
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
-                <input
-                    type="hidden"
-                    name="domainId"
-                    value={data?.id}
-                    readonly
-                />
+                <input {...sslForm.fields.domainId.as("hidden", data?.id)} />
 
-                <Button
-                    type={isDemo() ? "button" : "submit"}
-                    text="SSL Lookup"
-                    size="sm"
-                    color="white"
-                    ariaLabel="SSL Lookup - Check"
-                    icon={isDemo()
-                        ? "iconoir:security-pass"
-                        : sslSubmitting
-                          ? "iconoir:refresh-double"
-                          : "iconoir:security-pass"}
-                    iconClass={sslSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || sslSubmitting}
-                />
+                {#if !isApiConfigured && !isDemo()}
+                    <Tooltip
+                        text="SSL checks run via WhoisJSON — add an API key in Settings"
+                        position="top"
+                        offset={8}
+                    >
+                        <Button
+                            type="submit"
+                            text="SSL Lookup"
+                            size="sm"
+                            color="white"
+                            ariaLabel="SSL Lookup - Check"
+                            icon="iconoir:security-pass"
+                            disabled={true}
+                        />
+                    </Tooltip>
+                {:else}
+                    <Tooltip
+                        text="via WhoisJSON API"
+                        position="top"
+                        offset={8}
+                        hoverOpacity={false}
+                    >
+                        <Button
+                            type="submit"
+                            text="SSL Lookup"
+                            size="sm"
+                            color="white"
+                            ariaLabel="SSL Lookup - Check"
+                            icon={isDemo()
+                                ? "iconoir:security-pass"
+                                : sslForm.pending
+                                  ? "iconoir:refresh-double"
+                                  : "iconoir:security-pass"}
+                            iconClass={sslForm.pending ? "animate-spin" : ""}
+                            disabled={isDemo() || !!sslForm.pending}
+                        />
+                    </Tooltip>
+                {/if}
             </form>
 
             <form
-                {...check.enhance(async ({ submit }) => {
-                    checkSubmitting = true;
+                {...checkForm.enhance(async ({ submit }) => {
                     try {
-                        await submit();
-                        checkSubmitting = false;
-                        toast.show(check?.result);
+                        if (await submit()) {
+                            if (checkForm.result) toast.show(checkForm.result);
+                        } else {
+                            const issues = checkForm.fields.allIssues() ?? [];
+                            toast.show({
+                                status: 400,
+                                message: issues
+                                    .map((i) => i.message)
+                                    .join(", "),
+                            });
+                        }
                     } catch (error) {
-                        console.log(error);
+                        toast.show({
+                            status: 500,
+                            message: "Something went wrong",
+                        });
                     }
                 })}
             >
-                <input
-                    type="hidden"
-                    name="domainId"
-                    value={data?.id}
-                    readonly
-                />
+                <input {...checkForm.fields.domainId.as("hidden", data?.id)} />
 
-                <Button
-                    type={isDemo() ? "button" : "submit"}
-                    text="Scan Now"
-                    size="sm"
-                    color="white"
-                    ariaLabel="Scan domain for latest status and details"
-                    icon={isDemo()
-                        ? "iconoir:search"
-                        : checkSubmitting
-                          ? "iconoir:refresh-double"
-                          : "iconoir:search"}
-                    iconClass={checkSubmitting ? "animate-spin" : ""}
-                    disabled={isDemo() || checkSubmitting}
-                />
+                {#if scanTooltip}
+                    <Tooltip
+                        text={scanTooltip}
+                        position="top"
+                        offset={8}
+                        hoverOpacity={false}
+                    >
+                        <Button
+                            type="submit"
+                            text="Scan Now"
+                            size="sm"
+                            color="white"
+                            ariaLabel="Scan domain for latest status and details"
+                            icon={isDemo()
+                                ? "iconoir:search"
+                                : checkForm.pending
+                                  ? "iconoir:refresh-double"
+                                  : "iconoir:search"}
+                            iconClass={checkForm.pending ? "animate-spin" : ""}
+                            disabled={isDemo() ||
+                                !!checkForm.pending ||
+                                scanBlocked}
+                        />
+                    </Tooltip>
+                {:else}
+                    <Button
+                        type="submit"
+                        text="Scan Now"
+                        size="sm"
+                        color="white"
+                        ariaLabel="Scan domain for latest status and details"
+                        icon={isDemo()
+                            ? "iconoir:search"
+                            : checkForm.pending
+                              ? "iconoir:refresh-double"
+                              : "iconoir:search"}
+                        iconClass={checkForm.pending ? "animate-spin" : ""}
+                        disabled={isDemo() || !!checkForm.pending}
+                    />
+                {/if}
             </form>
         </div>
     </div>
 {/snippet}
 
-{#snippet showStatus(domainStatus)}
+{#snippet showStatus(domainStatus = "")}
     {#if domainStatus === DOMAIN_STATUS.AVAILABLE}
         <div class="status status--available">
             <Icon icon="iconoir:check" class="icon" />
         </div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.REGISTERED}
-        {#if getExpirationStatus(data?.expires)?.isExpired || getExpirationStatus(data?.expires)?.isExpiringSoon}
+        {#if getExpirationStatus(data?.expires ?? null)?.isExpired || getExpirationStatus(data?.expires ?? null)?.isExpiringSoon}
             <div class="status-expiring-soon">
                 <Icon icon="iconoir:warning-triangle-solid" class="icon" />
             </div>
@@ -432,7 +566,7 @@
     {/if}
 {/snippet}
 
-{#snippet statusTextFormat(domainStatus)}
+{#snippet statusTextFormat(domainStatus = "")}
     {#if domainStatus === DOMAIN_STATUS.AVAILABLE}
         <div class="text-green">Available</div>
     {/if}
@@ -443,8 +577,13 @@
         <div class="text-blue">Not Checked</div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.ERROR}
-        <div class="text-orange-500">
-            Unable to Verify — <i>{data?.error_message}</i>
+        <div class="text-orange-500 flex items-center gap-1">
+            Unable to Verify
+            {#if data?.error_message}
+                <Tooltip text={data.error_message} position="bottom" offset={8}>
+                    <Icon icon="iconoir:info-circle" />
+                </Tooltip>
+            {/if}
         </div>
     {/if}
 {/snippet}

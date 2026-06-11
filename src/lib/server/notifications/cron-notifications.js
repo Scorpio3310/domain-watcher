@@ -4,28 +4,74 @@ import { domainVerification } from "../services/domain.js";
 import {
     getCurrentTimeInTimezone,
     formatHumanDate,
+    getErrorMessage,
 } from "$lib/utils/helpers.js";
+
+/** @import { DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig, BatchVerificationResult } from "$lib/types" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY
 // ============================================================================
 
 import { slackNotifier } from "./providers/slack-notifier.js";
+import { discordNotifier } from "./providers/discord-notifier.js";
 import { resendNotifier } from "./providers/resend-notifier.js";
 
 /**
- * Configuration registry for notification providers
+ * Configuration registry entry for a notification provider
  * @typedef {Object} ProviderConfig
  * @property {string} name - Human-readable provider name
- * @property {string} query - Database query key for settings
- * @property {Object} service - Notification service implementation
- * @property {Function} validate - Validation function for provider settings
+ * @property {keyof typeof SETTINGS_QUERIES} query - Database query key for settings
+ * @property {typeof slackNotifier | typeof discordNotifier | typeof resendNotifier} service - Notification service implementation
+ * @property {(settings: ProviderSettings) => boolean} validate - Validation function for provider settings
  */
+
+/**
+ * Provider selected for sending, including its loaded settings
+ * @typedef {ProviderConfig & {key: string, settings: ProviderSettings}} ActiveProvider
+ */
+
+/**
+ * Aggregated result of sending notifications to all selected providers
+ * @typedef {Object} NotificationSendResult
+ * @property {number} sent - Number of successful notifications sent
+ * @property {string[]} providers - Provider keys that succeeded
+ * @property {Array<{provider: string, error?: string}>} [errors] - Provider errors (only present if errors occurred)
+ */
+
+/**
+ * Domain verification results gathered for notifications
+ * @typedef {Object} DomainCheckResult
+ * @property {number} checked - Total number of domains verified via API
+ * @property {DomainRecord[]} available - Domains that became available
+ * @property {DomainRecord[]} expiring - Domains approaching expiration
+ * @property {DomainRecord[]} expired - Domains that are expired but still registered
+ */
+
+/**
+ * Result of a cron notification run
+ * @typedef {Object} CronExecutionResult
+ * @property {string} timestamp - ISO timestamp of execution
+ * @property {string|null} timestampLocal - Human-readable local timestamp
+ * @property {"skipped"|"executed"} action - Whether the run executed or was skipped
+ * @property {string} [reason] - Reason for skipping (if action is "skipped")
+ * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
+ * @property {{checked: number, available: number, expiring: number, expired: number}} [domains] - Domain verification counts (if executed)
+ * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
+ */
+
+/** @type {Record<string, ProviderConfig>} */
 const PROVIDERS = {
     slack: {
         name: "Slack",
         query: "SELECT_SLACK_SETTINGS",
         service: slackNotifier,
+        validate: (s) => !!s.webhook_url,
+    },
+    discord: {
+        name: "Discord",
+        query: "SELECT_DISCORD_SETTINGS",
+        service: discordNotifier,
         validate: (s) => !!s.webhook_url,
     },
     resend: {
@@ -51,20 +97,7 @@ export const cronNotifications = {
      * Main entry point - orchestrates domain checking and notification sending
      *
      * @param {boolean} [force=false] - Bypass time checking and force execution
-     * @returns {Promise<Object>} Execution results with timing and notification details
-     * @returns {string} returns.timestamp - ISO timestamp of execution
-     * @returns {string} returns.timestampLocal - Human-readable local timestamp
-     * @returns {string} returns.action - "skipped" or "executed"
-     * @returns {string} [returns.reason] - Reason for skipping (if action is "skipped")
-     * @returns {Object} [returns.domains] - Domain verification results (if executed)
-     * @returns {number} returns.domains.checked - Total domains verified
-     * @returns {number} returns.domains.available - Count of available domains
-     * @returns {number} returns.domains.expiring - Count of expiring domains
-     * @returns {number} returns.domains.expired - Count of expired domains
-     * @returns {Object} [returns.notifications] - Notification sending results
-     * @returns {number} returns.notifications.sent - Successfully sent notifications
-     * @returns {string[]} returns.notifications.providers - Provider keys that succeeded
-     * @returns {Object[]} [returns.notifications.errors] - Provider errors if any occurred
+     * @returns {Promise<CronExecutionResult>} Execution results with timing and notification details
      *
      * @example
      * // Regular scheduled execution
@@ -82,18 +115,23 @@ export const cronNotifications = {
 
         try {
             // Get providers to send to
-            const providersToSend = await this.getProviders(currentTime, force);
+            const { providers: providersToSend, settingsErrors } =
+                await this.getProviders(currentTime, force);
 
             const baseResponse = {
                 timestamp: new Date().toISOString(),
                 timestampLocal: formatHumanDate(new Date().toISOString()),
+                ...(settingsErrors.length > 0 && { settingsErrors }),
             };
 
             if (providersToSend.length === 0) {
                 return {
                     ...baseResponse,
                     action: "skipped",
-                    reason: "No providers scheduled",
+                    reason:
+                        settingsErrors.length > 0
+                            ? "No providers scheduled (some provider settings failed to load)"
+                            : "No providers scheduled",
                 };
             }
 
@@ -104,8 +142,7 @@ export const cronNotifications = {
             console.log("📨 Sending notifications...");
             const notifications = await this.sendNotifications(
                 providersToSend,
-                domains,
-                force
+                domains
             );
 
             return {
@@ -133,25 +170,32 @@ export const cronNotifications = {
      *
      * @param {string} currentTime - Current time in HH:MM format
      * @param {boolean} [force=false] - Bypass time checking for all enabled providers
-     * @returns {Promise<Object[]>} Array of provider configurations to use
-     * @returns {string} returns[].key - Provider key (slack, resend, etc.)
-     * @returns {string} returns[].name - Human-readable provider name
-     * @returns {Object} returns[].service - Provider service implementation
-     * @returns {Object} returns[].settings - Provider configuration settings
+     * @returns {Promise<{providers: ActiveProvider[], settingsErrors: Array<{provider: string, error: string}>}>} Providers to use plus any settings load failures
      *
      * @example
      * // Get providers for current time
-     * const providers = await cronNotifications.getProviders("14:30");
+     * const { providers } = await cronNotifications.getProviders("14:30");
      *
      * @example
      * // Get all enabled providers
-     * const providers = await cronNotifications.getProviders("14:30", true);
+     * const { providers } = await cronNotifications.getProviders("14:30", true);
      */
     async getProviders(currentTime, force = false) {
+        /** @type {ActiveProvider[]} */
         const providers = [];
+        /** @type {Array<{provider: string, error: string}>} */
+        const settingsErrors = [];
 
         for (const [key, config] of Object.entries(PROVIDERS)) {
             const settings = await this.getSettings(key);
+
+            if (settings.error) {
+                console.error(
+                    `❌ ${config.name} settings failed to load: ${settings.error}`
+                );
+                settingsErrors.push({ provider: key, error: settings.error });
+                continue;
+            }
 
             if (!settings.enabled) {
                 console.log(`⏭️ ${config.name} disabled`);
@@ -174,7 +218,7 @@ export const cronNotifications = {
             }
         }
 
-        return providers;
+        return { providers, settingsErrors };
     },
 
     /**
@@ -185,11 +229,7 @@ export const cronNotifications = {
      * 2. Regular domains - standard availability verification
      * 3. Expiring domains - fetches domains approaching expiration
      *
-     * @returns {Promise<Object>} Comprehensive domain verification results
-     * @returns {number} returns.checked - Total number of domains verified via API
-     * @returns {Object[]} returns.available - Domains that became available
-     * @returns {Object[]} returns.expiring - Domains approaching expiration
-     * @returns {Object[]} returns.expired - Domains that are expired but still registered
+     * @returns {Promise<DomainCheckResult>} Comprehensive domain verification results
      *
      * @example
      * const results = await cronNotifications.checkDomains();
@@ -205,42 +245,29 @@ export const cronNotifications = {
             ]);
 
         // Verify domains in parallel (if any exist)
-        const verificationPromises = [];
-
         if (expiredRegistered.length > 0) {
             console.log(
                 `🚨 Verifying ${expiredRegistered.length} expired domains...`
             );
-            verificationPromises.push(
-                domainVerification.verifyExpiredDomainsBatch(expiredRegistered)
-            );
-        } else {
-            verificationPromises.push(
-                Promise.resolve({
-                    checked: 0,
-                    available: [],
-                    stillRegistered: [],
-                })
-            );
         }
-
         if (domainsToCheck.length > 0) {
             console.log(
                 `📊 Verifying ${domainsToCheck.length} regular domains...`
             );
-            verificationPromises.push(
-                domainVerification.verifyDomainsBatch(domainsToCheck)
-            );
-        } else {
-            verificationPromises.push(
-                Promise.resolve({ checked: 0, available: [] })
-            );
         }
 
-        const [expiredResults, verificationResults] = await Promise.all(
-            verificationPromises
-        );
+        const [expiredResults, verificationResults] = await Promise.all([
+            expiredRegistered.length > 0
+                ? domainVerification.verifyExpiredDomainsBatch(
+                      expiredRegistered
+                  )
+                : { checked: 0, available: [], stillRegistered: [] },
+            domainsToCheck.length > 0
+                ? domainVerification.verifyDomainsBatch(domainsToCheck)
+                : { checked: 0, available: [] },
+        ]);
 
+        /** @type {DomainCheckResult} */
         const results = {
             checked:
                 (expiredResults.checked || 0) +
@@ -265,17 +292,9 @@ export const cronNotifications = {
      * Validates each provider configuration before sending and handles failures gracefully.
      * Sends notifications in parallel for better performance.
      *
-     * @param {Object[]} providers - Array of provider configurations from getProviders()
-     * @param {Object} domains - Domain verification results from checkDomains()
-     * @param {Object[]} domains.available - Domains that became available
-     * @param {Object[]} domains.expiring - Domains approaching expiration
-     * @param {Object[]} domains.expired - Expired domains still registered
-     * @returns {Promise<Object>} Notification sending results
-     * @returns {number} returns.sent - Number of successful notifications sent
-     * @returns {string[]} returns.providers - Array of provider keys that succeeded
-     * @returns {Object[]} [returns.errors] - Array of provider errors (only if errors occurred)
-     * @returns {string} returns.errors[].provider - Provider key that failed
-     * @returns {string} returns.errors[].error - Error message
+     * @param {ActiveProvider[]} providers - Array of provider configurations from getProviders()
+     * @param {DomainCheckResult} domains - Domain verification results from checkDomains()
+     * @returns {Promise<NotificationSendResult>} Notification sending results
      *
      * @example
      * const providers = await cronNotifications.getProviders("14:30");
@@ -297,11 +316,13 @@ export const cronNotifications = {
             );
         }
 
+        /** @type {{sent: number, providers: string[], errors: Array<{provider: string, error?: string}>}} */
         const results = { sent: 0, providers: [], errors: [] };
 
         console.log(`📨 Sending to ${providers.length} provider(s)...`);
 
         // Send to all providers in parallel
+        /** @type {Array<Promise<{key: string, success: boolean, error?: string} | null>>} */
         const sendPromises = providers.map(async (provider) => {
             try {
                 if (!provider.validate(provider.settings)) {
@@ -310,7 +331,9 @@ export const cronNotifications = {
                 }
 
                 const result = await provider.service.sendDomainReport(
-                    provider.settings,
+                    /** @type {ProviderSettings & SlackConfig & DiscordConfig & ResendConfig} */ (
+                        provider.settings
+                    ),
                     {
                         available: domains.available,
                         expiring: domains.expiring,
@@ -337,7 +360,7 @@ export const cronNotifications = {
                 return {
                     key: provider.key,
                     success: false,
-                    error: error.message,
+                    error: getErrorMessage(error),
                 };
             }
         });
@@ -367,18 +390,17 @@ export const cronNotifications = {
     /**
      * Retrieves and parses notification provider settings from database
      *
+     * Never throws - database or JSON parsing errors are logged and returned as
+     * {enabled: false, error} so callers can distinguish a failure from a disabled provider.
+     *
      * @param {string} providerKey - Provider key (must exist in PROVIDERS registry)
-     * @returns {Promise<Object>} Provider settings with enabled status
-     * @returns {boolean} returns.enabled - Whether the provider is enabled
-     * @returns {*} returns... - Additional provider-specific settings from database
+     * @returns {Promise<ProviderSettings>} Provider settings with enabled status
      *
      * @example
      * const slackSettings = await cronNotifications.getSettings("slack");
      * if (slackSettings.enabled && slackSettings.webhook_url) {
      *   // Slack is configured and ready
      * }
-     *
-     * @throws {Error} Database or JSON parsing errors are logged and return {enabled: false}
      */
     async getSettings(providerKey) {
         try {
@@ -394,7 +416,7 @@ export const cronNotifications = {
             return { enabled: settings.enabled === 1, ...parsed };
         } catch (error) {
             console.error(`❌ Error getting ${providerKey} settings:`, error);
-            return { enabled: false };
+            return { enabled: false, error: getErrorMessage(error) };
         }
     },
 };

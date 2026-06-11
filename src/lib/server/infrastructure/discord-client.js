@@ -1,9 +1,9 @@
-/** @import { ServiceResult, SlackConfig } from '$lib/types' */
+/** @import { ServiceResult, DiscordConfig } from '$lib/types' */
 
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { isDemo } from "$src/lib/utils/helpers";
-import { SLACK_CONNECTION_STATUS } from "$lib/constants/constants";
+import { DISCORD_CONNECTION_STATUS } from "$lib/constants/constants";
 import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
@@ -11,19 +11,19 @@ import { validateDemoMode } from "$src/lib/server/utils/access";
 // CORE UTILITIES
 // ========================================
 /**
- * Creates Slack configuration object
+ * Creates Discord configuration object
  * @param {Object} [values={}] - Configuration values
- * @param {string} [values.webhookUrl] - Slack webhook URL
+ * @param {string} [values.webhookUrl] - Discord webhook URL
  * @param {string} [values.notificationTime] - Notification time (HH:mm)
  * @param {string} [values.connectionStatus] - Connection test status
  * @param {string|null} [values.verifiedAt] - When the connection was verified
  * @param {number} [values.version] - Config schema version
- * @returns {SlackConfig} Slack configuration object
+ * @returns {DiscordConfig} Discord configuration object
  */
-const createSlackConfiguration = ({
+const createDiscordConfiguration = ({
     webhookUrl = "",
     notificationTime = "",
-    connectionStatus = SLACK_CONNECTION_STATUS.SETUP_REQUIRED,
+    connectionStatus = DISCORD_CONNECTION_STATUS.SETUP_REQUIRED,
     verifiedAt = null,
     version = 1,
 } = {}) => ({
@@ -35,48 +35,37 @@ const createSlackConfiguration = ({
 });
 
 // ========================================
-// SLACK WEBHOOK TESTING
+// DISCORD WEBHOOK TESTING
 // ========================================
 
 /**
- * Tests Slack webhook by sending a test message
+ * Tests Discord webhook by sending a test message
  * @async
- * @function testSlackWebhook
- * @param {string} webhook - Slack webhook URL
+ * @function testDiscordWebhook
+ * @param {string} webhook - Discord webhook URL
  * @param {string} notificationTime - Notification time in HH:MM format
  * @returns {Promise<ServiceResult>} Success object or error object
  * @example
- * const result = await testSlackWebhook(
- *   "https://hooks.slack.com/services/...",
+ * const result = await testDiscordWebhook(
+ *   "https://discord.com/api/webhooks/...",
  *   "14:33"
  * );
  */
-export async function testSlackWebhook(webhook, notificationTime) {
+export async function testDiscordWebhook(webhook, notificationTime) {
     try {
         // Create test message
         const testMessage = {
-            text: "🚀 Domain Watcher - Configuration Verified",
-            blocks: [
+            content: "🚀 Domain Watcher - Configuration Verified",
+            embeds: [
                 {
-                    type: "section",
-                    text: {
-                        type: "mrkdwn",
-                        text: `*Domain Watcher Test ✨*\n\nYour notifications just passed the vibe check!\nThis notification was sent at ${new Date().toLocaleString()}\n\n*Scheduled notification time:* ${notificationTime}`,
-                    },
-                },
-                {
-                    type: "context",
-                    elements: [
-                        {
-                            type: "mrkdwn",
-                            text: "If you received this message, your webhook is working correctly! 🎉",
-                        },
-                    ],
+                    title: "Domain Watcher Test ✨",
+                    description: `Your notifications just passed the vibe check!\n\n**Scheduled notification time:** ${notificationTime}\n\nIf you received this message, your webhook is working correctly! 🎉`,
+                    color: 0x2ba805,
                 },
             ],
         };
 
-        // Send test message to Slack
+        // Send test message to Discord
         const response = await fetch(webhook, {
             method: "POST",
             headers: {
@@ -86,25 +75,25 @@ export async function testSlackWebhook(webhook, notificationTime) {
         });
 
         if (response.ok) {
-            console.log("✅ Slack webhook test successful");
+            console.log("✅ Discord webhook test successful");
             return {
                 status: 200,
-                message: `Test message sent successfully to Slack!`,
+                message: `Test message sent successfully to Discord!`,
             };
         } else {
             const errorText = await response.text();
             console.error(
-                "❌ Slack webhook test failed:",
+                "❌ Discord webhook test failed:",
                 response.status,
                 errorText
             );
             return {
                 status: response.status,
-                message: `Slack API error: ${errorText}`,
+                message: `Discord API error: ${errorText}`,
             };
         }
     } catch (error) {
-        console.error("❌ Failed to test Slack webhook:", error);
+        console.error("❌ Failed to test Discord webhook:", error);
         return {
             status: 500,
             message: `Failed to test webhook: ${getErrorMessage(error)}`,
@@ -113,57 +102,60 @@ export async function testSlackWebhook(webhook, notificationTime) {
 }
 
 // ========================================
-// SLACK SETTINGS MANAGEMENT
+// DISCORD SETTINGS MANAGEMENT
 // ========================================
 
 /**
- * Slack integration management operations
- * @namespace slack
+ * Discord integration management operations
+ * @namespace discord
  */
-export const slack = {
+export const discord = {
     /**
-     * Gets Slack notification enabled status
+     * Gets Discord notification enabled status
      * @async
-     * @memberof slack
+     * @memberof discord
      * @returns {Promise<boolean>} True if enabled, false otherwise
      *
      * @example
-     * const enabled = await slack.getNotificationStatus();
+     * const enabled = await discord.getNotificationStatus();
      * // Returns: true or false
      */
     async getNotificationStatus() {
         try {
             const queryResult = await executeSql(
-                SETTINGS_QUERIES.SELECT_SLACK_SETTINGS
+                SETTINGS_QUERIES.SELECT_DISCORD_SETTINGS
             );
             return queryResult?.results?.[0]?.enabled === 1;
         } catch (error) {
-            console.error("❌ Failed to get Slack notification status:", error);
+            console.error(
+                "❌ Failed to get Discord notification status:",
+                error
+            );
             return false;
         }
     },
 
     /**
-     * Gets Slack webhook configuration with demo mode masking
+     * Gets Discord webhook configuration with demo mode masking
      * @async
-     * @memberof slack
-     * @returns {Promise<SlackConfig|null>} Webhook settings (masked in demo mode) or null
+     * @memberof discord
+     * @returns {Promise<DiscordConfig|null>} Webhook settings (masked in demo mode) or null
      *
      * @example
-     * const getWebhookConfig = await slack.getWebhookConfig();
-     * // Demo mode: { webhook_url: "https://hooks.slack.com/services/***", ... }
-     * // Normal: { webhook_url: "https://hooks.slack.com/services/T05Q3ABS0JC/...", ... }
+     * const config = await discord.getWebhookConfig();
+     * // Demo mode: { webhook_url: "https://discord.com/api/webhooks/***", ... }
+     * // Normal: { webhook_url: "https://discord.com/api/webhooks/1234/...", ... }
      */
     async getWebhookConfig() {
         try {
             const queryResult = await executeSql(
-                SETTINGS_QUERIES.SELECT_SLACK_SETTINGS
+                SETTINGS_QUERIES.SELECT_DISCORD_SETTINGS
             );
-            const slackSettings = queryResult?.results?.[0];
+            const discordSettings = queryResult?.results?.[0];
 
-            const config = slackSettings?.json_config_data
-                ? /** @type {SlackConfig|null} */ (
-                      JSON.parse(slackSettings.json_config_data || "{}")
+            const config = discordSettings?.json_config_data
+                ? /** @type {DiscordConfig|null} */ (
+                      JSON.parse(discordSettings.json_config_data || "{}")
                   )
                 : null;
 
@@ -171,13 +163,13 @@ export const slack = {
 
             // Apply demo mode masking directly in service
             if (isDemo() && config.webhook_url) {
-                config.webhook_url = maskApiKey(config.webhook_url, 30);
+                config.webhook_url = maskApiKey(config.webhook_url, 35);
             }
 
             return config;
         } catch (error) {
             console.error(
-                "❌ Failed to get Slack webhook configuration:",
+                "❌ Failed to get Discord webhook configuration:",
                 error
             );
             return null;
@@ -185,15 +177,15 @@ export const slack = {
     },
 
     /**
-     * Sets Slack notification enabled status
+     * Sets Discord notification enabled status
      * @async
-     * @memberof slack
+     * @memberof discord
      * @param {boolean} isEnabled - Whether notifications should be enabled
      * @returns {Promise<ServiceResult>} Operation result
      *
      * @example
-     * const result = await slack.saveNotificationStatus(true);
-     * // Returns: { status: 200, message: "Slack notifications enabled" }
+     * const result = await discord.saveNotificationStatus(true);
+     * // Returns: { status: 200, message: "Discord notifications enabled" }
      */
     async saveNotificationStatus(isEnabled) {
         try {
@@ -203,29 +195,32 @@ export const slack = {
             const enabledValue = isEnabled ? 1 : 0;
 
             const updateResult = await executeSql(
-                SETTINGS_QUERIES.UPDATE_SLACK_ENABLED_ONLY,
+                SETTINGS_QUERIES.UPDATE_DISCORD_ENABLED_ONLY,
                 [enabledValue]
             );
 
             if ((updateResult?.meta?.changes ?? 0) > 0) {
                 const statusMessage = isEnabled
-                    ? "Slack notifications are now live and kicking! 🚀"
-                    : "Slack notifications chilled out - no more pings 😴";
+                    ? "Discord notifications are now live and kicking! 🚀"
+                    : "Discord notifications chilled out - no more pings 😴";
                 return { status: 200, message: statusMessage };
             }
 
-            const defaultSlackConfiguration = createSlackConfiguration();
-            await executeSql(SETTINGS_QUERIES.UPSERT_SLACK_SETTINGS, [
-                JSON.stringify(defaultSlackConfiguration),
+            const defaultDiscordConfiguration = createDiscordConfiguration();
+            await executeSql(SETTINGS_QUERIES.UPSERT_DISCORD_SETTINGS, [
+                JSON.stringify(defaultDiscordConfiguration),
                 enabledValue,
             ]);
 
             return {
                 status: 201,
-                message: `Slack notifications enabled! 🎉 (Psst - don't forget to set your webhook in Settings)`,
+                message: `Discord notifications enabled! 🎉 (Psst - don't forget to set your webhook in Settings)`,
             };
         } catch (error) {
-            console.error("❌ Failed to set Slack notification status:", error);
+            console.error(
+                "❌ Failed to set Discord notification status:",
+                error
+            );
             return {
                 status: 500,
                 message: `Houston, we have a problem: ${getErrorMessage(error)}`,
@@ -234,10 +229,10 @@ export const slack = {
     },
 
     /**
-     * Saves and tests Slack webhook configuration
+     * Saves and tests Discord webhook configuration
      * @async
-     * @memberof slack
-     * @param {string} webhookUrl - Slack webhook URL
+     * @memberof discord
+     * @param {string} webhookUrl - Discord webhook URL
      * @param {string} notificationTime - Notification time in HH:MM format
      * @param {Object} [options={}] - Configuration options
      * @param {boolean} [options.shouldTestConnection=true] - Whether to test the webhook
@@ -245,18 +240,12 @@ export const slack = {
      *
      * @example
      * // Test connection (default behavior)
-     * const result = await slack.saveWebhook("https://hooks.slack.com/...", "14:30");
+     * const result = await discord.saveWebhook("https://discord.com/api/webhooks/...", "14:30");
      *
      * @example
      * // Save without testing
-     * const result = await slack.saveWebhook("https://hooks.slack.com/...", "14:30", {
+     * const result = await discord.saveWebhook("https://discord.com/api/webhooks/...", "14:30", {
      *   shouldTestConnection: false
-     * });
-     *
-     * @example
-     * // Explicit test (same as default)
-     * const result = await slack.saveWebhook("https://hooks.slack.com/...", "14:30", {
-     *   shouldTestConnection: true
      * });
      */
     async saveWebhook(webhookUrl, notificationTime, options = {}) {
@@ -266,45 +255,45 @@ export const slack = {
             const demoAccessError = validateDemoMode();
             if (demoAccessError) return demoAccessError;
 
-            const initialSlackConfiguration = createSlackConfiguration({
+            const initialDiscordConfiguration = createDiscordConfiguration({
                 webhookUrl,
                 notificationTime,
-                connectionStatus: SLACK_CONNECTION_STATUS.READY,
+                connectionStatus: DISCORD_CONNECTION_STATUS.READY,
             });
 
-            await executeSql(SETTINGS_QUERIES.UPDATE_SLACK_VALUE_ONLY, [
-                JSON.stringify(initialSlackConfiguration),
+            await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
+                JSON.stringify(initialDiscordConfiguration),
             ]);
 
             if (!shouldTestConnection) {
                 return {
                     status: 201,
                     message:
-                        "Slack Webhook saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
+                        "Discord Webhook saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
                 };
             }
 
-            const webhookTestResult = await testSlackWebhook(
+            const webhookTestResult = await testDiscordWebhook(
                 webhookUrl,
                 notificationTime
             );
             const isConnectionSuccessful = webhookTestResult.status === 200;
 
-            const finalSlackConfiguration = createSlackConfiguration({
+            const finalDiscordConfiguration = createDiscordConfiguration({
                 webhookUrl,
                 notificationTime,
                 connectionStatus: isConnectionSuccessful
-                    ? SLACK_CONNECTION_STATUS.CONNECTED
-                    : SLACK_CONNECTION_STATUS.DISCONNECTED,
+                    ? DISCORD_CONNECTION_STATUS.CONNECTED
+                    : DISCORD_CONNECTION_STATUS.DISCONNECTED,
                 verifiedAt: new Date().toISOString(),
             });
 
-            await executeSql(SETTINGS_QUERIES.UPDATE_SLACK_VALUE_ONLY, [
-                JSON.stringify(finalSlackConfiguration),
+            await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
+                JSON.stringify(finalDiscordConfiguration),
             ]);
 
             const responseMessage = isConnectionSuccessful
-                ? `Test message sent! Slack is ready to ping you at ${notificationTime} ⏰`
+                ? `Test message sent! Discord is ready to ping you at ${notificationTime} ⏰`
                 : `Connection test stumbled: ${webhookTestResult.message} 🔧`;
 
             return {
@@ -313,7 +302,7 @@ export const slack = {
             };
         } catch (error) {
             console.error(
-                "❌ Failed to save Slack webhook configuration:",
+                "❌ Failed to save Discord webhook configuration:",
                 error
             );
             return {

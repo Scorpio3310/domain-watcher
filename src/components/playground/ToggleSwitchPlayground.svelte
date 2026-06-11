@@ -2,7 +2,9 @@
     import ToggleSwitch from "$components/ToggleSwitch.svelte";
 
     // All possible prop combinations
+    /** @type {('lg'|'md'|'sm')[]} */
     const sizes = ["lg", "md", "sm"];
+    /** @type {('primary'|'secondary'|'success')[]} */
     const variants = ["primary", "secondary"];
     const icons = [
         { checked: "iconoir:check", unchecked: "" },
@@ -19,7 +21,21 @@
         { type: "both-icons", label: "Both Icons" },
     ];
 
+    /**
+     * Single toggle switch prop combination used for rendering test cases
+     * @typedef {Object} ToggleCombo
+     * @property {('lg'|'md'|'sm')} size - Switch size
+     * @property {('primary'|'secondary'|'success')} variant - Switch variant
+     * @property {string} checkedIcon - Icon when checked (empty for none)
+     * @property {string} uncheckedIcon - Icon when unchecked (empty for none)
+     * @property {boolean} checked - Initial checked state
+     * @property {string} description - Human-readable combination description
+     * @property {string} label - Display label
+     * @property {string} uniqueId - Unique toggle identifier
+     */
+
     // Generate combinations organized by size and type
+    /** @type {Record<string, Record<string, ToggleCombo[]>>} */
     let combinationsBySizeAndType = {};
     let globalIndex = 0; // Globalni števec za unikatne ID-je
 
@@ -78,6 +94,11 @@
     }
 
     // Split into groups for better layout
+    /**
+     * @param {ToggleCombo[]} array - Items to split
+     * @param {number} size - Chunk size
+     * @returns {ToggleCombo[][]} Chunked groups
+     */
     function chunkArray(array, size) {
         const chunks = [];
         for (let i = 0; i < array.length; i += size) {
@@ -86,6 +107,10 @@
         return chunks;
     }
 
+    /**
+     * @param {string} description - Combination description to log
+     * @param {boolean} newValue - New toggle state
+     */
     function handleToggleChange(description, newValue) {
         console.log(`Toggle changed: ${description} -> ${newValue}`);
     }
@@ -101,14 +126,23 @@
     let secondaryToggle = $state(false);
 
     // Objekt za shranjevanje state-ov vseh playground toggle-ov
+    /** @type {Record<string, boolean>} */
     let toggleStates = $state({});
 
     // Funkcija za posodabljanje state-a
+    /**
+     * @param {string} uniqueId - Unique toggle identifier
+     * @param {boolean} newValue - New toggle state
+     */
     function updateToggleState(uniqueId, newValue) {
         toggleStates[uniqueId] = newValue;
     }
 
     // Funkcija za pridobivanje trenutnega state-a
+    /**
+     * @param {string} uniqueId - Unique toggle identifier
+     * @returns {boolean} Current toggle state
+     */
     function getToggleState(uniqueId) {
         return toggleStates[uniqueId] ?? false;
     }

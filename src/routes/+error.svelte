@@ -18,6 +18,7 @@
      */
     const errorConfig = $derived(
         (() => {
+            /** @type {Record<number, {icon: string, title: string, description: string}>} */
             const configs = {
                 404: {
                     icon: "iconoir:question-mark-circle",

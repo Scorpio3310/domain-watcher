@@ -8,6 +8,9 @@
     // Cloudflare Workers runtime API version
     "compatibility_date": "2025-08-03",
 
+    // Node.js AsyncLocalStorage support - required by SvelteKit remote functions (async server features)
+    "compatibility_flags": ["nodejs_als"],
+
     // Configuration for serving static files (CSS, JS, images)
     "assets": {
         "binding": "ASSETS", // Binding name for code access

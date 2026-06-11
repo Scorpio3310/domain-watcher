@@ -16,6 +16,11 @@ const config = {
             remoteFunctions: true,
         },
     },
+    compilerOptions: {
+        experimental: {
+            async: true,
+        },
+    },
     vitePlugin: {
         inspector: {
             showToggleButton: "always",

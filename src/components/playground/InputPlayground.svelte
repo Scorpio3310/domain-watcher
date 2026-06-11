@@ -51,8 +51,29 @@
         ],
     };
 
+    /**
+     * Base input props configuration for a test case
+     * @typedef {Object} InputConfig
+     * @property {string} type - Input type attribute
+     * @property {string} variant - Input variant (default, error, success)
+     * @property {boolean} disabled - Disabled state
+     * @property {boolean} required - Required state
+     * @property {string} [label] - Label text
+     * @property {string} [placeholder] - Placeholder text
+     * @property {string} [tooltip] - Tooltip text
+     * @property {string} [tooltipIcon] - Tooltip icon name
+     * @property {string} [helperText] - Helper text below the input
+     */
+
+    /**
+     * Full test combination with identity and description
+     * @typedef {InputConfig & {uniqueId: string, description: string}} InputCombo
+     */
+
     // Generate combinations organized by type and variant
+    /** @type {Record<string, Record<string, InputCombo[]>>} */
     let combinationsByTypeAndVariant = {};
+    /** @type {Record<string, string>} */
     let inputValues = {}; // Store values for each input
 
     for (let inputType of inputTypes) {
@@ -81,6 +102,12 @@
         }
     }
 
+    /**
+     * @param {string} inputTypeKey - Input test type key (basic, with-label, ...)
+     * @param {string} variant - Input variant
+     * @param {string} type - Input type attribute
+     * @returns {InputConfig} Generated input configuration
+     */
     function generateInputConfig(inputTypeKey, variant, type) {
         const baseConfig = {
             type,
@@ -145,6 +172,10 @@
         }
     }
 
+    /**
+     * @param {InputConfig} config - Input configuration to describe
+     * @returns {string} Additional props description suffix
+     */
     function getAdditionalPropsDescription(config) {
         const props = [];
         if (config.label) props.push(`label="${config.label}"`);
@@ -155,6 +186,11 @@
     }
 
     // Split into groups of 3 for better layout
+    /**
+     * @param {InputCombo[]} array - Items to split
+     * @param {number} size - Chunk size
+     * @returns {InputCombo[][]} Chunked groups
+     */
     function chunkArray(array, size) {
         const chunks = [];
         for (let i = 0; i < array.length; i += size) {
@@ -163,9 +199,13 @@
         return chunks;
     }
 
+    /**
+     * @param {string} uniqueId - Unique input identifier
+     * @param {Event & { currentTarget: EventTarget & HTMLInputElement }} event - Input event
+     */
     function handleInput(uniqueId, event) {
-        inputValues[uniqueId] = event.target.value;
-        console.log(`Input ${uniqueId} changed:`, event.target.value);
+        inputValues[uniqueId] = event.currentTarget.value;
+        console.log(`Input ${uniqueId} changed:`, event.currentTarget.value);
     }
 
     function resetAllValues() {

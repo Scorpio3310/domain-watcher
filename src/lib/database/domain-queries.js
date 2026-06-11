@@ -171,15 +171,23 @@ export const DOMAIN_QUERIES = {
     /**
      * Finds domains requiring basic verification checks
      * @type {string}
-     * @description Returns domains that need status verification
-     * @returns {Array<Object>} Domains with: no expiry, expired, or unchecked status
+     * @description Returns domains that need status verification: no expiry,
+     * expired, or a non-registered status. Status values must match
+     * DOMAIN_STATUS in $lib/constants/constants.js and the status set used by
+     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below.
+     * Registered domains with NULL expires (TLDs without public expiry data,
+     * e.g. .de/.ch via RDAP) sort last so they don't crowd out the per-run
+     * check limit for domains that actually need attention.
+     * @returns {Array<Object>} Domains with: no expiry, expired, or non-registered status
      */
     SELECT_DOMAINS_NEEDING_CHECK: `
         SELECT *
-        FROM domains 
-        WHERE expires IS NULL 
+        FROM domains
+        WHERE expires IS NULL
            OR expires <= datetime('now')
-           OR status = 0
+           OR status IN ('not_checked', 'available', 'error')
+        ORDER BY CASE WHEN status = 'registered' AND expires IS NULL THEN 1 ELSE 0 END ASC,
+                 last_domain_checked ASC
     `,
 
     /**
@@ -193,6 +201,9 @@ export const DOMAIN_QUERIES = {
      * // - is_expired_registered: 1/0 (registered but expired)
      * // - needs_verification: 1/0 (available/error/unchecked)
      * // - is_expiring_soon: 1/0 (expires within 30 days)
+     *
+     * NOTE: the '+30 days' window below must stay in sync with
+     * EXPIRY_WARNING_DAYS in $lib/constants/constants.js
      */
     SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION: `
         SELECT 

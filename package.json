@@ -1,7 +1,7 @@
 {
     "name": "domain-watcher",
     "private": true,
-    "version": "1.0.",
+    "version": "1.1.0",
     "type": "module",
     "description": "Domain availability watcher built with SvelteKit",
     "author": {
@@ -33,19 +33,19 @@
         "check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch"
     },
     "devDependencies": {
-        "@iconify/svelte": "^5.0.1",
-        "@sveltejs/adapter-cloudflare": "^7.1.2",
-        "@sveltejs/kit": "^2.27.1",
-        "@sveltejs/vite-plugin-svelte": "^6.1.0",
-        "@tailwindcss/vite": "^4.1.11",
-        "svelte": "^5.37.3",
-        "svelte-check": "^4.3.1",
-        "sveltekit-superforms": "^2.27.1",
-        "tailwindcss": "^4.1.11",
-        "typescript": "^5.9.2",
-        "vite": "^7.0.6",
-        "wrangler": "^4.28.0",
-        "zod": "^4.0.15"
+        "@iconify/svelte": "^5.2.1",
+        "@sveltejs/adapter-cloudflare": "^7.2.8",
+        "@sveltejs/kit": "^2.64.0",
+        "@sveltejs/vite-plugin-svelte": "^7.1.2",
+        "@tailwindcss/vite": "^4.3.0",
+        "@types/node": "^25.9.2",
+        "svelte": "^5.56.3",
+        "svelte-check": "^4.6.0",
+        "tailwindcss": "^4.3.0",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.16",
+        "wrangler": "^4.99.0",
+        "zod": "^4.4.3"
     },
     "pnpm": {
         "onlyBuiltDependencies": [
@@ -53,9 +53,9 @@
         ]
     },
     "dependencies": {
-        "@fontsource/figtree": "^5.2.8",
+        "@fontsource/figtree": "^5.2.10",
         "@whoisjson/whoisjson": "^1.0.4",
-        "date-fns": "^4.1.0",
-        "resend": "^4.7.0"
+        "date-fns": "^4.4.0",
+        "resend": "^6.12.4"
     }
 }

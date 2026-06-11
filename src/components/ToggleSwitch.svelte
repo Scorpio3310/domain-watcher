@@ -12,9 +12,10 @@
      * @property {string} [ariaLabel] - Accessibility label
      * @property {string} [checkedIcon=""] - Icon when checked (empty for no icon)
      * @property {string} [uncheckedIcon=""] - Icon when unchecked (empty for no icon)
-     * @property {Function} [onchange] - Change handler
+     * @property {(checked: boolean) => void} [onchange] - Change handler
      */
 
+    /** @type {Props & Record<string, any>} */
     let {
         name = undefined,
         id,
@@ -58,11 +59,16 @@
             .join(" ")
     );
 
-    // Handle change
+    // Handle change - keep the bindable prop in sync (visual state always
+    // follows the prop, so external updates like remote-form field reverts win).
+    // No `disabled` guard: a natively disabled checkbox never fires change, so
+    // this only runs for real interactions or tampered DOM - in the latter case
+    // the submission proceeds and the server answers (e.g. demo-mode 403 toast,
+    // after which the parent's revert callback snaps the switch back).
+    /** @param {Event & { currentTarget: EventTarget & HTMLInputElement }} event */
     function handleChange(event) {
-        if (!disabled) {
-            onchange?.(event.target.checked);
-        }
+        checked = event.currentTarget.checked;
+        onchange?.(event.currentTarget.checked);
     }
 </script>
 
@@ -72,7 +78,7 @@
         type="checkbox"
         {name}
         {id}
-        bind:checked
+        {checked}
         {disabled}
         class="toggle-switch__input sr-only"
         aria-label={ariaLabel}

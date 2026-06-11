@@ -399,11 +399,13 @@ header {
 
 /* Position variants */
 .tooltip--top {
-    @apply bottom-full mb-1;
+    @apply bottom-full;
+    margin-bottom: var(--tooltip-offset, 0.25rem);
 }
 
 .tooltip--bottom {
-    @apply top-full mt-1;
+    @apply top-full;
+    margin-top: var(--tooltip-offset, 0.25rem);
 }
 
 /* Responsive text wrapping for longer content */
