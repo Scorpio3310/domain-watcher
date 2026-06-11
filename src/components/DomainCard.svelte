@@ -3,7 +3,10 @@
     import Icon from "@iconify/svelte";
     import { slide, fly } from "svelte/transition";
     import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
-    import { DOMAIN_STATUS } from "$src/lib/constants/constants";
+    import {
+        DOMAIN_STATUS,
+        DOMAIN_PROVIDER,
+    } from "$src/lib/constants/constants";
     import { isDemo } from "$src/lib/utils/helpers";
     import Tooltip from "$components/Tooltip.svelte";
     import { toast } from "$src/lib/stores/toast.svelte.js";
@@ -16,8 +19,14 @@
     import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
 
     //// PROPS ////
-    /** @type {{data: import('$lib/types').DomainRecord, uiView?: string}} */
-    let { data, uiView } = $props();
+    /** @type {{data: import('$lib/types').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */
+    let {
+        data,
+        uiView,
+        isApiConfigured = false,
+        lookupProvider = null,
+        whoisjsonFallback = true,
+    } = $props();
 
     //// FORM INSTANCES (isolated per domain) ////
     const nsForm = $derived(ns.for(data?.id));
@@ -62,6 +71,35 @@
     const buttonIconClass = $derived(
         `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`,
     );
+
+    //// PROVIDER TRANSPARENCY ////
+    const tld = $derived(data?.domain_name?.split(".").pop() ?? "");
+    // willCheckVia === "none" means the next check would just error
+    const scanBlocked = $derived(data?.willCheckVia === "none");
+    const scanTooltip = $derived.by(() => {
+        switch (data?.willCheckVia) {
+            case DOMAIN_PROVIDER.RDAP:
+                return "Will check via RDAP";
+            case DOMAIN_PROVIDER.WHOIS_JSON:
+                return lookupProvider === DOMAIN_PROVIDER.RDAP
+                    ? `Will check via WhoisJSON (.${tld} has no RDAP)`
+                    : "Will check via WhoisJSON";
+            case "none":
+                if (lookupProvider === DOMAIN_PROVIDER.WHOIS_JSON) {
+                    return "WhoisJSON is selected but no API key is configured — add one in Settings";
+                }
+                // Mirror the server's branch order: fallback state first,
+                // then the key requirement
+                if (!whoisjsonFallback) {
+                    return `.${tld} has no RDAP server and WhoisJSON fallback is disabled — enable it in Settings${
+                        isApiConfigured ? "" : " and add a WhoisJSON API key"
+                    }`;
+                }
+                return `.${tld} has no RDAP server — add a WhoisJSON API key in Settings`;
+            default:
+                return ""; // unknown (bootstrap outage) — plain button, no tooltip
+        }
+    });
 </script>
 
 <div class="card card--domain">
@@ -77,6 +115,7 @@
                 <Tooltip
                     text="Domains added to watchlist aren't auto-checked. Click 'Check Domains' for batch verification or use 'Scan Now' for individual verification."
                     position="bottom"
+                    offset={8}
                 >
                     <div
                         class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
@@ -266,6 +305,13 @@
     </p>
     <hr />
     <p class="inline">
+        <span class="opacity-50">Checked via:</span>
+        <!-- On error the stored source describes the last SUCCESSFUL check,
+             which would misattribute the just-failed attempt -->
+        {data?.status === DOMAIN_STATUS.ERROR ? "/" : data?.source || "/"}
+    </p>
+    <hr />
+    <p class="inline">
         <span class="opacity-50">Added At:</span>
         {formatHumanDate(data?.created_at ?? null) || "/"}
     </p>
@@ -334,20 +380,27 @@
                 })}
             >
                 <input {...nsForm.fields.domainId.as("hidden", data?.id)} />
-                <Button
-                    type="submit"
-                    text="NS Lookup"
-                    size="sm"
-                    color="white"
-                    ariaLabel="NS Lookup - Check"
-                    icon={isDemo()
-                        ? "iconoir:dns"
-                        : nsForm.pending
-                          ? "iconoir:refresh-double"
-                          : "iconoir:dns"}
-                    iconClass={nsForm.pending ? "animate-spin" : ""}
-                    disabled={isDemo() || !!nsForm.pending}
-                />
+                <Tooltip
+                    text="Via Cloudflare DNS — free, no API key"
+                    position="top"
+                    offset={8}
+                    hoverOpacity={false}
+                >
+                    <Button
+                        type="submit"
+                        text="NS Lookup"
+                        size="sm"
+                        color="white"
+                        ariaLabel="NS Lookup - Check"
+                        icon={isDemo()
+                            ? "iconoir:dns"
+                            : nsForm.pending
+                              ? "iconoir:refresh-double"
+                              : "iconoir:dns"}
+                        iconClass={nsForm.pending ? "animate-spin" : ""}
+                        disabled={isDemo() || !!nsForm.pending}
+                    />
+                </Tooltip>
             </form>
             <form
                 {...sslForm.enhance(async ({ submit }) => {
@@ -373,20 +426,45 @@
             >
                 <input {...sslForm.fields.domainId.as("hidden", data?.id)} />
 
-                <Button
-                    type="submit"
-                    text="SSL Lookup"
-                    size="sm"
-                    color="white"
-                    ariaLabel="SSL Lookup - Check"
-                    icon={isDemo()
-                        ? "iconoir:security-pass"
-                        : sslForm.pending
-                          ? "iconoir:refresh-double"
-                          : "iconoir:security-pass"}
-                    iconClass={sslForm.pending ? "animate-spin" : ""}
-                    disabled={isDemo() || !!sslForm.pending}
-                />
+                {#if !isApiConfigured && !isDemo()}
+                    <Tooltip
+                        text="SSL checks run via WhoisJSON — add an API key in Settings"
+                        position="top"
+                        offset={8}
+                    >
+                        <Button
+                            type="submit"
+                            text="SSL Lookup"
+                            size="sm"
+                            color="white"
+                            ariaLabel="SSL Lookup - Check"
+                            icon="iconoir:security-pass"
+                            disabled={true}
+                        />
+                    </Tooltip>
+                {:else}
+                    <Tooltip
+                        text="via WhoisJSON API"
+                        position="top"
+                        offset={8}
+                        hoverOpacity={false}
+                    >
+                        <Button
+                            type="submit"
+                            text="SSL Lookup"
+                            size="sm"
+                            color="white"
+                            ariaLabel="SSL Lookup - Check"
+                            icon={isDemo()
+                                ? "iconoir:security-pass"
+                                : sslForm.pending
+                                  ? "iconoir:refresh-double"
+                                  : "iconoir:security-pass"}
+                            iconClass={sslForm.pending ? "animate-spin" : ""}
+                            disabled={isDemo() || !!sslForm.pending}
+                        />
+                    </Tooltip>
+                {/if}
             </form>
 
             <form
@@ -413,20 +491,46 @@
             >
                 <input {...checkForm.fields.domainId.as("hidden", data?.id)} />
 
-                <Button
-                    type="submit"
-                    text="Scan Now"
-                    size="sm"
-                    color="white"
-                    ariaLabel="Scan domain for latest status and details"
-                    icon={isDemo()
-                        ? "iconoir:search"
-                        : checkForm.pending
-                          ? "iconoir:refresh-double"
-                          : "iconoir:search"}
-                    iconClass={checkForm.pending ? "animate-spin" : ""}
-                    disabled={isDemo() || !!checkForm.pending}
-                />
+                {#if scanTooltip}
+                    <Tooltip
+                        text={scanTooltip}
+                        position="top"
+                        offset={8}
+                        hoverOpacity={false}
+                    >
+                        <Button
+                            type="submit"
+                            text="Scan Now"
+                            size="sm"
+                            color="white"
+                            ariaLabel="Scan domain for latest status and details"
+                            icon={isDemo()
+                                ? "iconoir:search"
+                                : checkForm.pending
+                                  ? "iconoir:refresh-double"
+                                  : "iconoir:search"}
+                            iconClass={checkForm.pending ? "animate-spin" : ""}
+                            disabled={isDemo() ||
+                                !!checkForm.pending ||
+                                scanBlocked}
+                        />
+                    </Tooltip>
+                {:else}
+                    <Button
+                        type="submit"
+                        text="Scan Now"
+                        size="sm"
+                        color="white"
+                        ariaLabel="Scan domain for latest status and details"
+                        icon={isDemo()
+                            ? "iconoir:search"
+                            : checkForm.pending
+                              ? "iconoir:refresh-double"
+                              : "iconoir:search"}
+                        iconClass={checkForm.pending ? "animate-spin" : ""}
+                        disabled={isDemo() || !!checkForm.pending}
+                    />
+                {/if}
             </form>
         </div>
     </div>
@@ -473,8 +577,13 @@
         <div class="text-blue">Not Checked</div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.ERROR}
-        <div class="text-orange-500">
-            Unable to Verify — <i>{data?.error_message}</i>
+        <div class="text-orange-500 flex items-center gap-1">
+            Unable to Verify
+            {#if data?.error_message}
+                <Tooltip text={data.error_message} position="bottom" offset={8}>
+                    <Icon icon="iconoir:info-circle" />
+                </Tooltip>
+            {/if}
         </div>
     {/if}
 {/snippet}

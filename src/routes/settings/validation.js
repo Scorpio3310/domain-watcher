@@ -17,6 +17,15 @@ export const whoIsApiKeySchema = z.object({
         .max(253, "API key too long"),
 });
 
+export const domainProviderSchema = z.object({
+    provider: z
+        .string()
+        .refine((value) => value === "rdap" || value === "whoisjson", {
+            message: "Provider must be 'rdap' or 'whoisjson'",
+        }),
+    whoisjsonFallback: checkboxBoolean(),
+});
+
 export const uiViewSchema = z.object({
     viewMode: z
         .string()
@@ -36,6 +45,25 @@ export const slackWebhookSchema = z.object({
         .refine(
             (url) => url.startsWith("https://hooks.slack.com"),
             "Must be a valid Slack webhook URL"
+        ),
+    notificationTime: z
+        .string()
+        .regex(
+            /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/,
+            "Time must be in HH:MM format (e.g., 14:30)"
+        ),
+    sendTestMessage: checkboxBoolean(),
+});
+
+export const discordWebhookSchema = z.object({
+    webhook: z
+        .url("Must be a valid URL")
+        .max(253, "Discord Webhook too long")
+        .refine(
+            (url) =>
+                url.startsWith("https://discord.com/api/webhooks") ||
+                url.startsWith("https://discordapp.com/api/webhooks"),
+            "Must be a valid Discord webhook URL"
         ),
     notificationTime: z
         .string()

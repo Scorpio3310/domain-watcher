@@ -15,6 +15,23 @@ import { domainVerification } from "$src/lib/server/services/domain.js";
 /** Maximum number of individual error messages shown in the toast */
 const MAX_SHOWN_ERRORS = 3;
 
+/**
+ * Formats the per-provider breakdown for the batch toast
+ * @param {{rdap: number, whoisjson: number}} [sources] - Successful checks per provider
+ * @returns {string} " (18 via RDAP, 2 via WhoisJSON)", " (all via RDAP)" or ""
+ */
+const formatSourceNote = (sources) => {
+    if (!sources) return "";
+    const parts = [];
+    if (sources.rdap > 0) parts.push(`${sources.rdap} via RDAP`);
+    if (sources.whoisjson > 0) parts.push(`${sources.whoisjson} via WhoisJSON`);
+    if (parts.length === 0) return "";
+    if (parts.length === 1) {
+        return ` (all via ${sources.rdap > 0 ? "RDAP" : "WhoisJSON"})`;
+    }
+    return ` (${parts.join(", ")})`;
+};
+
 // ========================================
 // BATCH CHECK REMOTE FUNCTION
 // ========================================
@@ -29,7 +46,7 @@ const MAX_SHOWN_ERRORS = 3;
  * @memberof module:CheckDomainsRemote
  * @returns {Promise<ServiceResult>} Response object with batch verification results
  * (status: 200 success, 204 nothing to check, 207 partial success, 422 mostly failed,
- * 403 demo mode, 400 missing API key, 500 error)
+ * 403 demo mode, 400 lookup provider not usable (WhoisJSON selected without a key), 500 error)
  *
  * @example
  * const response = await batchCheck();
@@ -81,7 +98,9 @@ export const batchCheck = form(async () => {
                     results.checked - results.errors
                 }/${
                     results.checked
-                } domains cooperated, others were stubborn 😅: ${shownErrors}${moreErrors}${truncatedNote}`,
+                } domains cooperated${formatSourceNote(
+                    results.sources
+                )}, others were stubborn 😅: ${shownErrors}${moreErrors}${truncatedNote}`,
                 results: {
                     total: results.checked,
                     successful: results.checked - results.errors,
@@ -92,7 +111,7 @@ export const batchCheck = form(async () => {
         } else {
             return {
                 status: 200,
-                message: `Boom! ${results.checked}/${results.checked} domains checked - 100% success rate! 🎯${truncatedNote}`,
+                message: `Boom! ${results.checked}/${results.checked} domains checked - 100% success rate! 🎯${formatSourceNote(results.sources)}${truncatedNote}`,
             };
         }
     } catch (error) {

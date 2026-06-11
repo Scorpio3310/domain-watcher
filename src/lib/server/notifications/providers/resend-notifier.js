@@ -1,7 +1,13 @@
 import { Resend } from "resend";
 import { PRODUCTION_DOMAIN } from "$env/static/private";
 import { getErrorMessage } from "$lib/utils/helpers.js";
-import { formatDate, getDaysUntilExpiry } from "./date-format.js";
+import {
+    escapeHtml,
+    formatDate,
+    getDaysUntilExpiry,
+    getQuietMessage,
+    getReportTimestamp,
+} from "./shared.js";
 
 /** @import { DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
 
@@ -17,10 +23,15 @@ export const resendNotifier = {
      */
     async sendDomainReport(settings, domainUpdates) {
         try {
-            if (!settings?.api_key || !settings?.to_email) {
+            if (
+                !settings?.api_key ||
+                !settings?.to_email ||
+                !settings?.from_email
+            ) {
                 return {
                     success: false,
-                    message: "Resend API key or recipient email not configured",
+                    message:
+                        "Resend API key, sender or recipient email not configured",
                 };
             }
 
@@ -46,18 +57,21 @@ export const resendNotifier = {
             if (error) {
                 console.error("❌ Resend email failed:", error);
 
-                // Handle specific Resend API errors
-                let errorMessage = error.message || "Unknown error occurred";
-
-                if (error.message?.includes("API key")) {
-                    errorMessage = "Invalid API key";
-                } else if (error.message?.includes("rate limit")) {
-                    errorMessage = "Rate limit exceeded";
-                } else if (error.message?.includes("from")) {
-                    errorMessage = "Invalid 'from' email address";
-                } else if (error.message?.includes("to")) {
-                    errorMessage = "Invalid 'to' email address";
-                }
+                // Map known Resend API error names to friendly messages
+                /** @type {Record<string, string>} */
+                const knownErrors = {
+                    missing_api_key: "Invalid API key",
+                    invalid_api_key: "Invalid API key",
+                    restricted_api_key: "Invalid API key",
+                    rate_limit_exceeded: "Rate limit exceeded",
+                    daily_quota_exceeded: "Daily email quota exceeded",
+                    monthly_quota_exceeded: "Monthly email quota exceeded",
+                    invalid_from_address: "Invalid 'from' email address",
+                };
+                const errorMessage =
+                    knownErrors[error.name] ||
+                    error.message ||
+                    "Unknown error occurred";
 
                 return {
                     success: false,
@@ -122,7 +136,7 @@ export const resendNotifier = {
             expired = [],
             totalCount,
         } = domainUpdates;
-        const timestamp = new Date().toLocaleString();
+        const timestamp = getReportTimestamp();
 
         // Generate HTML version
         const html = this.generateHtmlContent(timestamp, totalCount, {
@@ -181,14 +195,13 @@ export const resendNotifier = {
                     .slice(0, 20)
                     .map((domain) => {
                         const isUrgent = title.includes("Expired");
+                        const domainName = escapeHtml(domain.domain_name);
 
                         if (isUrgent && domain.expires) {
                             const daysExpired = Math.abs(
                                 getDaysUntilExpiry(domain.expires)
                             );
-                            return `<li><strong>${
-                                domain.domain_name
-                            }</strong> - expired ${formatDate(
+                            return `<li><strong>${domainName}</strong> - expired ${formatDate(
                                 domain.expires
                             )} (${daysExpired} days ago)</li>`;
                         }
@@ -197,14 +210,12 @@ export const resendNotifier = {
                             const daysUntilExpiry = getDaysUntilExpiry(
                                 domain.expires
                             );
-                            return `<li><strong>${
-                                domain.domain_name
-                            }</strong> - expires ${formatDate(
+                            return `<li><strong>${domainName}</strong> - expires ${formatDate(
                                 domain.expires
                             )} (${daysUntilExpiry} days)</li>`;
                         }
 
-                        return `<li><strong>${domain.domain_name}</strong></li>`;
+                        return `<li><strong>${domainName}</strong></li>`;
                     })
                     .join("");
 
@@ -234,7 +245,7 @@ export const resendNotifier = {
                 ? `
             <div style="text-align: center; padding: 40px 20px; color: #1A1A1A;">
                 <p style="font-size: 18px; margin: 0 0 8px 0; font-weight: 600;">
-                    ${this.getRandomQuietMessage()}
+                    ${getQuietMessage()}
                 </p>
                 <p style="font-size: 14px; margin: 0; opacity: 0.7; line-height: 1.4;">
                     Your domain portfolio is having a peaceful day - no expired domains, no urgent renewals, just pure digital harmony. 
@@ -353,7 +364,7 @@ ${"=".repeat(50)}
 ${
     totalCount > 0
         ? sectionsText
-        : `${this.getRandomQuietMessage()}
+        : `${getQuietMessage()}
 
 Your domain portfolio is having a peaceful day - no expired domains, no urgent renewals, just pure digital harmony.`
 }
@@ -362,26 +373,5 @@ ${"=".repeat(50)}
 
 This is an automated report from your Domain Watcher system.
         `.trim();
-    },
-
-    /**
-     * Get a random fun message for quiet days
-     * @returns {string} Quiet day message
-     */
-    getRandomQuietMessage() {
-        const messages = [
-            "🧘‍♂️ Zen mode activated - All domains chilling like champions!",
-            "🏖️ Beach vibes only - Your domains are soaking up the sun!",
-            "😴 Sleepy Sunday energy - Even your domains took a nap today!",
-            "🕶️ Cool as a cucumber - Your portfolio is smooth and unbothered!",
-            "🎭 Plot twist: Sometimes no news IS the best news!",
-            "🏆 Achievement unlocked: Zero drama domains! Time for coffee!",
-            "🦄 Unicorn status - Your domains are basically mythical today!",
-            "🎪 The show must NOT go on - Because there's literally nothing dramatic happening!",
-        ];
-
-        // Pick a random message based on the day to keep it fresh
-        const messageIndex = new Date().getDay() % messages.length;
-        return messages[messageIndex];
     },
 };

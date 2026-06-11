@@ -7,15 +7,15 @@
 
 import { executeSql, executeQueryFirst } from "$src/lib/database/db";
 import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import * as whoisService from "$src/lib/server/infrastructure/whois-client";
+import * as domainLookup from "$src/lib/server/services/domain-lookup";
 import { getErrorMessage } from "$src/lib/utils/helpers";
 import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
-import { DOMAIN_STATUS } from "$lib/constants/constants";
+import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "$lib/constants/constants";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
 export { validateDemoMode };
 
-/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult } from "$lib/types" */
+/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult, LookupContext } from "$lib/types" */
 
 // ========================================
 // CONFIGURATION CONSTANTS
@@ -45,13 +45,14 @@ export const CONFIG = {
 
 /**
  * Validates if the user has access to domain verification features.
- * Checks both demo mode restrictions and API key configuration.
+ * Checks demo mode restrictions and that the effective lookup provider is
+ * usable (RDAP needs nothing; WhoisJSON needs a configured API key).
  *
  * @async
  * @function validateAccess
  * @memberof module:DomainUtils
  * @returns {Promise<ValidationError|null>} Error object if access denied, null if access granted
- * @throws {Error} When API key validation fails unexpectedly
+ * @throws {Error} When provider resolution fails unexpectedly
  *
  * @example
  * ```javascript
@@ -66,11 +67,34 @@ export const CONFIG = {
 export const validateAccess = async () => {
     const demoError = validateDemoMode();
     if (demoError) return demoError;
+    const context = await domainLookup.resolveLookupContext();
+    if (context.provider === DOMAIN_PROVIDER.RDAP) return null;
+    if (!context.whoisKeyConfigured)
+        return {
+            status: 400,
+            message:
+                "No API key, no party 🎉 Drop a WhoisJSON key in Settings — or switch the lookup provider to RDAP (free)",
+        };
+    return null;
+};
+
+/**
+ * Validates access to SSL certificate checks, which run via WhoisJSON
+ * regardless of the selected lookup provider.
+ *
+ * @async
+ * @function validateSslAccess
+ * @memberof module:DomainUtils
+ * @returns {Promise<ValidationError|null>} Error object if access denied, null if access granted
+ */
+export const validateSslAccess = async () => {
+    const demoError = validateDemoMode();
+    if (demoError) return demoError;
     if (!(await apiKey.isConfigured()))
         return {
             status: 400,
             message:
-                "No API key, no party 🎉 Drop your API key in Settings first, then we're good to go",
+                "SSL checks run via WhoisJSON — add an API key in Settings first",
         };
     return null;
 };
@@ -150,13 +174,15 @@ export const executeDomainQuery = async (queryKey, params) => {
  */
 export const verificationEngine = {
     /**
-     * Verifies the availability status of a single domain through WHOIS lookup.
+     * Verifies the availability status of a single domain through the
+     * configured lookup provider (RDAP or WhoisJSON).
      * Handles both successful verifications and error cases, updating the database
      * with current domain status and expiration information.
      *
      * @async
      * @memberof module:DomainUtils.verificationEngine
      * @param {DomainRecord} domain - Domain object from database
+     * @param {LookupContext|null} [lookupContext=null] - Pre-resolved provider context (batch path)
      * @returns {Promise<VerificationResult>} Verification result object
      * @throws {Error} Database or network connectivity errors
      *
@@ -179,12 +205,13 @@ export const verificationEngine = {
      * ```
      *
      */
-    async verifyDomain(domain) {
+    async verifyDomain(domain, lookupContext = null) {
         try {
             console.log(`🔍 Checking ${domain.domain_name}...`);
 
-            const result = await whoisService.checkDomainAvailability(
-                domain.domain_name
+            const result = await domainLookup.checkDomainAvailability(
+                domain.domain_name,
+                lookupContext
             );
 
             if (result.status === 200 && result.data) {
@@ -213,6 +240,7 @@ export const verificationEngine = {
                     status: result.data.status,
                     wasAvailable,
                     isStillRegistered,
+                    source: result.data.source,
                 };
             } else {
                 const errorMessage = getErrorMessage(result, "Unknown error");
@@ -299,12 +327,16 @@ export const verificationEngine = {
                 stillRegistered: [],
                 errors: 0,
                 errorMessages: [],
+                sources: { rdap: 0, whoisjson: 0 },
             };
         }
 
         console.log(
             `📊 Verifying ${domains.length} domains (delay: ${delayBetweenDomains}ms, batch: ${batchSize})...`
         );
+
+        // Resolve the provider once per batch instead of per domain
+        const lookupContext = await domainLookup.resolveLookupContext();
 
         /** @type {BatchVerificationResult} */
         const results = {
@@ -313,6 +345,7 @@ export const verificationEngine = {
             stillRegistered: [],
             errors: 0,
             errorMessages: [],
+            sources: { rdap: 0, whoisjson: 0 },
         };
 
         // Process domains in batches
@@ -325,7 +358,7 @@ export const verificationEngine = {
                 console.log(
                     `[${results.checked}/${domains.length}] ${domain.domain_name}...`
                 );
-                return this.verifyDomain(domain);
+                return this.verifyDomain(domain, lookupContext);
             });
 
             const batchResults = await Promise.allSettled(batchPromises);
@@ -336,6 +369,14 @@ export const verificationEngine = {
                     const verifyResult = settledResult.value;
 
                     if (verifyResult.success) {
+                        if (verifyResult.source === DOMAIN_PROVIDER.RDAP) {
+                            results.sources.rdap++;
+                        } else if (
+                            verifyResult.source === DOMAIN_PROVIDER.WHOIS_JSON
+                        ) {
+                            results.sources.whoisjson++;
+                        }
+
                         if (verifyResult.wasAvailable) {
                             const domain = domains.find(
                                 (d) => d.domain_name === verifyResult.domain

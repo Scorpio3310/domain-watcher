@@ -6,7 +6,7 @@
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { getErrorMessage } from "$src/lib/utils/helpers";
-import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
+import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "$lib/constants/constants";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================
@@ -105,6 +105,97 @@ export const ui = {
             };
         } catch (error) {
             console.error("❌ Failed to save UI view mode:", error);
+            return {
+                status: 500,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
+            };
+        }
+    },
+};
+
+// ========================================
+// DOMAIN LOOKUP PROVIDER MANAGEMENT
+// ========================================
+
+/**
+ * Domain lookup provider settings operations
+ * @namespace domainProvider
+ */
+export const domainProvider = {
+    /**
+     * Gets the stored domain lookup provider configuration
+     * @async
+     * @memberof domainProvider
+     * @returns {Promise<{provider: ('rdap'|'whoisjson')|null, whoisjsonFallback: boolean}>}
+     *   Stored provider (null when unset/invalid) and whether RDAP-unsupported
+     *   TLDs may fall back to WhoisJSON (absent on legacy rows = true)
+     *
+     * @example
+     * const { provider, whoisjsonFallback } = await domainProvider.getConfig();
+     * // Returns: { provider: "rdap", whoisjsonFallback: true }
+     */
+    async getConfig() {
+        try {
+            const queryResult = await executeSql(
+                SETTINGS_QUERIES.SELECT_DOMAIN_PROVIDER
+            );
+            const row = queryResult?.results?.[0];
+            const parsedConfig = row?.json_config_data
+                ? parseJsonSafely(row.json_config_data)
+                : {};
+
+            const provider =
+                parsedConfig.provider === DOMAIN_PROVIDER.RDAP ||
+                parsedConfig.provider === DOMAIN_PROVIDER.WHOIS_JSON
+                    ? parsedConfig.provider
+                    : null;
+            return {
+                provider,
+                whoisjsonFallback: parsedConfig.whoisjson_fallback !== false,
+            };
+        } catch (error) {
+            console.error("❌ Failed to get domain provider config:", error);
+            return { provider: null, whoisjsonFallback: true };
+        }
+    },
+
+    /**
+     * Saves the domain lookup provider selection
+     * @async
+     * @memberof domainProvider
+     * @param {string} provider - Provider to use (DOMAIN_PROVIDER.RDAP or DOMAIN_PROVIDER.WHOIS_JSON)
+     * @param {boolean} [whoisjsonFallback=true] - Allow WhoisJSON fallback for TLDs without RDAP
+     * @returns {Promise<Object>} Operation result
+     *
+     * @example
+     * const result = await domainProvider.save(DOMAIN_PROVIDER.RDAP, true);
+     * // Returns: { status: 201, message: '"RDAP" is now your domain lookup provider 🛰️' }
+     */
+    async save(provider, whoisjsonFallback = true) {
+        try {
+            const demoAccessError = validateDemoMode();
+            if (demoAccessError) return demoAccessError;
+
+            await executeSql(SETTINGS_QUERIES.UPSERT_DOMAIN_PROVIDER, [
+                JSON.stringify({
+                    provider,
+                    whoisjson_fallback: whoisjsonFallback,
+                    version: 2,
+                }),
+            ]);
+
+            const providerLabel =
+                provider === DOMAIN_PROVIDER.RDAP ? "RDAP" : "WhoisJSON";
+            const fallbackNote =
+                provider === DOMAIN_PROVIDER.RDAP
+                    ? ` (WhoisJSON fallback ${whoisjsonFallback ? "on" : "off"})`
+                    : "";
+            return {
+                status: 201,
+                message: `"${providerLabel}" is now your domain lookup provider${fallbackNote} 🛰️`,
+            };
+        } catch (error) {
+            console.error("❌ Failed to save domain provider:", error);
             return {
                 status: 500,
                 message: `Houston, we have a problem: ${getErrorMessage(error)}`,

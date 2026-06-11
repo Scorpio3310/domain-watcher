@@ -6,13 +6,13 @@
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?logo=cloudflare&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-07405E?logo=sqlite&logoColor=white)
 
-**Keywords:** `domain monitor` • `domain checker` • `whois lookup` • `ssl certificate tracker` • `domain expiration alerts` • `sveltekit` • `cloudflare workers` • `slack notifications` • `resend notifications` • `email notifications`
+**Keywords:** `domain monitor` • `domain checker` • `whois lookup` • `ssl certificate tracker` • `domain expiration alerts` • `sveltekit` • `cloudflare workers` • `slack notifications` • `discord notifications` • `resend notifications` • `email notifications`
 
 ## 🔗 [Check Live Demo](https://domain-watcher.klemenc.dev)
 
 > **Monitor domain availability, track expiration dates, and get notifications when domains become available or are about to expire.**
 
-A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers that tracks domain availability, SSL certificates, and sends smart notifications via Slack or email (Resend).
+A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers that tracks domain availability, SSL certificates, and sends smart notifications via Slack, Discord or email (Resend).
 
 **Perfect for:** Domain investors, web developers, businesses tracking competitor domains, and anyone managing domain portfolios.
 
@@ -21,9 +21,9 @@ A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers 
 -   **Frontend**: SvelteKit
 -   **Platform**: Cloudflare Workers
 -   **Database**: Cloudflare D1 (SQLite)
--   **Notifications**: Slack Webhooks, Resend API
+-   **Notifications**: Slack Webhooks, Discord Webhooks, Resend API
 -   **Scheduling**: Cloudflare Cron Triggers
--   **Domain API**: WhoisJSON (1000 free calls/month)
+-   **Domain Data**: RDAP (free, no API key, default) with optional WhoisJSON (1000 free calls/month) as a selectable provider and fallback; NS lookups via Cloudflare DNS-over-HTTPS
 
 ---
 
@@ -41,7 +41,7 @@ A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers 
 
 ## 👀 Overview
 
-A SvelteKit application running on Cloudflare Workers that monitors domain availability and sends notifications via Slack or Email (Resend) when domains become available.
+A SvelteKit application running on Cloudflare Workers that monitors domain availability and sends notifications via Slack, Discord or Email (Resend) when domains become available.
 
 In addition to available domains, you also receive:
 
@@ -71,9 +71,10 @@ A daily summary keeps you informed and helps you act fast.
 ## 🚀 Features
 
 -   **Domain Monitoring**: Monitor domain status, including availability, nameservers (NS), and SSL certificate validity.
--   **Automated Checks**: A cron job runs every minute to evaluate if notification conditions are met (via Slack or Resend), based on the configured time and settings.
--   **Notifications via Slack or Email (Resend)**: Get notified when domains become available or when specific conditions are met. Choose your preferred notification method (Slack or Email) and configure when alerts should be sent.
--   **Settings Panel**: Configure API key for WhoisJSON, choose your preferred view mode for the interface, and manage notification settings for Slack and Resend.
+-   **Automated Checks**: A cron job runs every minute to evaluate if notification conditions are met (via Slack, Discord or Resend), based on the configured time and settings.
+-   **Notifications via Slack, Discord or Email (Resend)**: Get notified when domains become available or when specific conditions are met. Choose your preferred notification method (Slack, Discord or Email) and configure when alerts should be sent.
+-   **Domain Lookup Providers**: Choose between RDAP (free, queries domain registries directly, no API key needed) and WhoisJSON. With RDAP selected, TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs) fall back to WhoisJSON when an API key is configured and the "Allow WhoisJSON fallback" toggle is on (default). Every domain card shows which provider was used and which one the next check will use. SSL certificate checks always require a WhoisJSON API key; NS lookups run via Cloudflare DNS-over-HTTPS and need no key.
+-   **Settings Panel**: Pick the domain lookup provider, configure the optional WhoisJSON API key, choose your preferred view mode for the interface, and manage notification settings for Slack, Discord and Resend.
 -   **Web Interface**: A clean and functional UI where you can add new domains, view and manually refresh domain status, perform bulk checks, and manage your domain list with ease.
 
 ## 📦 Setup
@@ -82,8 +83,9 @@ A daily summary keeps you informed and helps you act fast.
 
 -   Node.js and pnpm
 -   [Cloudflare Account](https://www.cloudflare.com/)
--   [WhoIs JSON API key](https://whoisjson.com) - Get your API key for domain lookups
+-   [WhoIs JSON API key](https://whoisjson.com) - Optional: only needed for SSL certificate checks, the WhoisJSON provider, or TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs). Domain checks work out of the box via RDAP without any key.
 -   [Slack Webhooks](https://api.slack.com/messaging/webhooks) – Create a Slack app and generate an incoming webhook URL for Slack notifications
+-   [Discord Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) – Create a webhook in your Discord channel settings (Integrations → Webhooks) for Discord notifications
 -   [Resend API](https://resend.com/docs/dashboard/api-keys/introduction) – Generate your Resend API key to enable email notifications
 
 ---
@@ -181,7 +183,7 @@ http://localhost:8787/__scheduled?cron=*+*+*+*+*
 
 ### Cron Schedule
 
-The cron job runs **every minute** to check scheduled notifications. Since you can set specific times in Slack or Resend settings (e.g., "Send at 14:30"), the cron job must check every minute to trigger notifications at the exact scheduled time.
+The cron job runs **every minute** to check scheduled notifications. Since you can set specific times in Slack, Discord or Resend settings (e.g., "Send at 14:30"), the cron job must check every minute to trigger notifications at the exact scheduled time.
 
 **Example**: If notification is set for 14:30, the cron job checks every minute until it matches 14:30, then sends the notification.
 
@@ -284,7 +286,7 @@ The application uses two main tables:
 
 -   Stores domain names and availability status
 -   Tracks domain expiration dates and check history
--   Stores complete API responses from WhoisJSON (domain, DNS, SSL data)
+-   Stores complete provider responses (RDAP or WhoisJSON domain data with a `source` tag, DNS-over-HTTPS records, WhoisJSON SSL data)
 -   Includes error logging and check statistics
 
 `settings` Table

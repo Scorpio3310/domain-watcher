@@ -12,14 +12,18 @@
 import { form } from "$app/server";
 import {
     whoIsApiKeySchema,
+    domainProviderSchema,
     uiViewSchema,
     toggleFormSchema,
     slackWebhookSchema,
+    discordWebhookSchema,
     resendSchema,
 } from "$src/routes/settings/validation";
 import { apiKey } from "$src/lib/server/infrastructure/api-key";
-import { ui } from "$src/lib/server/services/settings";
+import { ui, domainProvider } from "$src/lib/server/services/settings";
+import { DOMAIN_PROVIDER } from "$lib/constants/constants";
 import { slack } from "$src/lib/server/infrastructure/slack-client";
+import { discord } from "$src/lib/server/infrastructure/discord-client";
 import { resend } from "$src/lib/server/infrastructure/resend-client";
 import { getErrorMessage } from "$src/lib/utils/helpers";
 
@@ -31,6 +35,21 @@ import { getErrorMessage } from "$src/lib/utils/helpers";
  */
 export const saveApiKey = form(whoIsApiKeySchema, async ({ apiKey: key }) => {
     try {
+        // Pin the currently-effective provider before the key exists —
+        // otherwise saving a key on a fresh install would silently flip the
+        // resolved default from RDAP to WhoisJSON (the keyed-install default
+        // exists only for installs that predate the provider setting).
+        const providerConfig = await domainProvider.getConfig();
+        if (providerConfig.provider === null) {
+            const hadKeyBefore = await apiKey.isConfigured();
+            await domainProvider.save(
+                hadKeyBefore
+                    ? DOMAIN_PROVIDER.WHOIS_JSON
+                    : DOMAIN_PROVIDER.RDAP,
+                providerConfig.whoisjsonFallback
+            );
+        }
+
         const result = /** @type {ServiceResult} */ (await apiKey.save(key));
 
         return {
@@ -45,6 +64,45 @@ export const saveApiKey = form(whoIsApiKeySchema, async ({ apiKey: key }) => {
         };
     }
 });
+
+/**
+ * Update the domain lookup provider (rdap/whoisjson).
+ * @function updateDomainProvider
+ * @memberof module:SettingsRemote
+ * @returns {Promise<ServiceResult>}
+ */
+export const updateDomainProvider = form(
+    domainProviderSchema,
+    async ({ provider, whoisjsonFallback }) => {
+        try {
+            if (
+                provider === DOMAIN_PROVIDER.WHOIS_JSON &&
+                !(await apiKey.isConfigured())
+            ) {
+                return {
+                    status: 400,
+                    message:
+                        "Add a WhoisJSON API key before selecting WhoisJSON as the provider 🔑",
+                };
+            }
+
+            const result = /** @type {ServiceResult} */ (
+                await domainProvider.save(provider, whoisjsonFallback)
+            );
+
+            return {
+                status: result.status,
+                message: result.message,
+            };
+        } catch (error) {
+            console.error("❌ Failed to update domain provider:", error);
+            return {
+                status: 500,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
+            };
+        }
+    }
+);
 
 /**
  * Update the UI domain view mode (compact/detailed).
@@ -118,6 +176,64 @@ export const updateSlackWebhook = form(
             };
         } catch (error) {
             console.error("❌ Failed to save Slack webhook:", error);
+            return {
+                status: 500,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
+            };
+        }
+    }
+);
+
+/**
+ * Enable/disable Discord notifications.
+ * @function updateDiscordEnabled
+ * @memberof module:SettingsRemote
+ * @returns {Promise<ServiceResult>}
+ */
+export const updateDiscordEnabled = form(
+    toggleFormSchema,
+    async ({ enabled }) => {
+        try {
+            const result = /** @type {ServiceResult} */ (
+                await discord.saveNotificationStatus(enabled)
+            );
+
+            return {
+                status: result.status,
+                message: result.message,
+            };
+        } catch (error) {
+            console.error("❌ Failed to update Discord notifications:", error);
+            return {
+                status: 500,
+                message: `Houston, we have a problem: ${getErrorMessage(error)}`,
+            };
+        }
+    }
+);
+
+/**
+ * Update the Discord webhook configuration (optionally sending a test message).
+ * @function updateDiscordWebhook
+ * @memberof module:SettingsRemote
+ * @returns {Promise<ServiceResult>}
+ */
+export const updateDiscordWebhook = form(
+    discordWebhookSchema,
+    async ({ webhook, notificationTime, sendTestMessage }) => {
+        try {
+            const result = /** @type {ServiceResult} */ (
+                await discord.saveWebhook(webhook, notificationTime, {
+                    shouldTestConnection: sendTestMessage,
+                })
+            );
+
+            return {
+                status: result.status,
+                message: result.message,
+            };
+        } catch (error) {
+            console.error("❌ Failed to save Discord webhook:", error);
             return {
                 status: 500,
                 message: `Houston, we have a problem: ${getErrorMessage(error)}`,

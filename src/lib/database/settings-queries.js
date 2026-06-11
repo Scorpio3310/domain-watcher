@@ -67,6 +67,36 @@ export const SETTINGS_QUERIES = {
     `,
 
     // =============================================================================
+    // API SETTINGS (Domain Lookup Provider)
+    // =============================================================================
+
+    /**
+     * Retrieves the selected domain lookup provider configuration
+     * @type {string}
+     * @description Returns JSON config with the provider choice (rdap/whoisjson)
+     * @returns {Array<Object>} Single object: [{json_config_data: "..."}] or empty array
+     */
+    SELECT_DOMAIN_PROVIDER: `
+        SELECT json_config_data FROM settings
+        WHERE category = 'api' AND key = 'domain_provider'
+    `,
+
+    /**
+     * Creates or updates the domain lookup provider selection
+     * @type {string}
+     * @description UPSERT operation for the provider choice
+     * @param {string} json_config_data - JSON string with provider config ({provider, version})
+     * @returns {Object} Insert/update result with meta information
+     */
+    UPSERT_DOMAIN_PROVIDER: `
+        INSERT INTO settings (category, key, json_config_data, enabled, description)
+        VALUES ('api', 'domain_provider', ?, 1, 'Domain Lookup Provider')
+        ON CONFLICT(category, key) DO UPDATE SET
+            json_config_data = excluded.json_config_data,
+            updated_at = CURRENT_TIMESTAMP
+    `,
+
+    // =============================================================================
     // SLACK NOTIFICATION SETTINGS
     // =============================================================================
 
@@ -118,6 +148,64 @@ export const SETTINGS_QUERIES = {
     UPSERT_SLACK_SETTINGS: `
         INSERT INTO settings (category, key, json_config_data, enabled, description, created_at, updated_at)
         VALUES ('notifications', 'slack', ?, ?, 'Slack - Notification Settings', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(category, key) DO UPDATE SET
+            json_config_data = excluded.json_config_data,
+            enabled = excluded.enabled,
+            updated_at = CURRENT_TIMESTAMP
+    `,
+
+    // =============================================================================
+    // DISCORD NOTIFICATION SETTINGS
+    // =============================================================================
+
+    /**
+     * Retrieves complete Discord notification configuration and status
+     * @type {string}
+     * @description Returns full settings record with config, enabled status, and metadata
+     * @returns {Array<Object>} Single object with all fields: [{id, category, key, json_config_data, enabled, description, created_at, updated_at}] or empty array
+     */
+    SELECT_DISCORD_SETTINGS: `
+        SELECT * FROM settings
+        WHERE category = 'notifications' AND key = 'discord'
+    `,
+
+    /**
+     * Updates only the enabled/disabled status for Discord notifications
+     * @type {string}
+     * @description Toggles Discord notifications without changing configuration data
+     * @param {boolean} enabled - Enable (true) or disable (false) Discord notifications
+     * @returns {Object} Update result with meta.changes (1 if updated, 0 if not found)
+     */
+    UPDATE_DISCORD_ENABLED_ONLY: `
+        UPDATE settings
+        SET enabled = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE category = 'notifications' AND key = 'discord'
+    `,
+
+    /**
+     * Updates only Discord configuration data (preserves enabled status)
+     * @type {string}
+     * @description Updates webhook and settings without changing enabled/disabled state
+     * @param {string} json_config_data - JSON string with Discord config (webhook_url, notification_time, etc.)
+     * @returns {Object} Update result with meta.changes (1 if updated, 0 if not found)
+     */
+    UPDATE_DISCORD_VALUE_ONLY: `
+        UPDATE settings
+        SET json_config_data = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE category = 'notifications' AND key = 'discord'
+    `,
+
+    /**
+     * Creates or completely updates Discord notification settings
+     * @type {string}
+     * @description UPSERT operation - handles both config and enabled status simultaneously
+     * @param {string} json_config_data - JSON string with complete Discord configuration
+     * @param {boolean} enabled - Enable/disable status for notifications
+     * @returns {Object} Insert/update result with meta information
+     */
+    UPSERT_DISCORD_SETTINGS: `
+        INSERT INTO settings (category, key, json_config_data, enabled, description, created_at, updated_at)
+        VALUES ('notifications', 'discord', ?, ?, 'Discord - Notification Settings', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(category, key) DO UPDATE SET
             json_config_data = excluded.json_config_data,
             enabled = excluded.enabled,

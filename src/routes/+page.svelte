@@ -162,7 +162,13 @@
                         }}
                         animate:flip={{ duration: 300 }}
                     >
-                        <DomainCard data={domain} uiView={data?.viewMode} />
+                        <DomainCard
+                            data={domain}
+                            uiView={data?.viewMode}
+                            isApiConfigured={data?.isApiConfigured}
+                            lookupProvider={data?.lookupProvider}
+                            whoisjsonFallback={data?.whoisjsonFallback}
+                        />
                     </div>
                 {/each}
             </div>

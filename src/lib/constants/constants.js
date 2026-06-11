@@ -30,6 +30,25 @@ export const DOMAIN_STATUS = Object.freeze({
 });
 
 /**
+ * Domain lookup provider constants for availability/expiry checks
+ * @readonly
+ * @enum {string}
+ * @example
+ * // Check which provider is active
+ * const { provider } = await resolveLookupContext();
+ * if (provider === DOMAIN_PROVIDER.RDAP) {
+ *   console.log("Using free registry RDAP lookups");
+ * }
+ */
+export const DOMAIN_PROVIDER = Object.freeze({
+    /** @type {"whoisjson"} WhoisJSON API (requires API key) */
+    WHOIS_JSON: "whoisjson",
+
+    /** @type {"rdap"} Direct registry RDAP (free, no API key) */
+    RDAP: "rdap",
+});
+
+/**
  * Number of days before expiry within which a domain counts as "expiring soon".
  * Must stay in sync with the hardcoded '+30 days' window in
  * domain-queries.js (SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION).
@@ -106,6 +125,34 @@ export const IS_ENABLED_STATUS = Object.freeze({
  * }
  */
 export const SLACK_CONNECTION_STATUS = Object.freeze({
+    /** @type {"setup_required"} Webhook is not configured */
+    SETUP_REQUIRED: "setup_required",
+
+    /** @type {"ready"} Webhook is configured and ready for testing */
+    READY: "ready",
+
+    /** @type {"connected"} Webhook connection is working properly */
+    CONNECTED: "connected",
+
+    /** @type {"disconnected"} Webhook connection is not working */
+    DISCONNECTED: "disconnected",
+
+    /** @type {"error"} System error occurred while checking connection */
+    ERROR: "error",
+});
+
+/**
+ * Discord webhook connection status constants
+ * @readonly
+ * @enum {string}
+ * @example
+ * // Check Discord connection status
+ * const config = await discord.getWebhookConfig();
+ * if (config.connection_status === DISCORD_CONNECTION_STATUS.CONNECTED) {
+ *   console.log("Discord webhook is working correctly");
+ * }
+ */
+export const DISCORD_CONNECTION_STATUS = Object.freeze({
     /** @type {"setup_required"} Webhook is not configured */
     SETUP_REQUIRED: "setup_required",
 

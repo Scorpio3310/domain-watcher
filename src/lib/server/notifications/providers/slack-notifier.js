@@ -1,5 +1,10 @@
 import { getErrorMessage } from "$lib/utils/helpers.js";
-import { formatDate, getDaysUntilExpiry } from "./date-format.js";
+import {
+    formatDate,
+    getDaysUntilExpiry,
+    getQuietMessage,
+    getReportTimestamp,
+} from "./shared.js";
 
 /** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
 
@@ -11,10 +16,9 @@ export const slackNotifier = {
      * Send domain monitoring report to Slack
      * @param {{webhook_url: string}} settings - Slack settings object
      * @param {DomainUpdates} domainUpdates - Domain update data
-     * @param {string} [origin=""] - Optional origin URL for links
      * @returns {Promise<NotifierResult>} Send result
      */
-    async sendDomainReport(settings, domainUpdates, origin = "") {
+    async sendDomainReport(settings, domainUpdates) {
         try {
             if (!settings?.webhook_url) {
                 return {
@@ -65,7 +69,7 @@ export const slackNotifier = {
             expired = [],
             totalCount,
         } = domainUpdates;
-        const timestamp = new Date().toLocaleString();
+        const timestamp = getReportTimestamp();
 
         /** @type {SlackBlock[]} */
         const blocks = [
@@ -174,28 +178,13 @@ export const slackNotifier = {
 
         // If no domains to report, add a fun "all quiet" message
         if (totalCount === 0) {
-            const quietMessages = [
-                "🧘‍♂️ *Zen mode activated* - All your domains are chilling like champions today!",
-                "🏖️ *Beach vibes only* - Your domains are soaking up the sun, nothing to worry about!",  
-                "😴 *Sleepy Sunday energy* - Even your domains decided to take a nap today!",
-                "🕶️ *Cool as a cucumber* - Your domain portfolio is looking smooth and unbothered!",
-                "🎭 *Plot twist:* Sometimes no news IS the best news! Your domains are behaving perfectly.",
-                "🏆 *Achievement unlocked:* Zero drama domains! Time to celebrate with a coffee ☕",
-                "🦄 *Unicorn status* - Your domains are so well-behaved, they're basically mythical today!",
-                "🎪 *The show must NOT go on* - Because there's literally nothing dramatic happening! 🎉"
-            ];
-
-            // Pick a random message based on the day to keep it fresh
-            const messageIndex = new Date().getDay() % quietMessages.length;
-            const selectedMessage = quietMessages[messageIndex];
-
             blocks.push({ type: "divider" });
             blocks.push({
-                type: "section", 
+                type: "section",
                 text: {
                     type: "mrkdwn",
-                    text: selectedMessage
-                }
+                    text: `*${getQuietMessage()}*`,
+                },
             });
 
             blocks.push({

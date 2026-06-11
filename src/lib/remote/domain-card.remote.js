@@ -8,11 +8,14 @@
 /** @import { ServiceResult } from '$lib/types' */
 
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
+import * as dnsService from "$src/lib/server/infrastructure/dns-client";
 import { form } from "$app/server";
 import { getErrorMessage } from "$src/lib/utils/helpers";
 import { domainIdFormSchema } from "$src/routes/validation";
 import {
     validateAccess,
+    validateSslAccess,
+    validateDemoMode,
     findDomainById,
     executeDomainQuery,
     verificationEngine,
@@ -23,8 +26,9 @@ import {
 // ========================================
 
 /**
- * Performs nameserver (NS) lookup for a specific domain.
- * Validates user access, retrieves domain information, and updates the database
+ * Performs nameserver (NS) lookup for a specific domain via Cloudflare
+ * DNS-over-HTTPS (free, no API key required).
+ * Validates demo mode, retrieves domain information, and updates the database
  * with current nameserver records.
  *
  * @async
@@ -34,8 +38,8 @@ import {
  * @throws {Error} Database or network connectivity errors
  */
 export const ns = form(domainIdFormSchema, async ({ domainId }) => {
-    const accessError = await validateAccess();
-    if (accessError) return accessError;
+    const demoError = validateDemoMode();
+    if (demoError) return demoError;
 
     const domain = await findDomainById(domainId);
     if (!domain)
@@ -46,7 +50,7 @@ export const ns = form(domainIdFormSchema, async ({ domainId }) => {
         };
 
     try {
-        const apiResult = await whoisService.checkDomainNS(domain.domain_name);
+        const apiResult = await dnsService.checkDomainNS(domain.domain_name);
 
         if (apiResult?.status !== 200) {
             return {
@@ -82,8 +86,8 @@ export const ns = form(domainIdFormSchema, async ({ domainId }) => {
 
 /**
  * Performs SSL certificate check for a specific domain.
- * Validates user access, retrieves domain information, and updates the database
- * with current SSL certificate information including expiration dates.
+ * SSL checks always run via WhoisJSON, so this requires a configured API key
+ * regardless of the selected lookup provider.
  *
  * @async
  * @function ssl
@@ -92,7 +96,7 @@ export const ns = form(domainIdFormSchema, async ({ domainId }) => {
  * @throws {Error} Database or network connectivity errors
  */
 export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
-    const accessError = await validateAccess();
+    const accessError = await validateSslAccess();
     if (accessError) return accessError;
 
     const domain = await findDomainById(domainId);
@@ -140,8 +144,9 @@ export const ssl = form(domainIdFormSchema, async ({ domainId }) => {
 
 /**
  * Verifies the availability status of a single domain.
- * Performs comprehensive domain verification including WHOIS lookup,
- * status updates, and availability change detection.
+ * Performs comprehensive domain verification via the configured lookup
+ * provider (RDAP or WhoisJSON), with status updates and availability
+ * change detection.
  *
  * @async
  * @function check
@@ -164,10 +169,19 @@ export const check = form(domainIdFormSchema, async ({ domainId }) => {
 
         const verifyResult = await verificationEngine.verifyDomain(domain);
 
+        const sourceLabel =
+            verifyResult.source === "rdap"
+                ? "RDAP"
+                : verifyResult.source === "whoisjson"
+                  ? "WhoisJSON"
+                  : null;
+
         return verifyResult.success
             ? {
                   status: 200,
-                  message: `"${domain.domain_name}" analyzed - all the juicy details are ready! 🔍`,
+                  message: `"${domain.domain_name}" analyzed${
+                      sourceLabel ? ` via ${sourceLabel}` : ""
+                  } - all the juicy details are ready! 🔍`,
               }
             : { status: 500, message: verifyResult.error ?? "Unknown error" };
     } catch (error) {
@@ -191,8 +205,8 @@ export const check = form(domainIdFormSchema, async ({ domainId }) => {
  * @throws {Error} Database connectivity errors
  */
 export const remove = form(domainIdFormSchema, async ({ domainId }) => {
-    const accessError = await validateAccess();
-    if (accessError) return accessError;
+    const demoError = validateDemoMode();
+    if (demoError) return demoError;
 
     try {
         const domain = await findDomainById(domainId);

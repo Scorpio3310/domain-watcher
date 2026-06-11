@@ -7,13 +7,14 @@ import {
     getErrorMessage,
 } from "$lib/utils/helpers.js";
 
-/** @import { DomainRecord, ProviderSettings, SlackConfig, ResendConfig, BatchVerificationResult } from "$lib/types" */
+/** @import { DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig, BatchVerificationResult } from "$lib/types" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY
 // ============================================================================
 
 import { slackNotifier } from "./providers/slack-notifier.js";
+import { discordNotifier } from "./providers/discord-notifier.js";
 import { resendNotifier } from "./providers/resend-notifier.js";
 
 /**
@@ -21,7 +22,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @typedef {Object} ProviderConfig
  * @property {string} name - Human-readable provider name
  * @property {keyof typeof SETTINGS_QUERIES} query - Database query key for settings
- * @property {typeof slackNotifier | typeof resendNotifier} service - Notification service implementation
+ * @property {typeof slackNotifier | typeof discordNotifier | typeof resendNotifier} service - Notification service implementation
  * @property {(settings: ProviderSettings) => boolean} validate - Validation function for provider settings
  */
 
@@ -65,6 +66,12 @@ const PROVIDERS = {
         name: "Slack",
         query: "SELECT_SLACK_SETTINGS",
         service: slackNotifier,
+        validate: (s) => !!s.webhook_url,
+    },
+    discord: {
+        name: "Discord",
+        query: "SELECT_DISCORD_SETTINGS",
+        service: discordNotifier,
         validate: (s) => !!s.webhook_url,
     },
     resend: {
@@ -238,42 +245,27 @@ export const cronNotifications = {
             ]);
 
         // Verify domains in parallel (if any exist)
-        /** @type {Array<Promise<{checked: number, available: DomainRecord[], stillRegistered?: DomainRecord[]}>>} */
-        const verificationPromises = [];
-
         if (expiredRegistered.length > 0) {
             console.log(
                 `🚨 Verifying ${expiredRegistered.length} expired domains...`
             );
-            verificationPromises.push(
-                domainVerification.verifyExpiredDomainsBatch(expiredRegistered)
-            );
-        } else {
-            verificationPromises.push(
-                Promise.resolve({
-                    checked: 0,
-                    available: [],
-                    stillRegistered: [],
-                })
-            );
         }
-
         if (domainsToCheck.length > 0) {
             console.log(
                 `📊 Verifying ${domainsToCheck.length} regular domains...`
             );
-            verificationPromises.push(
-                domainVerification.verifyDomainsBatch(domainsToCheck)
-            );
-        } else {
-            verificationPromises.push(
-                Promise.resolve({ checked: 0, available: [] })
-            );
         }
 
-        const [expiredResults, verificationResults] = await Promise.all(
-            verificationPromises
-        );
+        const [expiredResults, verificationResults] = await Promise.all([
+            expiredRegistered.length > 0
+                ? domainVerification.verifyExpiredDomainsBatch(
+                      expiredRegistered
+                  )
+                : { checked: 0, available: [], stillRegistered: [] },
+            domainsToCheck.length > 0
+                ? domainVerification.verifyDomainsBatch(domainsToCheck)
+                : { checked: 0, available: [] },
+        ]);
 
         /** @type {DomainCheckResult} */
         const results = {
@@ -339,7 +331,7 @@ export const cronNotifications = {
                 }
 
                 const result = await provider.service.sendDomainReport(
-                    /** @type {ProviderSettings & SlackConfig & ResendConfig} */ (
+                    /** @type {ProviderSettings & SlackConfig & DiscordConfig & ResendConfig} */ (
                         provider.settings
                     ),
                     {
@@ -398,6 +390,9 @@ export const cronNotifications = {
     /**
      * Retrieves and parses notification provider settings from database
      *
+     * Never throws - database or JSON parsing errors are logged and returned as
+     * {enabled: false, error} so callers can distinguish a failure from a disabled provider.
+     *
      * @param {string} providerKey - Provider key (must exist in PROVIDERS registry)
      * @returns {Promise<ProviderSettings>} Provider settings with enabled status
      *
@@ -406,8 +401,6 @@ export const cronNotifications = {
      * if (slackSettings.enabled && slackSettings.webhook_url) {
      *   // Slack is configured and ready
      * }
-     *
-     * @throws {Error} Database or JSON parsing errors are logged and returned as {enabled: false, error} so callers can distinguish a failure from a disabled provider
      */
     async getSettings(providerKey) {
         try {

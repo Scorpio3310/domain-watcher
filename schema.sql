@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- -- Notification settings (enabled = TRUE/FALSE)
 -- ('notifications', 'slack', '{}', FALSE, 'Slack - Notification Settings'),
+-- ('notifications', 'discord', '{}', FALSE, 'Discord - Notification Settings'),
 -- ('notifications', 'resend', '{}', FALSE, 'Resend - Notification Settings');
 
 -- Auto-update trigger for settings

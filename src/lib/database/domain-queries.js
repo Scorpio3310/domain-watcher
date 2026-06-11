@@ -175,6 +175,9 @@ export const DOMAIN_QUERIES = {
      * expired, or a non-registered status. Status values must match
      * DOMAIN_STATUS in $lib/constants/constants.js and the status set used by
      * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below.
+     * Registered domains with NULL expires (TLDs without public expiry data,
+     * e.g. .de/.ch via RDAP) sort last so they don't crowd out the per-run
+     * check limit for domains that actually need attention.
      * @returns {Array<Object>} Domains with: no expiry, expired, or non-registered status
      */
     SELECT_DOMAINS_NEEDING_CHECK: `
@@ -183,6 +186,8 @@ export const DOMAIN_QUERIES = {
         WHERE expires IS NULL
            OR expires <= datetime('now')
            OR status IN ('not_checked', 'available', 'error')
+        ORDER BY CASE WHEN status = 'registered' AND expires IS NULL THEN 1 ELSE 0 END ASC,
+                 last_domain_checked ASC
     `,
 
     /**

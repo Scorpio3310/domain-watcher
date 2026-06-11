@@ -21,9 +21,12 @@ const TEST_DOMAIN = "example.com";
 // ========================================
 /**
  * @typedef {Object} DomainAvailabilityData
+ * @property {string} domain - The domain name that was checked
  * @property {string} status - Domain availability status
  * @property {string|null} expires - Domain expiration date
+ * @property {{name: string, url?: string|null}|null} registrar - Registrar info
  * @property {Record<string, any>} rawDomainData - Raw data from WHOIS API
+ * @property {'whoisjson'} source - Provider tag (see DomainLookupData in $lib/types)
  */
 
 /**
@@ -190,6 +193,7 @@ export async function checkDomainAvailability(domainName, customApiKey = null) {
                 expires: fullData?.expires || null,
                 registrar: fullData?.registrar || null,
                 rawDomainData: fullData || availability,
+                source: "whoisjson",
             },
         };
     } catch (error) {

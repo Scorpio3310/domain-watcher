@@ -13,11 +13,11 @@
      * App header with per-page layout configuration and batch check action
      * @typedef {Object} Props
      * @property {string} [type="default"] - Header layout type (main, settings, default)
-     * @property {boolean} [isApiConfigured=false] - Whether the WHOIS API key is configured
+     * @property {boolean} [isLookupReady=false] - Whether domain lookups can run (RDAP selected, or WhoisJSON with a configured key)
      */
 
     /** @type {Props} */
-    let { type = "default", isApiConfigured = false } = $props();
+    let { type = "default", isLookupReady = false } = $props();
 
     /** @type {Record<string, {showActions: boolean, showBackButton: boolean, showLogo: boolean, justify: string}>} */
     const headerConfigs = {
@@ -106,7 +106,7 @@
     {#if actionType === "main"}
         <div class="flex gap-2 items-center">
             <div class="relative">
-                {#if !isApiConfigured}
+                {#if !isLookupReady}
                     <div
                         class="bg-red animate-pulse size-3 rounded-full absolute -right-0.5 -top-0.5"
                     ></div>

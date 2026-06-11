@@ -30,6 +30,27 @@
  * @property {string} [created_at] - Record creation timestamp
  * @property {string} [updated_at] - Record last update timestamp
  * @property {string|null} [registrar] - Registrar name (derived for UI, not a table column)
+ * @property {string|null} [source] - Lookup provider label of the last stored check (derived for UI, not a table column)
+ * @property {('rdap'|'whoisjson'|'none')|null} [willCheckVia] - Predicted provider for the next check (derived for UI; null = unknown)
+ */
+
+/**
+ * Normalized domain lookup result (provider-agnostic envelope stored in raw_domain_data)
+ * @typedef {Object} DomainLookupData
+ * @property {string} domain - The domain name that was checked
+ * @property {string} status - Domain status (DOMAIN_STATUS value)
+ * @property {string|null} expires - Expiration date as ISO-8601 UTC string (e.g. "2028-09-14T04:00:00Z")
+ * @property {{name: string, url?: string|null}|null} registrar - Registrar info (name consumed by getRegistrar)
+ * @property {Record<string, any>} rawDomainData - Raw provider response (whoisjson or RDAP JSON)
+ * @property {('rdap'|'whoisjson')} [source] - Which provider produced the data
+ */
+
+/**
+ * Resolved lookup provider state (see domain-lookup.resolveLookupContext)
+ * @typedef {Object} LookupContext
+ * @property {('rdap'|'whoisjson')} provider - Effective domain lookup provider
+ * @property {boolean} whoisKeyConfigured - Whether a WhoisJSON API key is configured
+ * @property {boolean} whoisjsonFallback - Whether RDAP-unsupported TLDs may fall back to WhoisJSON
  */
 
 /**
@@ -47,6 +68,7 @@
  * @property {string} [status] - Domain status (available, registered, error)
  * @property {boolean} [wasAvailable] - True if domain is now available
  * @property {boolean} [isStillRegistered] - True if domain remains registered
+ * @property {('rdap'|'whoisjson')} [source] - Provider that produced the data (success only)
  * @property {string} [error] - Error message if verification failed
  */
 
@@ -65,6 +87,7 @@
  * @property {DomainRecord[]} stillRegistered - Expired domains still registered
  * @property {number} errors - Number of domains that failed verification
  * @property {string[]} errorMessages - Detailed error messages for failed verifications
+ * @property {{rdap: number, whoisjson: number}} sources - Successful checks per provider
  */
 
 /**
@@ -101,9 +124,27 @@
  */
 
 /**
+ * Domain lookup provider configuration (settings: api/domain_provider)
+ * @typedef {Object} DomainProviderConfig
+ * @property {('rdap'|'whoisjson')} provider - Selected domain lookup provider
+ * @property {boolean} [whoisjson_fallback] - Allow WhoisJSON fallback for TLDs without RDAP (absent = true)
+ * @property {number} [version] - Config schema version
+ */
+
+/**
  * Slack notification configuration (settings: notifications/slack)
  * @typedef {Object} SlackConfig
  * @property {string} webhook_url - Slack incoming webhook URL
+ * @property {string} [notification_time] - Daily notification time (HH:mm)
+ * @property {string} [connection_status] - Last connection test status
+ * @property {string|null} [connection_verified_at] - When the connection was last verified
+ * @property {number} [version] - Config schema version
+ */
+
+/**
+ * Discord notification configuration (settings: notifications/discord)
+ * @typedef {Object} DiscordConfig
+ * @property {string} webhook_url - Discord webhook URL
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
  * @property {string|null} [connection_verified_at] - When the connection was last verified
@@ -158,6 +199,14 @@
  * @property {string} type - Block type (section, context, divider, ...)
  * @property {{type: string, text: string}} [text] - Block text object
  * @property {Array<{type: string, text: string}>} [elements] - Context elements
+ */
+
+/**
+ * Discord webhook embed (subset used by the notifier)
+ * @typedef {Object} DiscordEmbed
+ * @property {string} [title] - Embed title
+ * @property {string} [description] - Embed body (Discord markdown)
+ * @property {number} [color] - Accent color as decimal RGB integer
  */
 
 export {};

@@ -148,6 +148,31 @@ export const getRegistrar = (rawDomainData) => {
     }
 };
 
+/**
+ * Extracts the lookup provider display label from raw domain data JSON
+ * @param {string|null} rawDomainData - Raw JSON string (stored lookup envelope)
+ * @returns {string|null} "RDAP", "WhoisJSON", or null (legacy rows / invalid JSON)
+ *
+ * @example
+ * getLookupSource('{"source": "rdap"}'); // "RDAP"
+ * getLookupSource('{"source": "whoisjson"}'); // "WhoisJSON"
+ * getLookupSource('{"domain": "example.com"}'); // null (legacy row)
+ * getLookupSource(null); // null
+ */
+export const getLookupSource = (rawDomainData) => {
+    if (!rawDomainData) return null;
+    try {
+        const { source } = JSON.parse(rawDomainData);
+        return source === "rdap"
+            ? "RDAP"
+            : source === "whoisjson"
+              ? "WhoisJSON"
+              : null;
+    } catch {
+        return null;
+    }
+};
+
 // ============================================================================
 // DATE FORMATTING FUNCTIONS (specialized date utilities)
 // ============================================================================

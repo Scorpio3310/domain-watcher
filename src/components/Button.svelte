@@ -125,9 +125,14 @@
                     window.location.href = href;
                 }
             } else {
-                // Check if this is a submit button in a form
+                // Check if this is a submit button in a form.
+                // .form honors the form="" attribute (external submitters);
+                // closest() covers non-button elements.
                 const target = /** @type {HTMLElement} */ (event.target);
-                const form = target.closest("form");
+                const form =
+                    target instanceof HTMLButtonElement
+                        ? target.form
+                        : target.closest("form");
 
                 if (type === "submit" && form) {
                     // Use requestSubmit to trigger form validation and submission

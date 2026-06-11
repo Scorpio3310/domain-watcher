@@ -73,7 +73,7 @@
 <NoJavascript />
 
 <div class="app-container max-w-5xl mx-auto">
-    <Header type={headerType} isApiConfigured={data.isApiConfigured} />
+    <Header type={headerType} isLookupReady={data.isLookupReady} />
 
     <main class="main-content">
         {@render children()}
