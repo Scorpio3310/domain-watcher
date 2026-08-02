@@ -51,6 +51,16 @@ export const escapeHtml = (value) =>
         .replaceAll("'", "&#39;");
 
 /**
+ * Trim an error message for report rendering (protects notifier size limits,
+ * e.g. Discord's 4096-character embed description)
+ * @param {string} error - Raw error message
+ * @param {number} [maxLength=200] - Maximum length before truncation
+ * @returns {string} Error message capped at maxLength characters
+ */
+export const truncateError = (error, maxLength = 200) =>
+    error.length > maxLength ? `${error.slice(0, maxLength - 1)}…` : error;
+
+/**
  * Get a fun message for quiet days (no domain updates)
  *
  * Deterministic per weekday so both providers show the same message that day.

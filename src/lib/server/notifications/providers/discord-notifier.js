@@ -4,6 +4,7 @@ import {
     getDaysUntilExpiry,
     getQuietMessage,
     getReportTimestamp,
+    truncateError,
 } from "./shared.js";
 
 /** @import { DomainUpdates, NotifierResult, DiscordEmbed } from "$lib/types" */
@@ -67,6 +68,7 @@ export const discordNotifier = {
             available = [],
             expiring = [],
             expired = [],
+            failures = [],
             totalCount,
         } = domainUpdates;
         const timestamp = getReportTimestamp();
@@ -77,6 +79,12 @@ export const discordNotifier = {
                 title: "Domain Detective 🕵️ - Daily Report",
                 description: `Date: ${timestamp} • ${totalCount} domain update${
                     totalCount !== 1 ? "s" : ""
+                }${
+                    failures.length > 0
+                        ? ` • ${failures.length} check failure${
+                              failures.length !== 1 ? "s" : ""
+                          }`
+                        : ""
                 }`,
                 color: 0x1a1a1a,
             },
@@ -148,8 +156,33 @@ export const discordNotifier = {
             });
         });
 
+        // Failed checks are shown explicitly — a lookup/DB hiccup must never
+        // masquerade as a quiet day
+        if (failures.length > 0) {
+            const failureList = failures
+                .slice(0, 20)
+                .map(
+                    (failure) =>
+                        `• \`${failure.domain_name}\` - ${truncateError(
+                            failure.error
+                        )}`
+                )
+                .join("\n");
+
+            const moreText =
+                failures.length > 20
+                    ? `\n_... and ${failures.length - 20} more check failures_`
+                    : "";
+
+            embeds.push({
+                title: `⛔ Check Failures (${failures.length})`,
+                description: `${failureList}${moreText}`,
+                color: 0x999999,
+            });
+        }
+
         // If no domains to report, add a fun "all quiet" message
-        if (totalCount === 0) {
+        if (totalCount === 0 && failures.length === 0) {
             embeds.push({
                 description: `**${getQuietMessage()}**\n\n💡 _Pro tip: This is exactly what you want to see! No expired domains, no urgent renewals, just peaceful domain harmony._`,
                 color: 0x2ba805,
@@ -158,9 +191,13 @@ export const discordNotifier = {
 
         return {
             content:
-                totalCount === 0
+                totalCount === 0 && failures.length === 0
                     ? "🌐 Domain Watcher: All quiet on the western front! 🤠"
-                    : `🌐 Domain Watcher: ${totalCount} updates`,
+                    : `🌐 Domain Watcher: ${totalCount} updates${
+                          failures.length > 0
+                              ? `, ${failures.length} check failures`
+                              : ""
+                      }`,
             embeds,
         };
     },

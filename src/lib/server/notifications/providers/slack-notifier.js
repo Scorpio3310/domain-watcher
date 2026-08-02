@@ -4,6 +4,7 @@ import {
     getDaysUntilExpiry,
     getQuietMessage,
     getReportTimestamp,
+    truncateError,
 } from "./shared.js";
 
 /** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
@@ -67,6 +68,7 @@ export const slackNotifier = {
             available = [],
             expiring = [],
             expired = [],
+            failures = [],
             totalCount,
         } = domainUpdates;
         const timestamp = getReportTimestamp();
@@ -87,13 +89,20 @@ export const slackNotifier = {
                         type: "mrkdwn",
                         text: `Date: ${timestamp} • ${totalCount} domain update${
                             totalCount !== 1 ? "s" : ""
+                        }${
+                            failures.length > 0
+                                ? ` • ${failures.length} check failure${
+                                      failures.length !== 1 ? "s" : ""
+                                  }`
+                                : ""
                         }`,
                     },
                 ],
             },
         ];
 
-        if (totalCount > 0) blocks.push({ type: "divider" });
+        if (totalCount > 0 || failures.length > 0)
+            blocks.push({ type: "divider" });
 
         // Add each section if it has domains
         const sections = [
@@ -176,8 +185,51 @@ export const slackNotifier = {
             addedSection = true;
         });
 
+        // Failed checks are shown explicitly — a lookup/DB hiccup must never
+        // masquerade as a quiet day
+        if (failures.length > 0) {
+            if (addedSection) blocks.push({ type: "divider" });
+
+            blocks.push({
+                type: "section",
+                text: {
+                    type: "mrkdwn",
+                    text: `*⛔ Check Failures (${failures.length})*`,
+                },
+            });
+
+            const failureList = failures
+                .slice(0, 20)
+                .map(
+                    (failure) =>
+                        `• \`${failure.domain_name}\` - ${truncateError(
+                            failure.error
+                        )}`
+                )
+                .join("\n");
+
+            blocks.push({
+                type: "section",
+                text: { type: "mrkdwn", text: failureList },
+            });
+
+            if (failures.length > 20) {
+                blocks.push({
+                    type: "context",
+                    elements: [
+                        {
+                            type: "mrkdwn",
+                            text: `... and ${
+                                failures.length - 20
+                            } more check failures`,
+                        },
+                    ],
+                });
+            }
+        }
+
         // If no domains to report, add a fun "all quiet" message
-        if (totalCount === 0) {
+        if (totalCount === 0 && failures.length === 0) {
             blocks.push({ type: "divider" });
             blocks.push({
                 type: "section",
@@ -199,9 +251,14 @@ export const slackNotifier = {
         }
 
         return {
-            text: totalCount === 0 
-                ? `🌐 Domain Watcher: All quiet on the western front! 🤠`
-                : `🌐 Domain Watcher: ${totalCount} updates`,
+            text:
+                totalCount === 0 && failures.length === 0
+                    ? `🌐 Domain Watcher: All quiet on the western front! 🤠`
+                    : `🌐 Domain Watcher: ${totalCount} updates${
+                          failures.length > 0
+                              ? `, ${failures.length} check failures`
+                              : ""
+                      }`,
             blocks,
         };
     },

@@ -80,6 +80,13 @@
  */
 
 /**
+ * A single failed domain check surfaced in reports
+ * @typedef {Object} CheckFailure
+ * @property {string} domain_name - Domain whose check failed
+ * @property {string} error - Human-readable failure reason
+ */
+
+/**
  * Aggregate result of a batch verification run
  * @typedef {Object} BatchVerificationResult
  * @property {number} checked - Total number of domains processed
@@ -87,6 +94,7 @@
  * @property {DomainRecord[]} stillRegistered - Expired domains still registered
  * @property {number} errors - Number of domains that failed verification
  * @property {string[]} errorMessages - Detailed error messages for failed verifications
+ * @property {CheckFailure[]} failures - Structured per-domain failures (parallel to errorMessages)
  * @property {{rdap: number, whoisjson: number}} sources - Successful checks per provider
  */
 
@@ -101,10 +109,11 @@
 /**
  * Domain updates payload passed to notification providers
  * @typedef {Object} DomainUpdates
- * @property {DomainRecord[]} available - Domains that became available
+ * @property {DomainRecord[]} available - Domains currently available (post-check DB state)
  * @property {DomainRecord[]} expiring - Domains expiring soon
  * @property {DomainRecord[]} expired - Expired domains still registered
- * @property {number} totalCount - Total number of domains in the report
+ * @property {CheckFailure[]} failures - Checks that failed this run
+ * @property {number} totalCount - Total number of domains in the report sections
  */
 
 /**

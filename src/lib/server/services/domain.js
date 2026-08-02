@@ -14,7 +14,7 @@ import {
     verificationEngine,
     CONFIG,
 } from "$src/lib/server/utils/domain-utils.js";
-import { EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
+import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
 
 /** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "$lib/types" */
 
@@ -136,12 +136,10 @@ export const domainVerification = {
                     (d) =>
                         ["available", "error", "not_checked"].includes(
                             d.status ?? ""
-                        ) &&
-                        !(
-                            d.expires &&
-                            new Date(d.expires) < new Date() &&
-                            d.status === "registered"
-                        )
+                        ) ||
+                        // Registered without expiry data (.de/.ch style TLDs) —
+                        // only a re-check can ever notice these becoming available
+                        (d.status === "registered" && !d.expires)
                 ),
                 expiredRegistered: domains.filter(
                     (d) =>
@@ -173,55 +171,30 @@ export const domainVerification = {
     },
 
     /**
-     * Retrieves domains that need their availability status verified
+     * Snapshot of current DB state shaped for the daily report sections.
+     * Derived from ONE unified SELECT: available = status 'available',
+     * expired = registered with expires in the past, expiring = registered
+     * within the warning window. Meant to run AFTER a verification batch so
+     * the report reflects stored state (which failed checks preserve) instead
+     * of only the checks that happened to succeed in this run.
      * @async
      * @memberof domainVerification
-     * @returns {Promise<DomainRecord[]>} Array of domain objects needing verification
+     * @returns {Promise<DomainReportState>} Domains grouped for report sections
+     * @throws {Error} Database errors propagate to the caller
      *
      * @example
-     * const domains = await domainVerification.getDomainsNeedingVerification();
-     * if (domains.length > 0) {
-     *   console.log(`${domains.length} domains need verification`);
-     * }
+     * const state = await domainVerification.getDomainReportState();
+     * console.log(`${state.available.length} domains currently available`);
      */
-    async getDomainsNeedingVerification() {
-        const all = await this.getAllDomainsForVerification();
-        return all.needingVerification;
-    },
-
-    /**
-     * Retrieves domains that are expired but still showing as registered
-     * These domains are high priority for re-checking availability
-     * @async
-     * @memberof domainVerification
-     * @returns {Promise<DomainRecord[]>} Array of expired registered domain objects
-     *
-     * @example
-     * const expiredDomains = await domainVerification.getExpiredRegisteredDomains();
-     * if (expiredDomains.length > 0) {
-     *   console.log(`${expiredDomains.length} expired domains might be available now`);
-     * }
-     */
-    async getExpiredRegisteredDomains() {
-        const all = await this.getAllDomainsForVerification();
-        return all.expiredRegistered;
-    },
-
-    /**
-     * Retrieves domains that will expire within the next 30 days
-     * @async
-     * @memberof domainVerification
-     * @returns {Promise<DomainRecord[]>} Array of soon-to-expire domain objects
-     *
-     * @example
-     * const expiringDomains = await domainVerification.getExpiringDomains();
-     * if (expiringDomains.length > 0) {
-     *   console.log(`${expiringDomains.length} domains expiring soon`);
-     * }
-     */
-    async getExpiringDomains() {
-        const all = await this.getAllDomainsForVerification();
-        return all.expiring;
+    async getDomainReportState() {
+        const categorized = await this.getAllDomainsForVerification();
+        return {
+            available: categorized.needingVerification.filter(
+                (d) => d.status === DOMAIN_STATUS.AVAILABLE
+            ),
+            expired: categorized.expiredRegistered,
+            expiring: categorized.expiring,
+        };
     },
 
     /**
@@ -233,8 +206,8 @@ export const domainVerification = {
      * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
      *
      * @example
-     * const domains = await domainVerification.getDomainsNeedingVerification();
-     * const results = await domainVerification.verifyDomainsBatch(domains, {
+     * const { needingVerification } = await domainVerification.getAllDomainsForVerification();
+     * const results = await domainVerification.verifyDomainsBatch(needingVerification, {
      *   delayBetweenDomains: 100,
      *   batchSize: 5
      * });
@@ -289,8 +262,8 @@ export const domainVerification = {
      * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
      *
      * @example
-     * const expiredDomains = await domainVerification.getExpiredRegisteredDomains();
-     * const results = await domainVerification.verifyExpiredDomainsBatch(expiredDomains);
+     * const { expiredRegistered } = await domainVerification.getAllDomainsForVerification();
+     * const results = await domainVerification.verifyExpiredDomainsBatch(expiredRegistered);
      * if (results.available.length > 0) {
      *   console.log(`${results.available.length} expired domains are now available!`);
      *   // Send notifications or trigger alerts
@@ -325,5 +298,13 @@ export const domainVerification = {
  * @property {DomainRecord[]} needingVerification - Domains that need status verification
  * @property {DomainRecord[]} expiredRegistered - Expired domains still showing as registered
  * @property {DomainRecord[]} expiring - Domains expiring within 30 days
+ * @memberof module:DomainsServer
+ */
+
+/**
+ * @typedef {Object} DomainReportState
+ * @property {DomainRecord[]} available - Domains currently available
+ * @property {DomainRecord[]} expired - Expired domains still showing as registered
+ * @property {DomainRecord[]} expiring - Domains expiring within the warning window
  * @memberof module:DomainsServer
  */

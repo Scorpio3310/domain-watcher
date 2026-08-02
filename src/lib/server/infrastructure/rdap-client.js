@@ -19,8 +19,10 @@ const IANA_BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json";
 const BOOTSTRAP_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 const BOOTSTRAP_FETCH_TIMEOUT_MS = 15_000;
-/** Retry-After values above this are not worth blocking a batch for */
+/** Cap on how long a Retry-After header may delay the single 429 retry */
 const MAX_RETRY_AFTER_SECONDS = 5;
+/** Backoff before the single retry when no usable Retry-After is available */
+const RETRY_DELAY_MS = 2000;
 
 /**
  * Working RDAP servers missing from the IANA bootstrap (verified 2026-06).
@@ -194,29 +196,52 @@ const extractRegistrar = (entities) => {
 // ========================================
 
 /**
- * Fetches an RDAP URL, retrying once on 429 when Retry-After is short
+ * Waits for the given number of milliseconds
+ * @param {number} ms - Delay in milliseconds
+ * @returns {Promise<void>} Resolves after the delay
+ */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Fetches an RDAP URL with exactly ONE retry on transient failures:
+ * thrown fetch errors (timeout/abort/network), 429 (delayed by Retry-After
+ * capped at MAX_RETRY_AFTER_SECONDS, or RETRY_DELAY_MS when the header is
+ * missing/non-numeric) and 5xx responses. A registry hiccup on the single
+ * daily cron attempt would otherwise drop the domain from that day's report.
  * @param {string} url - Full RDAP query URL
- * @returns {Promise<Response>} Fetch response (redirects followed by default)
+ * @returns {Promise<Response>} Fetch response (redirects followed by default);
+ *   a second failed attempt is returned/thrown as-is for the caller to map
  */
 const rdapFetch = async (url) => {
-    /** @type {RequestInit} */
-    const options = {
-        headers: { accept: "application/rdap+json" },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    };
-    let response = await fetch(url, options);
+    // Fresh AbortSignal per attempt — a consumed signal cannot be reused
+    const attempt = () =>
+        fetch(url, {
+            headers: { accept: "application/rdap+json" },
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
 
-    if (response.status === 429) {
+    let response;
+    try {
+        response = await attempt();
+    } catch (error) {
+        console.warn(
+            `⚠️ RDAP fetch failed (${getErrorMessage(error)}), retrying once...`
+        );
+        await sleep(RETRY_DELAY_MS);
+        return attempt();
+    }
+
+    if (response.status === 429 || response.status >= 500) {
         const retryAfter = Number(response.headers.get("retry-after"));
-        if (retryAfter > 0 && retryAfter <= MAX_RETRY_AFTER_SECONDS) {
-            await new Promise((resolve) =>
-                setTimeout(resolve, retryAfter * 1000)
-            );
-            response = await fetch(url, {
-                ...options,
-                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-            });
-        }
+        const delayMs =
+            response.status === 429 && retryAfter > 0
+                ? Math.min(retryAfter, MAX_RETRY_AFTER_SECONDS) * 1000
+                : RETRY_DELAY_MS;
+        console.warn(
+            `⚠️ RDAP returned HTTP ${response.status}, retrying once in ${delayMs}ms...`
+        );
+        await sleep(delayMs);
+        return attempt();
     }
     return response;
 };
