@@ -7,7 +7,7 @@ import {
     getErrorMessage,
 } from "$lib/utils/helpers.js";
 
-/** @import { DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig, BatchVerificationResult } from "$lib/types" */
+/** @import { CheckFailure, DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig } from "$lib/types" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY
@@ -40,12 +40,15 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  */
 
 /**
- * Domain verification results gathered for notifications
+ * Domain verification results gathered for notifications.
+ * Section lists reflect post-check DB state (failed checks preserve the last
+ * known status), while failures come from this run's live batch results.
  * @typedef {Object} DomainCheckResult
  * @property {number} checked - Total number of domains verified via API
- * @property {DomainRecord[]} available - Domains that became available
+ * @property {DomainRecord[]} available - Domains currently available
  * @property {DomainRecord[]} expiring - Domains approaching expiration
  * @property {DomainRecord[]} expired - Domains that are expired but still registered
+ * @property {CheckFailure[]} failures - Checks that failed in this run
  */
 
 /**
@@ -56,7 +59,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {"skipped"|"executed"} action - Whether the run executed or was skipped
  * @property {string} [reason] - Reason for skipping (if action is "skipped")
  * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
- * @property {{checked: number, available: number, expiring: number, expired: number}} [domains] - Domain verification counts (if executed)
+ * @property {{checked: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain verification counts (if executed)
  * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
  */
 
@@ -153,6 +156,7 @@ export const cronNotifications = {
                     available: domains.available.length,
                     expiring: domains.expiring.length,
                     expired: domains.expired.length,
+                    failed: domains.failures.length,
                 },
                 notifications,
             };
@@ -229,6 +233,11 @@ export const cronNotifications = {
      * 2. Regular domains - standard availability verification
      * 3. Expiring domains - fetches domains approaching expiration
      *
+     * Report sections are read back from DB state AFTER the verification
+     * batches: failed checks preserve the last known status, so a transient
+     * lookup/DB failure can't silently drop a domain from the daily report.
+     * The failures list comes from this run's live batch results.
+     *
      * @returns {Promise<DomainCheckResult>} Comprehensive domain verification results
      *
      * @example
@@ -236,13 +245,9 @@ export const cronNotifications = {
      * console.log(`Checked ${results.checked} domains, found ${results.available.length} available`);
      */
     async checkDomains() {
-        // Get all domain data in parallel
-        const [expiredRegistered, domainsToCheck, expiringDomains] =
-            await Promise.all([
-                domainVerification.getExpiredRegisteredDomains(),
-                domainVerification.getDomainsNeedingVerification(),
-                domainVerification.getExpiringDomains(),
-            ]);
+        // ONE unified SELECT, partitioned in JS (was 3 identical queries)
+        const { expiredRegistered, needingVerification } =
+            await domainVerification.getAllDomainsForVerification();
 
         // Verify domains in parallel (if any exist)
         if (expiredRegistered.length > 0) {
@@ -250,9 +255,9 @@ export const cronNotifications = {
                 `🚨 Verifying ${expiredRegistered.length} expired domains...`
             );
         }
-        if (domainsToCheck.length > 0) {
+        if (needingVerification.length > 0) {
             console.log(
-                `📊 Verifying ${domainsToCheck.length} regular domains...`
+                `📊 Verifying ${needingVerification.length} regular domains...`
             );
         }
 
@@ -261,27 +266,31 @@ export const cronNotifications = {
                 ? domainVerification.verifyExpiredDomainsBatch(
                       expiredRegistered
                   )
-                : { checked: 0, available: [], stillRegistered: [] },
-            domainsToCheck.length > 0
-                ? domainVerification.verifyDomainsBatch(domainsToCheck)
-                : { checked: 0, available: [] },
+                : null,
+            needingVerification.length > 0
+                ? domainVerification.verifyDomainsBatch(needingVerification)
+                : null,
         ]);
+
+        // Post-check DB state drives the report sections
+        const reportState = await domainVerification.getDomainReportState();
 
         /** @type {DomainCheckResult} */
         const results = {
             checked:
-                (expiredResults.checked || 0) +
-                (verificationResults.checked || 0),
-            available: [
-                ...(expiredResults.available || []),
-                ...(verificationResults.available || []),
+                (expiredResults?.checked ?? 0) +
+                (verificationResults?.checked ?? 0),
+            available: reportState.available,
+            expiring: reportState.expiring,
+            expired: reportState.expired,
+            failures: [
+                ...(expiredResults?.failures ?? []),
+                ...(verificationResults?.failures ?? []),
             ],
-            expiring: expiringDomains,
-            expired: expiredResults.stillRegistered || [],
         };
 
         console.log(
-            `✅ Domains: ${results.checked} checked, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring`
+            `✅ Domains: ${results.checked} checked, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring, ${results.failures.length} failed`
         );
         return results;
     },
@@ -310,7 +319,7 @@ export const cronNotifications = {
             domains.expired.length;
 
         // Always send notifications, even if no domains to report
-        if (totalCount === 0) {
+        if (totalCount === 0 && domains.failures.length === 0) {
             console.log(
                 "📭 No domain updates today - sending 'all quiet' notification"
             );
@@ -338,6 +347,7 @@ export const cronNotifications = {
                         available: domains.available,
                         expiring: domains.expiring,
                         expired: domains.expired,
+                        failures: domains.failures,
                         totalCount,
                     }
                 );

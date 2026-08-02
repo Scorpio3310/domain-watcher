@@ -98,7 +98,8 @@ export const DOMAIN_QUERIES = {
     /**
      * Updates domain after WHOIS/availability check
      * @type {string}
-     * @description Complete domain status update with check counter increment
+     * @description Complete domain status update with check counter increment.
+     * Clears error_message — a definitive answer supersedes any earlier failure.
      * @param {number} status - Domain status (0=Not Checked, 1=Available, 2=Registered, etc.)
      * @param {string|null} expires - ISO date string or NULL for available domains
      * @param {string|null} raw_domain_data - JSON string with complete WHOIS response
@@ -106,10 +107,11 @@ export const DOMAIN_QUERIES = {
      * @returns {Object} Update result with meta.changes
      */
     UPDATE_DOMAIN: `
-        UPDATE domains 
-        SET status = ?, 
+        UPDATE domains
+        SET status = ?,
             expires = ?,
-            raw_domain_data = ?, 
+            raw_domain_data = ?,
+            error_message = NULL,
             check_count = check_count + 1,
             last_domain_checked = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
@@ -155,9 +157,30 @@ export const DOMAIN_QUERIES = {
      * @returns {Object} Update result with meta.changes
      */
     UPDATE_DOMAIN_ERROR: `
-        UPDATE domains 
-        SET status = 'error', 
+        UPDATE domains
+        SET status = 'error',
             error_message = ?,
+            check_count = check_count + 1,
+            last_domain_checked = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `,
+
+    /**
+     * Records a failed check WITHOUT destroying the last known definitive status
+     * @type {string}
+     * @description Used when a domain with a known status (available/registered)
+     * hits a transient failure (provider outage, rate limit, DB hiccup): the
+     * status/expires/raw_domain_data stay untouched so reports keep reflecting
+     * the last definitive answer, while the failure itself stays visible in
+     * error_message. Same parameter shape as UPDATE_DOMAIN_ERROR.
+     * @param {string} errorMessage - Error description for troubleshooting
+     * @param {number} domainId - Domain ID that failed the check
+     * @returns {Object} Update result with meta.changes
+     */
+    UPDATE_DOMAIN_CHECK_FAILED: `
+        UPDATE domains
+        SET error_message = ?,
             check_count = check_count + 1,
             last_domain_checked = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
@@ -193,46 +216,51 @@ export const DOMAIN_QUERIES = {
     /**
      * UNIFIED query for comprehensive domain monitoring (SINGLE DB CALL)
      * @type {string}
-     * @description Returns ALL domains needing attention with smart prioritization
+     * @description Returns ALL domains needing attention with smart prioritization.
+     * Must stay in sync with SELECT_DOMAINS_NEEDING_CHECK above: same status set
+     * AND same registered-with-NULL-expires inclusion (TLDs without public
+     * expiry data, e.g. .de/.ch via RDAP, would otherwise never be re-checked).
      * @returns {Array<Object>} Prioritized domains with verification flags and categories
      * @example
      * // Returns domains with these additional fields:
      * // - verification_priority: 1-6 (1=CRITICAL, 6=LOWEST)
      * // - is_expired_registered: 1/0 (registered but expired)
-     * // - needs_verification: 1/0 (available/error/unchecked)
+     * // - needs_verification: 1/0 (available/error/unchecked/registered-no-expiry)
      * // - is_expiring_soon: 1/0 (expires within 30 days)
      *
      * NOTE: the '+30 days' window below must stay in sync with
      * EXPIRY_WARNING_DAYS in $lib/constants/constants.js
      */
     SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION: `
-        SELECT 
+        SELECT
             id,
-            domain_name, 
-            status, 
+            domain_name,
+            status,
             expires,
             last_domain_checked,
             -- Smart prioritization for processing order
-            CASE 
+            CASE
                 WHEN expires < datetime('now') AND status = 'registered' THEN 1  -- CRITICAL: Expired registered
                 WHEN status = 'error' THEN 2                                      -- HIGH: Error retry
                 WHEN status = 'not_checked' THEN 3                               -- MEDIUM: Never checked
                 WHEN status = 'available' THEN 4                                 -- LOW: Re-check available
                 WHEN expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered' THEN 5  -- INFO: Expiring soon
-                ELSE 6                                                           -- LOWEST: Others
+                ELSE 6                                                           -- LOWEST: Registered without expiry data
             END as verification_priority,
             -- Category flags for easy filtering and processing
             CASE WHEN expires < datetime('now') AND status = 'registered' THEN 1 ELSE 0 END as is_expired_registered,
-            CASE WHEN status IN ('available', 'error', 'not_checked') THEN 1 ELSE 0 END as needs_verification,
+            CASE WHEN status IN ('available', 'error', 'not_checked') OR (status = 'registered' AND expires IS NULL) THEN 1 ELSE 0 END as needs_verification,
             CASE WHEN expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered' THEN 1 ELSE 0 END as is_expiring_soon
-        FROM domains 
-        WHERE 
+        FROM domains
+        WHERE
             -- CRITICAL: Expired registered domains
             (expires < datetime('now') AND status = 'registered')
             -- OR needs verification (available/error/unchecked)
             OR status IN ('available', 'error', 'not_checked')
             -- OR expiring within 30 days
             OR (expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered')
+            -- OR registered without expiry data (would otherwise be excluded forever)
+            OR (status = 'registered' AND expires IS NULL)
         ORDER BY verification_priority ASC, last_domain_checked ASC
     `,
 };

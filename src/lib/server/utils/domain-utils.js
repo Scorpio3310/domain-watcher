@@ -164,6 +164,67 @@ export const executeDomainQuery = async (queryKey, params) => {
 // DOMAIN VERIFICATION ENGINE
 // ========================================
 
+/** Backoff delays (ms) between DB write attempts on the verification path */
+const DB_RETRY_DELAYS_MS = [200, 500];
+
+/**
+ * Runs a DB operation with bounded retries to ride out transient D1 failures
+ * ("D1 DB storage operation exceeded timeout ..."). Retries on ANY throw —
+ * retrying a deterministic SQL error twice is harmless, while sniffing D1
+ * message strings would be brittle.
+ * @template T
+ * @param {() => Promise<T>} operation - DB operation to execute
+ * @returns {Promise<T>} Result of the first successful attempt
+ * @throws {Error} The final attempt's error when all retries are exhausted
+ */
+const withDbRetry = async (operation) => {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (attempt >= DB_RETRY_DELAYS_MS.length) throw error;
+            console.warn(
+                `⚠️ DB write failed (${getErrorMessage(error)}), retry ${
+                    attempt + 1
+                }/${DB_RETRY_DELAYS_MS.length}...`
+            );
+            await new Promise((resolve) =>
+                setTimeout(resolve, DB_RETRY_DELAYS_MS[attempt])
+            );
+        }
+    }
+};
+
+/**
+ * Persists a failed check without destroying known domain state.
+ * Domains with a definitive status (available/registered) keep it — the
+ * failure lands in error_message only, so a transient provider or DB hiccup
+ * can't knock an available domain out of the daily report. Domains that never
+ * had a definitive answer (not_checked/error) become 'error'.
+ * Best-effort: its own DB errors are logged, never rethrown.
+ * @param {DomainRecord} domain - Domain whose check failed (pre-check row)
+ * @param {string} errorMessage - Failure reason to store
+ * @returns {Promise<void>} Resolves once bookkeeping is done (or abandoned)
+ */
+const recordCheckFailure = async (domain, errorMessage) => {
+    const hasKnownStatus =
+        domain.status === DOMAIN_STATUS.AVAILABLE ||
+        domain.status === DOMAIN_STATUS.REGISTERED;
+    const queryKey = hasKnownStatus
+        ? "UPDATE_DOMAIN_CHECK_FAILED"
+        : "UPDATE_DOMAIN_ERROR";
+    try {
+        await withDbRetry(() =>
+            executeSql(DOMAIN_QUERIES[queryKey], [errorMessage, domain.id])
+        );
+    } catch (dbError) {
+        console.error(
+            `❌ Failed to record check failure for ${domain.domain_name}:`,
+            dbError
+        );
+    }
+};
+
 /**
  * Core verification engine for domain status checking and batch processing.
  * Provides comprehensive domain verification capabilities with error handling,
@@ -176,8 +237,11 @@ export const verificationEngine = {
     /**
      * Verifies the availability status of a single domain through the
      * configured lookup provider (RDAP or WhoisJSON).
-     * Handles both successful verifications and error cases, updating the database
-     * with current domain status and expiration information.
+     * Only a definitive lookup answer updates the stored status; failed checks
+     * on domains with a known status (available/registered) preserve that
+     * state and are recorded in error_message via recordCheckFailure. If the
+     * lookup succeeded but the status write keeps failing, the outer catch
+     * records the failure and the OLD state stands (next run repairs it).
      *
      * @async
      * @memberof module:DomainUtils.verificationEngine
@@ -216,12 +280,14 @@ export const verificationEngine = {
 
             if (result.status === 200 && result.data) {
                 // ALWAYS save full domain data - not just availability
-                await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN, [
-                    result.data.status || DOMAIN_STATUS.ERROR,
-                    result.data.expires || null,
-                    JSON.stringify(result.data),
-                    domain.id,
-                ]);
+                await withDbRetry(() =>
+                    executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN, [
+                        result.data.status || DOMAIN_STATUS.ERROR,
+                        result.data.expires || null,
+                        JSON.stringify(result.data),
+                        domain.id,
+                    ])
+                );
 
                 const wasAvailable = result.data.status === "available";
                 const isStillRegistered = result.data.status === "registered";
@@ -244,11 +310,7 @@ export const verificationEngine = {
                 };
             } else {
                 const errorMessage = getErrorMessage(result, "Unknown error");
-                // Mark as error
-                await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
-                    errorMessage,
-                    domain.id,
-                ]);
+                await recordCheckFailure(domain, errorMessage);
 
                 console.log(
                     `❌ ERROR: ${domain.domain_name} - ${errorMessage}`
@@ -262,12 +324,7 @@ export const verificationEngine = {
             }
         } catch (error) {
             const errorMessage = getErrorMessage(error, "Unknown error");
-
-            // Mark as error
-            await executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
-                errorMessage,
-                domain.id,
-            ]);
+            await recordCheckFailure(domain, errorMessage);
 
             console.error(`❌ ERROR: ${domain.domain_name} - ${errorMessage}`);
 
@@ -327,6 +384,7 @@ export const verificationEngine = {
                 stillRegistered: [],
                 errors: 0,
                 errorMessages: [],
+                failures: [],
                 sources: { rdap: 0, whoisjson: 0 },
             };
         }
@@ -345,6 +403,7 @@ export const verificationEngine = {
             stillRegistered: [],
             errors: 0,
             errorMessages: [],
+            failures: [],
             sources: { rdap: 0, whoisjson: 0 },
         };
 
@@ -401,6 +460,10 @@ export const verificationEngine = {
                         results.errorMessages.push(
                             `${verifyResult.domain}: ${verifyResult.error}`
                         );
+                        results.failures.push({
+                            domain_name: verifyResult.domain,
+                            error: verifyResult.error ?? "Unknown error",
+                        });
                     }
                 } else {
                     // Handle promise rejection
@@ -409,6 +472,10 @@ export const verificationEngine = {
                     results.errorMessages.push(
                         `${domainName}: Promise rejected - ${settledResult.reason}`
                     );
+                    results.failures.push({
+                        domain_name: domainName,
+                        error: getErrorMessage(settledResult.reason),
+                    });
                     console.error(
                         `🚨 Promise rejected for ${domainName}:`,
                         settledResult.reason

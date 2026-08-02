@@ -7,9 +7,10 @@ import {
     getDaysUntilExpiry,
     getQuietMessage,
     getReportTimestamp,
+    truncateError,
 } from "./shared.js";
 
-/** @import { DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
+/** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
 
 /**
  * Resend Email notification service for formatting and sending messages
@@ -40,13 +41,17 @@ export const resendNotifier = {
 
             const emailContent = this.formatEmailContent(domainUpdates);
 
+            const failureCount = domainUpdates.failures?.length ?? 0;
+            const updateCount = domainUpdates.totalCount + failureCount;
             const emailData = {
                 from: settings.from_email,
                 to: [settings.to_email],
                 subject:
-                    domainUpdates.totalCount === 0
+                    updateCount === 0
                         ? "🌐 Domain Watcher: All quiet on the digital front! 🤠"
-                        : `🌐 Domain Watcher Report - ${domainUpdates.totalCount} updates need your attention!`,
+                        : `🌐 Domain Watcher Report - ${updateCount} update${
+                              updateCount !== 1 ? "s" : ""
+                          } need your attention!`,
                 html: emailContent.html,
                 text: emailContent.text,
             };
@@ -134,6 +139,7 @@ export const resendNotifier = {
             available = [],
             expiring = [],
             expired = [],
+            failures = [],
             totalCount,
         } = domainUpdates;
         const timestamp = getReportTimestamp();
@@ -143,6 +149,7 @@ export const resendNotifier = {
             available,
             expiring,
             expired,
+            failures,
         });
 
         // Generate text version
@@ -150,6 +157,7 @@ export const resendNotifier = {
             available,
             expiring,
             expired,
+            failures,
         });
 
         return { html, text };
@@ -159,13 +167,13 @@ export const resendNotifier = {
      * Generate modern HTML email content with new template
      * @param {string} timestamp - Human-readable report timestamp
      * @param {number} totalCount - Total number of domain updates
-     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[]}} domainGroups - Categorized domains
+     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[], failures: CheckFailure[]}} domainGroups - Categorized domains + failed checks
      * @returns {string} HTML email content
      */
     generateHtmlContent(
         timestamp,
         totalCount,
-        { available, expiring, expired }
+        { available, expiring, expired, failures }
     ) {
         const sections = [
             {
@@ -240,15 +248,51 @@ export const resendNotifier = {
             })
             .join("");
 
+        // Failed checks are shown explicitly — a lookup/DB hiccup must never
+        // masquerade as a quiet day
+        const failureItems = failures
+            .slice(0, 20)
+            .map(
+                (failure) =>
+                    `<li><strong>${escapeHtml(
+                        failure.domain_name
+                    )}</strong> - ${escapeHtml(
+                        truncateError(failure.error)
+                    )}</li>`
+            )
+            .join("");
+
+        const failuresMoreText =
+            failures.length > 20
+                ? `<p style="color: #1a1a1a; font-style: italic; margin: 0; font-size: 13px; opacity: 0.5;">... and ${
+                      failures.length - 20
+                  } more check failures</p>`
+                : "";
+
+        const failuresHtml =
+            failures.length > 0
+                ? `
+                    <div style="font-size: 14px; background-color: #EFEFEF; padding: 16px; border-radius: 16px; margin-bottom: 12px;">
+                        <p style="margin: 0; font-weight: 600; color: #5A5A5A;">
+                            ⛔ Check Failures (${failures.length})
+                        </p>
+                        <ul style="margin: 0; padding-left: 20px; color: #1A1A1A;">
+                            ${failureItems}
+                        </ul>
+                        ${failuresMoreText}
+                    </div>
+                `
+                : "";
+
         const noUpdatesContent =
-            totalCount === 0
+            totalCount === 0 && failures.length === 0
                 ? `
             <div style="text-align: center; padding: 40px 20px; color: #1A1A1A;">
                 <p style="font-size: 18px; margin: 0 0 8px 0; font-weight: 600;">
                     ${getQuietMessage()}
                 </p>
                 <p style="font-size: 14px; margin: 0; opacity: 0.7; line-height: 1.4;">
-                    Your domain portfolio is having a peaceful day - no expired domains, no urgent renewals, just pure digital harmony. 
+                    Your domain portfolio is having a peaceful day - no expired domains, no urgent renewals, just pure digital harmony.
                 </p>
             </div>
         `
@@ -278,12 +322,18 @@ export const resendNotifier = {
             <p style="color: #1A1A1A; font-size: 14px; margin-top: 12px; margin-bottom: 0px; opacity: 0.7; line-height: 1.4;">
                 Date: ${timestamp} • ${totalCount} domain update${
             totalCount !== 1 ? "s" : ""
+        }${
+            failures.length > 0
+                ? ` • ${failures.length} check failure${
+                      failures.length !== 1 ? "s" : ""
+                  }`
+                : ""
         }
             </p>
             <hr style="border: 1px dashed #1A1A1A; opacity: 0.10; margin: 16px 0px"/>
-            
-            ${totalCount > 0 ? sectionsHtml : noUpdatesContent}
-            
+
+            ${sectionsHtml}${failuresHtml}${noUpdatesContent}
+
             <hr style="border: 1px dashed #1A1A1A; opacity: 0.10; margin: 16px 0px"/>
             <p style="color: #1A1A1A; font-size: 14px; line-height: 1.5; margin: 0; opacity: 0.5;">
                 This is an automated report from your Domain Watcher system
@@ -299,13 +349,13 @@ export const resendNotifier = {
      * Generate plain text email content
      * @param {string} timestamp - Human-readable report timestamp
      * @param {number} totalCount - Total number of domain updates
-     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[]}} domainGroups - Categorized domains
+     * @param {{available: DomainRecord[], expiring: DomainRecord[], expired: DomainRecord[], failures: CheckFailure[]}} domainGroups - Categorized domains + failed checks
      * @returns {string} Plain text email content
      */
     generateTextContent(
         timestamp,
         totalCount,
-        { available, expiring, expired }
+        { available, expiring, expired, failures }
     ) {
         const sections = [
             { domains: expired, title: "🚨 EXPIRED BUT STILL REGISTERED" },
@@ -356,18 +406,43 @@ export const resendNotifier = {
             })
             .join("\n" + "=".repeat(50) + "\n");
 
-        return `
-Domain Watcher - Daily Report
-${timestamp} • ${totalCount} domain update${totalCount !== 1 ? "s" : ""}
+        const failureList = failures
+            .slice(0, 20)
+            .map(
+                (failure) =>
+                    `• ${failure.domain_name} - ${truncateError(failure.error)}`
+            )
+            .join("\n");
 
-${"=".repeat(50)}
-${
-    totalCount > 0
-        ? sectionsText
-        : `${getQuietMessage()}
+        const failuresMoreText =
+            failures.length > 20
+                ? `\n... and ${failures.length - 20} more check failures`
+                : "";
+
+        const failuresText =
+            failures.length > 0
+                ? `\n⛔ CHECK FAILURES (${failures.length}):\n${failureList}${failuresMoreText}\n`
+                : "";
+
+        const quietText =
+            totalCount === 0 && failures.length === 0
+                ? `${getQuietMessage()}
 
 Your domain portfolio is having a peaceful day - no expired domains, no urgent renewals, just pure digital harmony.`
-}
+                : "";
+
+        return `
+Domain Watcher - Daily Report
+${timestamp} • ${totalCount} domain update${totalCount !== 1 ? "s" : ""}${
+            failures.length > 0
+                ? ` • ${failures.length} check failure${
+                      failures.length !== 1 ? "s" : ""
+                  }`
+                : ""
+        }
+
+${"=".repeat(50)}
+${totalCount > 0 ? sectionsText : ""}${failuresText}${quietText}
 
 ${"=".repeat(50)}
 
