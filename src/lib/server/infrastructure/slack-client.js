@@ -1,11 +1,17 @@
 /** @import { ServiceResult, SlackConfig } from '#lib/types.js' */
 
+import { PUBLIC_TIMEZONE } from "$app/env/public";
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { isDemo } from "#lib/utils/helpers.js";
 import { SLACK_CONNECTION_STATUS } from "#lib/constants/constants.js";
-import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
+import {
+    formatHumanDate,
+    getErrorMessage,
+    maskApiKey,
+} from "#lib/utils/helpers.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
+import { truncateError } from "#lib/server/notifications/providers/shared.js";
 
 // ========================================
 // CORE UTILITIES
@@ -34,6 +40,23 @@ const createSlackConfiguration = ({
     version,
 });
 
+/**
+ * Timezone the scheduled notification time is interpreted in (same fallback
+ * as the cron's schedule check)
+ */
+const NOTIFICATION_TIMEZONE = PUBLIC_TIMEZONE || "UTC";
+
+/**
+ * Short, single-line detail from a failed webhook response. The raw body is
+ * never passed through to the UI (it can be large or an HTML error page).
+ * @param {string} body - Response body text
+ * @returns {string} Collapsed, truncated detail ("" for empty or HTML bodies)
+ */
+const summarizeErrorBody = (body) => {
+    const detail = body.replace(/\s+/g, " ").trim();
+    return detail.startsWith("<") ? "" : truncateError(detail, 100);
+};
+
 // ========================================
 // SLACK WEBHOOK TESTING
 // ========================================
@@ -53,6 +76,8 @@ const createSlackConfiguration = ({
  */
 export async function testSlackWebhook(webhook, notificationTime) {
     try {
+        const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+
         // Create test message
         const testMessage = {
             text: "🚀 Domain Watcher - Configuration Verified",
@@ -61,7 +86,7 @@ export async function testSlackWebhook(webhook, notificationTime) {
                     type: "section",
                     text: {
                         type: "mrkdwn",
-                        text: `*Domain Watcher Test ✨*\n\nYour notifications just passed the vibe check!\nThis notification was sent at ${new Date().toLocaleString()}\n\n*Scheduled notification time:* ${notificationTime}`,
+                        text: `*Domain Watcher Test ✨*\n\nYour notifications just passed the vibe check!\nThis notification was sent at ${sentAt} (${NOTIFICATION_TIMEZONE})\n\n*Scheduled notification time:* ${notificationTime} (${NOTIFICATION_TIMEZONE})`,
                     },
                 },
                 {
@@ -98,9 +123,12 @@ export async function testSlackWebhook(webhook, notificationTime) {
                 response.status,
                 errorText
             );
+            const detail = summarizeErrorBody(errorText);
             return {
                 status: response.status,
-                message: `Slack API error: ${errorText}`,
+                message: `Slack API error (${response.status})${
+                    detail ? `: ${detail}` : ""
+                }`,
             };
         }
     } catch (error) {

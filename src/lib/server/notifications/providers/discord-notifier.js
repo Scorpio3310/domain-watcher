@@ -9,6 +9,81 @@ import {
 
 /** @import { DomainUpdates, NotifierResult, DiscordEmbed } from "#lib/types.js" */
 
+// Discord rejects the whole message (400) when an embed description exceeds
+// 4096 characters or all embeds together exceed 6000 characters (titles +
+// descriptions). Titles here are short fixed strings, the report uses at most
+// 5 embeds (cap 10) and no fields (1024 / 25 caps), so only the list
+// descriptions need trimming: they share one running budget (with headroom).
+const DISCORD_DESCRIPTION_LIMIT = 4096;
+const DISCORD_TOTAL_BUDGET = 5900;
+const MAX_LIST_LINES = 20;
+
+/**
+ * Join list lines, stopping before the text would exceed the character budget
+ * @param {string[]} lines - Rendered list lines, in display order
+ * @param {number} maxChars - Character budget for the joined text
+ * @returns {{text: string, shown: number}} Joined text and how many lines fit
+ */
+const joinLinesWithinLimit = (lines, maxChars) => {
+    let text = "";
+    let shown = 0;
+    for (const line of lines) {
+        const next = shown === 0 ? line : `${text}\n${line}`;
+        if (next.length > maxChars) break;
+        text = next;
+        shown++;
+    }
+    return { text, shown };
+};
+
+/**
+ * Render a list embed description within a character budget, ending with
+ * "... and N more" when items had to be left out
+ * @param {{lines: string[], total: number, label: string}} list - Rendered lines (first MAX_LIST_LINES), total item count and item label
+ * @param {number} maxChars - Character budget for the description
+ * @returns {string} Embed description
+ */
+const formatListDescription = ({ lines, total, label }, maxChars) => {
+    /** @param {number} hidden */
+    const formatMore = (hidden) => `_... and ${hidden} more ${label}_`;
+
+    const fullList = lines.join("\n");
+    const full =
+        total > lines.length
+            ? `${fullList}\n${formatMore(total - lines.length)}`
+            : fullList;
+    if (full.length <= maxChars) return full;
+
+    // Reserve room for the suffix, sized for the largest possible count
+    const { text, shown } = joinLinesWithinLimit(
+        lines,
+        maxChars - formatMore(total).length - 1
+    );
+    const moreText = formatMore(total - shown);
+    return text ? `${text}\n${moreText}` : moreText;
+};
+
+/**
+ * Split a character budget across sections, max-min fair: sections that fit
+ * keep everything they need, the rest share what is left evenly
+ * @param {number[]} needs - Characters each section needs to be shown in full
+ * @param {number} budget - Total characters available
+ * @returns {number[]} Characters allocated to each section (same order)
+ */
+const allocateBudget = (needs, budget) => {
+    const allocations = needs.map(() => 0);
+    let remaining = budget;
+    needs
+        .map((need, index) => ({ need, index }))
+        .sort((a, b) => a.need - b.need)
+        .forEach(({ need, index }, position, sorted) => {
+            const share = Math.floor(remaining / (sorted.length - position));
+            allocations[index] = Math.min(need, share);
+            remaining -= allocations[index];
+        });
+    return allocations;
+};
+
 /**
  * Discord notification service for formatting and sending messages
  */
@@ -73,22 +148,28 @@ export const discordNotifier = {
         } = domainUpdates;
         const timestamp = getReportTimestamp();
 
+        const headerTitle = "Domain Detective 🕵️ - Daily Report";
+        const headerDescription = `Date: ${timestamp} • ${totalCount} domain update${
+            totalCount !== 1 ? "s" : ""
+        }${
+            failures.length > 0
+                ? ` • ${failures.length} check failure${
+                      failures.length !== 1 ? "s" : ""
+                  }`
+                : ""
+        }`;
+
         /** @type {DiscordEmbed[]} */
         const embeds = [
             {
-                title: "Domain Detective 🕵️ - Daily Report",
-                description: `Date: ${timestamp} • ${totalCount} domain update${
-                    totalCount !== 1 ? "s" : ""
-                }${
-                    failures.length > 0
-                        ? ` • ${failures.length} check failure${
-                              failures.length !== 1 ? "s" : ""
-                          }`
-                        : ""
-                }`,
+                title: headerTitle,
+                description: headerDescription,
                 color: 0x1a1a1a,
             },
         ];
+
+        /** @type {{title: string, lines: string[], total: number, label: string, color: number}[]} */
+        const lists = [];
 
         // Add each section as its own colored embed if it has domains
         const sections = [
@@ -115,9 +196,9 @@ export const discordNotifier = {
         sections.forEach(({ domains, title, color, urgent }) => {
             if (domains.length === 0) return;
 
-            const domainList = domains
-                .slice(0, 20)
-                .map((domain) => {
+            lists.push({
+                title: `${title} (${domains.length})`,
+                lines: domains.slice(0, MAX_LIST_LINES).map((domain) => {
                     if (urgent && domain.expires) {
                         const daysExpired = Math.abs(
                             getDaysUntilExpiry(domain.expires)
@@ -141,17 +222,9 @@ export const discordNotifier = {
                     }
 
                     return `• \`${domain.domain_name}\``;
-                })
-                .join("\n");
-
-            const moreText =
-                domains.length > 20
-                    ? `\n_... and ${domains.length - 20} more domains_`
-                    : "";
-
-            embeds.push({
-                title: `${title} (${domains.length})`,
-                description: `${domainList}${moreText}`,
+                }),
+                total: domains.length,
+                label: "domains",
                 color,
             });
         });
@@ -159,27 +232,45 @@ export const discordNotifier = {
         // Failed checks are shown explicitly — a lookup/DB hiccup must never
         // masquerade as a quiet day
         if (failures.length > 0) {
-            const failureList = failures
-                .slice(0, 20)
-                .map(
-                    (failure) =>
-                        `• \`${failure.domain_name}\` - ${truncateError(
-                            failure.error
-                        )}`
-                )
-                .join("\n");
-
-            const moreText =
-                failures.length > 20
-                    ? `\n_... and ${failures.length - 20} more check failures_`
-                    : "";
-
-            embeds.push({
+            lists.push({
                 title: `⛔ Check Failures (${failures.length})`,
-                description: `${failureList}${moreText}`,
+                lines: failures
+                    .slice(0, MAX_LIST_LINES)
+                    .map(
+                        (failure) =>
+                            `• \`${failure.domain_name}\` - ${truncateError(
+                                failure.error
+                            )}`
+                    ),
+                total: failures.length,
+                label: "check failures",
                 color: 0x999999,
             });
         }
+
+        // Header and list titles are fixed costs; the list descriptions share
+        // whatever is left of the total budget
+        const fixedChars =
+            headerTitle.length +
+            headerDescription.length +
+            lists.reduce((sum, list) => sum + list.title.length, 0);
+        const allocations = allocateBudget(
+            lists.map((list) =>
+                Math.min(
+                    formatListDescription(list, Infinity).length,
+                    DISCORD_DESCRIPTION_LIMIT
+                )
+            ),
+            DISCORD_TOTAL_BUDGET - fixedChars
+        );
+
+        lists.forEach((list, index) => {
+            embeds.push({
+                title: list.title,
+                description: formatListDescription(list, allocations[index]),
+                color: list.color,
+            });
+        });
 
         // If no domains to report, add a fun "all quiet" message
         if (totalCount === 0 && failures.length === 0) {

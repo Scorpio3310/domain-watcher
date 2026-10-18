@@ -9,6 +9,36 @@ import {
 
 /** @import { DomainUpdates, NotifierResult, SlackBlock } from "#lib/types.js" */
 
+// Slack rejects the whole message (400 invalid_blocks) when a single section
+// text exceeds 3000 characters or the message has more than 50 blocks, so
+// lists are cut to a character budget (with headroom) instead of a line count
+const SLACK_TEXT_BUDGET = 2800;
+const SLACK_MAX_BLOCKS = 50;
+const MAX_LIST_LINES = 20;
+
+/**
+ * Join list lines, stopping before the text would exceed the character budget
+ * @param {string[]} lines - Rendered list lines, in display order
+ * @param {number} maxChars - Character budget for the joined text
+ * @returns {{text: string, shown: number}} Joined text and how many lines fit
+ */
+const joinLinesWithinLimit = (lines, maxChars) => {
+    let text = "";
+    let shown = 0;
+    for (const line of lines) {
+        const next = shown === 0 ? line : `${text}\n${line}`;
+        if (next.length > maxChars) break;
+        text = next;
+        shown++;
+    }
+
+    // A section needs non-empty text: cut an oversized first line instead
+    if (shown === 0 && lines.length > 0)
+        return { text: truncateError(lines[0], maxChars), shown: 1 };
+
+    return { text, shown };
+};
+
 /**
  * Slack notification service for formatting and sending messages
  */
@@ -134,9 +164,8 @@ export const slackNotifier = {
                 },
             });
 
-            const domainList = domains
-                .slice(0, 20)
-                .map((domain) => {
+            const { text: domainList, shown } = joinLinesWithinLimit(
+                domains.slice(0, MAX_LIST_LINES).map((domain) => {
                     if (urgent && domain.expires) {
                         const daysExpired = Math.abs(
                             getDaysUntilExpiry(domain.expires)
@@ -160,22 +189,23 @@ export const slackNotifier = {
                     }
 
                     return `• \`${domain.domain_name}\``;
-                })
-                .join("\n");
+                }),
+                SLACK_TEXT_BUDGET
+            );
 
             blocks.push({
                 type: "section",
                 text: { type: "mrkdwn", text: domainList },
             });
 
-            if (domains.length > 20) {
+            if (domains.length > shown) {
                 blocks.push({
                     type: "context",
                     elements: [
                         {
                             type: "mrkdwn",
                             text: `... and ${
-                                domains.length - 20
+                                domains.length - shown
                             } more ${title.toLowerCase()} domains`,
                         },
                     ],
@@ -198,29 +228,31 @@ export const slackNotifier = {
                 },
             });
 
-            const failureList = failures
-                .slice(0, 20)
-                .map(
-                    (failure) =>
-                        `• \`${failure.domain_name}\` - ${truncateError(
-                            failure.error
-                        )}`
-                )
-                .join("\n");
+            const { text: failureList, shown } = joinLinesWithinLimit(
+                failures
+                    .slice(0, MAX_LIST_LINES)
+                    .map(
+                        (failure) =>
+                            `• \`${failure.domain_name}\` - ${truncateError(
+                                failure.error
+                            )}`
+                    ),
+                SLACK_TEXT_BUDGET
+            );
 
             blocks.push({
                 type: "section",
                 text: { type: "mrkdwn", text: failureList },
             });
 
-            if (failures.length > 20) {
+            if (failures.length > shown) {
                 blocks.push({
                     type: "context",
                     elements: [
                         {
                             type: "mrkdwn",
                             text: `... and ${
-                                failures.length - 20
+                                failures.length - shown
                             } more check failures`,
                         },
                     ],
@@ -249,6 +281,10 @@ export const slackNotifier = {
                 ]
             });
         }
+
+        // The layout above stays far below the cap (about 20 blocks); this only
+        // guards against a future section getting the whole report rejected
+        if (blocks.length > SLACK_MAX_BLOCKS) blocks.length = SLACK_MAX_BLOCKS;
 
         return {
             text:

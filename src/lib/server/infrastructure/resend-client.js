@@ -1,10 +1,15 @@
 /** @import { ServiceResult, ResendConfig } from '#lib/types.js' */
 
+import { PUBLIC_TIMEZONE } from "$app/env/public";
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { isDemo } from "#lib/utils/helpers.js";
 import { RESEND_CONNECTION_STATUS } from "#lib/constants/constants.js";
-import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
+import {
+    formatHumanDate,
+    getErrorMessage,
+    maskApiKey,
+} from "#lib/utils/helpers.js";
 import { Resend } from "resend";
 import { validateDemoMode } from "#lib/server/utils/access.js";
 
@@ -40,6 +45,12 @@ const createResendConfiguration = ({
     connection_verified_at: verifiedAt,
     version,
 });
+
+/**
+ * Timezone the scheduled notification time is interpreted in (same fallback
+ * as the cron's schedule check)
+ */
+const NOTIFICATION_TIMEZONE = PUBLIC_TIMEZONE || "UTC";
 
 // ========================================
 // RESEND EMAIL TESTING
@@ -90,6 +101,8 @@ export async function testResendEmail(
         // Initialize Resend client
         const resend = new Resend(apiKey);
 
+        const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+
         // Create enhanced HTML email template
         const htmlTemplate = `
 <!DOCTYPE html>
@@ -120,13 +133,13 @@ export async function testResendEmail(
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
             >
                 <p style="opacity: 0.5; margin: 0;">Send at:</p>
-                <p style="margin: 0;">${new Date().toLocaleString()}</p>
+                <p style="margin: 0;">${sentAt} (${NOTIFICATION_TIMEZONE})</p>
             </div>
             <div
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
             >
                 <p style="opacity: 0.5; margin: 0;">Scheduled notification time:</p>
-                <p style="margin: 0;">${notificationTime}</p>
+                <p style="margin: 0;">${notificationTime} (${NOTIFICATION_TIMEZONE})</p>
             </div>
             <div
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
@@ -142,7 +155,7 @@ export async function testResendEmail(
             </div>
             <hr style="border: 1px dashed #1A1A1A; opacity: 0.10; margin: 16px 0px"/>
             <p style="color: #1A1A1A; font-size: 14px; line-height: 1.5; margin: 0;">
-                You're all set to catch those domain alerts at ${notificationTime} daily. No more missed renewals on our watch!
+                You're all set to catch those domain alerts at ${notificationTime} (${NOTIFICATION_TIMEZONE}) daily. No more missed renewals on our watch!
             </p>
         </div>
     </div>
@@ -162,12 +175,12 @@ Domain Watcher Test ✨
 Your notifications just passed the vibe check!
 
 Test Details:
-• Sent at: ${new Date().toLocaleString()}
-• Notification time: ${notificationTime}
+• Sent at: ${sentAt} (${NOTIFICATION_TIMEZONE})
+• Notification time: ${notificationTime} (${NOTIFICATION_TIMEZONE})
 • From: ${fromEmail}
 • To: ${toEmail}
 
-You're all set to catch those domain alerts at ${notificationTime} daily. No more missed renewals on our watch!
+You're all set to catch those domain alerts at ${notificationTime} (${NOTIFICATION_TIMEZONE}) daily. No more missed renewals on our watch!
 
 This is an automated test email from Domain Watcher.
             `.trim(),
