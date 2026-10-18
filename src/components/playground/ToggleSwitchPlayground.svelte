@@ -161,7 +161,7 @@
     {#each sizes as size (size)}
         <div class="mb-20">
             <h2
-                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
             >
                 {size} Size Toggles
             </h2>
@@ -170,7 +170,7 @@
                 <div class="mb-8">
                     <h3 class="text-xl mb-4 flex items-center gap-2">
                         <span
-                            class="bg-blue/15 text-blue px-3 py-1 rounded-full text-sm font-medium"
+                            class="bg-blue/15 text-blue-ink px-3 py-1 rounded-full text-sm font-medium"
                         >
                             {toggleType.label}
                         </span>
@@ -190,7 +190,7 @@
                                         test.uniqueId
                                     )}
                                     <div
-                                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                                     >
                                         <div
                                             class="flex flex-col items-center gap-2"
@@ -239,7 +239,7 @@
     <!-- Disabled state examples -->
     <div class="mb-12">
         <h2
-            class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+            class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
         >
             Disabled States
         </h2>
@@ -255,7 +255,7 @@
                 >
                     {#each variants as variant (variant)}
                         <div
-                            class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                            class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                         >
                             <div class="flex flex-col items-center gap-2">
                                 <span class="text-sm font-medium"
@@ -288,7 +288,7 @@
 
     <!-- Interactive Testing Section -->
     <div class="mb-6 bg-blue/10 p-6 rounded-2xl">
-        <h2 class="text-2xl font-medium text-blue mb-6">Interactive Testing</h2>
+        <h2 class="text-2xl font-medium text-blue-ink mb-6">Interactive Testing</h2>
         <p class="opacity-70 mb-4">
             These toggles are bound to reactive variables. Toggle them and watch
             the state change!
@@ -297,7 +297,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Primary Toggle -->
             <div class="bg-white p-4 rounded-xl">
-                <h4 class="font-medium text-blue mb-3">Primary Toggle</h4>
+                <h4 class="font-medium text-blue-ink mb-3">Primary Toggle</h4>
                 <div class="flex items-center justify-between">
                     <ToggleSwitch
                         id="interactive-primary"
@@ -314,7 +314,7 @@
                         <div
                             class="text-sm font-medium {primaryToggle
                                 ? 'text-green'
-                                : 'text-red'}"
+                                : 'text-red-ink'}"
                         >
                             {primaryToggle ? "Enabled" : "Disabled"}
                         </div>
@@ -327,7 +327,7 @@
 
             <!-- Secondary Toggle -->
             <div class="bg-white p-4 rounded-xl">
-                <h4 class="font-medium text-blue mb-3">Secondary Toggle</h4>
+                <h4 class="font-medium text-blue-ink mb-3">Secondary Toggle</h4>
                 <div class="flex items-center justify-between">
                     <ToggleSwitch
                         id="interactive-secondary"
@@ -344,7 +344,7 @@
                         <div
                             class="text-sm font-medium {secondaryToggle
                                 ? 'text-green'
-                                : 'text-red'}"
+                                : 'text-red-ink'}"
                         >
                             {secondaryToggle ? "Enabled" : "Disabled"}
                         </div>
@@ -359,7 +359,7 @@
 
     <!-- Summary -->
     <div class="bg-blue/10 p-6 rounded-2xl">
-        <h3 class="text-lg font-medium text-blue mb-4">Test Summary</h3>
+        <h3 class="text-lg font-medium text-blue-ink mb-4">Test Summary</h3>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <h4 class="font-medium text-black mb-2">Basic Properties:</h4>

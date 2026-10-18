@@ -6,6 +6,14 @@
     const sizes = ["sm", "md", "lg"];
     /** @type {('primary'|'secondary')[]} */
     const variants = ["primary", "secondary"];
+
+    // Complete class strings (not interpolated) so Tailwind's scanner sees them
+    /** @type {Record<string, string>} */
+    const variantBadgeClasses = {
+        primary: "bg-blue-100 text-blue-800 dark:bg-blue/15 dark:text-blue-ink",
+        secondary: "bg-gray-100 text-gray-800 dark:bg-black/10 dark:text-black/80",
+    };
+
     const iconCombinations = [
         { checked: "iconoir:check", unchecked: "" },
         { checked: "iconoir:check", unchecked: "iconoir:circle" },
@@ -352,19 +360,19 @@
             </div>
             <div class="flex gap-2">
                 <button
-                    class="px-4 py-2 bg-blue text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    class="px-4 py-2 bg-blue text-snow rounded-lg hover:bg-blue-700 transition-colors"
                     onclick={logAllValues}
                 >
                     Log All Values
                 </button>
                 <button
-                    class="px-4 py-2 bg-green text-white rounded-lg hover:bg-green-700 transition-colors"
+                    class="px-4 py-2 bg-green text-snow rounded-lg hover:bg-green-700 transition-colors"
                     onclick={randomizeAllValues}
                 >
                     Randomize All
                 </button>
                 <button
-                    class="px-4 py-2 bg-red text-white rounded-lg hover:bg-red-700 transition-colors"
+                    class="px-4 py-2 bg-red dark:bg-red-600 text-snow rounded-lg hover:bg-red-700 transition-colors"
                     onclick={resetAllValues}
                 >
                     Reset All
@@ -375,7 +383,7 @@
         {#each radioTypes as radioType (radioType.type)}
             <div class="mb-20">
                 <h2
-                    class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                    class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
                 >
                     {radioType.label}
                 </h2>
@@ -384,11 +392,9 @@
                     <div class="mb-8">
                         <h3 class="text-xl mb-4 flex items-center gap-2">
                             <span
-                                class="bg-{variant === 'primary'
-                                    ? 'blue'
-                                    : 'gray'}-100 text-{variant === 'primary'
-                                    ? 'blue'
-                                    : 'gray'}-800 px-3 py-1 rounded-full text-sm font-medium capitalize"
+                                class="{variantBadgeClasses[
+                                    variant
+                                ]} px-3 py-1 rounded-full text-sm font-medium capitalize"
                             >
                                 {variant} Variant
                             </span>
@@ -406,7 +412,7 @@
                                 >
                                     {#each groupChunk as group (group.groupId)}
                                         <div
-                                            class="flex flex-col gap-4 p-6 bg-white shadow-button-white rounded-2xl"
+                                            class="flex flex-col gap-4 p-6 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                                         >
                                             <div
                                                 class="flex flex-wrap gap-3 items-center"
@@ -487,12 +493,12 @@
         <!-- Keyboard Navigation Demo -->
         <div class="mb-6">
             <h2
-                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
             >
                 Keyboard Navigation Demo
             </h2>
             <div class="bg-blue/10 p-6 rounded-2xl mb-6">
-                <h3 class="text-lg font-medium text-blue mb-4">
+                <h3 class="text-lg font-medium text-blue-ink mb-4">
                     How to test keyboard navigation:
                 </h3>
                 <div class="grid md:grid-cols-2 gap-6 text-sm opacity-70">
@@ -501,25 +507,25 @@
                         <ul class="space-y-1">
                             <li>
                                 <kbd
-                                    class="bg-blue-200 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-200 dark:bg-blue/25 px-2 py-1 rounded text-xs"
                                     >Tab</kbd
                                 > - Focus radio group
                             </li>
                             <li>
                                 <kbd
-                                    class="bg-blue-200 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-200 dark:bg-blue/25 px-2 py-1 rounded text-xs"
                                     >↑ ↓ ← →</kbd
                                 > - Navigate + select
                             </li>
                             <li>
                                 <kbd
-                                    class="bg-blue-200 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-200 dark:bg-blue/25 px-2 py-1 rounded text-xs"
                                     >Space</kbd
                                 > - Select focused radio
                             </li>
                             <li>
                                 <kbd
-                                    class="bg-blue-200 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-200 dark:bg-blue/25 px-2 py-1 rounded text-xs"
                                     >Enter</kbd
                                 > - Select focused radio
                             </li>
@@ -538,7 +544,7 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="p-6 bg-white shadow-button-white rounded-2xl">
+                <div class="p-6 bg-white shadow-[var(--shadow-button-white)] rounded-2xl">
                     <h4 class="font-medium mb-4">Small Buttons</h4>
                     <div class="flex flex-col gap-3">
                         {#each ["keyboard-sm-1", "keyboard-sm-2", "keyboard-sm-3"] as value, index (value)}
@@ -565,7 +571,7 @@
                     </div>
                 </div>
 
-                <div class="p-6 bg-white shadow-button-white rounded-2xl">
+                <div class="p-6 bg-white shadow-[var(--shadow-button-white)] rounded-2xl">
                     <h4 class="font-medium mb-4">Medium Buttons</h4>
                     <div class="flex flex-col gap-3">
                         {#each ["keyboard-md-1", "keyboard-md-2", "keyboard-md-3", "keyboard-md-4"] as value, index (value)}
@@ -597,7 +603,7 @@
                     </div>
                 </div>
 
-                <div class="p-6 bg-white shadow-button-white rounded-2xl">
+                <div class="p-6 bg-white shadow-[var(--shadow-button-white)] rounded-2xl">
                     <h4 class="font-medium mb-4">Large Buttons</h4>
                     <div class="flex flex-col gap-3">
                         {#each ["keyboard-lg-1", "keyboard-lg-2", "keyboard-lg-3"] as value, index (value)}
@@ -630,15 +636,15 @@
 
         <!-- Summary -->
         <div class="bg-blue/10 p-6 rounded-2xl">
-            <h3 class="text-lg font-medium text-blue mb-4">Test Summary</h3>
+            <h3 class="text-lg font-medium text-blue-ink mb-4">Test Summary</h3>
             <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div>
                     <h4 class="font-medium text-black mb-2">Sizes:</h4>
-                    <ul class="text-blue-700 space-y-1 text-sm">
+                    <ul class="text-blue-700 dark:text-blue-ink space-y-1 text-sm">
                         {#each sizes as size (size)}
                             <li>
                                 <code
-                                    class="bg-blue-100 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-100 dark:bg-blue/15 px-2 py-1 rounded text-xs"
                                     >{size}</code
                                 >
                             </li>
@@ -651,7 +657,7 @@
                         {#each variants as variant (variant)}
                             <li>
                                 <code
-                                    class="bg-blue-100 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-100 dark:bg-blue/15 px-2 py-1 rounded text-xs"
                                     >{variant}</code
                                 >
                             </li>

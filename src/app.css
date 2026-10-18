@@ -19,6 +19,12 @@
     --color-lime: #84ff00;
     --color-yellow: #ffe100;
     --color-orange: #ff8800;
+    /* Always white, also in dark mode - text/icons on colored accents */
+    --color-snow: #ffffff;
+    /* Red/blue for TEXT (status words) - brighter in dark mode for contrast,
+       while red/blue fills (badges, buttons) keep the brand value */
+    --color-red-ink: #fb0d0d;
+    --color-blue-ink: #1781f3;
 
     /* ===== FONTS ===== */
     --font-display: "Figtree", sans-serif;
@@ -30,8 +36,108 @@
     --shadow-focus-visible: 0 0 32px rgba(132, 255, 0, 0.8);
 }
 
+/* ======================================== */
+/* DARK MODE */
+/* ======================================== */
+/* `dark:` utilities follow the data-theme attribute set in app.html */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* "white" is the surface and "black" the ink color, so swapping them flips
+   every bg-white / text-black / border-black/10 utility at once */
+/* Surface ramp: page #0e0e0e, wells #131313, cards #1a1a1a, controls #262626 */
+[data-theme="dark"] {
+    color-scheme: dark;
+    --color-main-background: #0e0e0e;
+    --color-white: #262626;
+    --color-black: #ececec;
+    --color-red-ink: #ff4d4d;
+    --color-blue-ink: #4a9dff;
+    /* No drop shadows on dark: a hairline outlines controls instead */
+    --shadow-button-white: 0 0 0 1px rgb(255 255 255 / 0.1);
+    --shadow-input-white: 0 0 0 1px rgb(255 255 255 / 0.12);
+    --shadow-button-red: 0 0 24px rgba(231, 0, 11, 0.35);
+    --shadow-focus-visible: 0 0 24px rgba(132, 255, 0, 0.45);
+}
+
+/* "Islands": elements that are black in the light theme (header, toast,
+   tooltip, primary button) stay black with light text, and
+   toggle thumbs stay light - #000 keeps the header darker than the cards.
+   .playground-island: dev playground wells that preview header buttons */
+[data-theme="dark"] header,
+[data-theme="dark"] .toast-notification .panel,
+[data-theme="dark"] .tooltip,
+[data-theme="dark"] .button--black,
+[data-theme="dark"] .toggle-switch__thumb,
+[data-theme="dark"] .playground-island {
+    --color-white: #ececec;
+    --color-black: #000000;
+    --shadow-button-white: 0 0 24px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] header,
+[data-theme="dark"] .toast-notification .panel,
+[data-theme="dark"] .tooltip {
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+
+/* Inherited text color (e.g. the environment tag) as in the light theme */
+[data-theme="dark"] header {
+    color: var(--color-black);
+}
+
+/* Cards are translucent (the background glow shows through), so a hairline
+   keeps their edge visible on top of the glow */
+[data-theme="dark"] .card {
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.05);
+}
+
+/* Muted labels ("Status:", "API Status:") need a bit more contrast on dark */
+[data-theme="dark"] .card--domain .opacity-50,
+[data-theme="dark"] .card--settings .response .text {
+    opacity: 0.6;
+}
+
+/* Hover lightens the surface (a scale alone is hard to see on dark) */
+[data-theme="dark"] main .button--white:not(.button--disabled):hover {
+    --hover-surface: color-mix(in oklab, var(--color-white), var(--color-black) 10%);
+    background-color: var(--hover-surface);
+    border-color: var(--hover-surface);
+}
+
+[data-theme="dark"] main .button--black-outline:not(.button--disabled):hover {
+    background-color: rgb(255 255 255 / 0.05);
+}
+
+/* "Increase contrast" (macOS/iOS/Windows): stronger edges and labels */
+@media (prefers-contrast: more) {
+    [data-theme="dark"] {
+        --shadow-button-white: 0 0 0 1px rgb(255 255 255 / 0.3);
+        --shadow-input-white: 0 0 0 1px rgb(255 255 255 / 0.3);
+    }
+
+    [data-theme="dark"] header,
+    [data-theme="dark"] .toast-notification .panel,
+    [data-theme="dark"] .tooltip {
+        box-shadow: 0 0 0 1px rgb(255 255 255 / 0.3);
+    }
+
+    [data-theme="dark"] .card--domain .opacity-50,
+    [data-theme="dark"] .card--settings .response .text {
+        opacity: 0.8;
+    }
+}
+
+/* Set for one frame while the theme switches, so buttons and inputs don't
+   fade between the old and new colors on top of the already switched page */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+    transition: none !important;
+}
+
 *:focus-visible {
-    @apply outline-none ring-2 ring-lime rounded-xl shadow-focus-visible;
+    @apply outline-none ring-2 ring-lime rounded-xl shadow-[var(--shadow-focus-visible)];
 }
 
 body {
@@ -91,7 +197,7 @@ body {
 
 /* ===== COLOR THEMES ===== */
 .button--white {
-    @apply bg-white text-black border-white shadow-button-white;
+    @apply bg-white text-black border-white shadow-[var(--shadow-button-white)];
 }
 
 .button--black {
@@ -99,7 +205,8 @@ body {
 }
 
 .button--red {
-    @apply bg-red text-white border-red shadow-button-red;
+    /* dark: a deeper red so the white label passes contrast (4.8:1) */
+    @apply bg-red text-snow border-red shadow-[var(--shadow-button-red)] dark:bg-red-600 dark:border-red-600;
 }
 
 .button--white-outline {
@@ -127,10 +234,10 @@ body {
     -ms-user-select: none;
 }
 
-/* Enhanced focus styles for keyboard navigation */
-.radio-button__input:focus + .radio-button,
+/* Focus ring for keyboard navigation only - :focus also matched a mouse
+   click on the label, which left a lime ring around the clicked radio */
 .radio-button__input:focus-visible + .radio-button {
-    @apply outline-none ring-2 ring-lime shadow-focus-visible rounded-full;
+    @apply outline-none ring-2 ring-lime shadow-[var(--shadow-focus-visible)] rounded-full;
 }
 
 /* Hover effects - only apply when NOT disabled */
@@ -183,12 +290,12 @@ body {
 
 /* Unchecked states */
 .radio-button--unchecked {
-    @apply border-blue text-white;
+    @apply border-blue text-snow;
 }
 
 /* Checked states */
 .radio-button--checked {
-    @apply text-white;
+    @apply text-snow;
 }
 
 /* ===== COLOR THEMES ===== */
@@ -205,14 +312,15 @@ body {
 }
 
 /* Secondary variant */
+/* dark: a light dot with a dark icon ("black" is the light ink in dark) */
 .radio-button--secondary.radio-button--checked {
-    @apply bg-gray-700 border-gray-700;
+    @apply bg-gray-700 border-gray-700 dark:bg-black dark:border-black dark:text-main-background;
 }
 
 .radio-button--secondary.radio-button--checked:not(
         .radio-button--disabled
     ):hover {
-    @apply bg-gray-800;
+    @apply bg-gray-800 dark:bg-black/85;
 }
 
 .radio-button--secondary:focus {
@@ -254,7 +362,7 @@ body {
 
 /* Thumb (slider) */
 .toggle-switch__thumb {
-    @apply absolute bg-white rounded-full transition-all duration-200 ease-in-out flex items-center justify-center shadow-button-white;
+    @apply absolute bg-white rounded-full transition-all duration-200 ease-in-out flex items-center justify-center shadow-[var(--shadow-button-white)];
     /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06); */
 }
 
@@ -285,11 +393,11 @@ body {
 
 /* Color variants - Unchecked */
 .toggle-switch--primary {
-    @apply bg-black/10;
+    @apply bg-black/10 dark:bg-black/25;
 }
 
 .toggle-switch--secondary {
-    @apply bg-gray-200;
+    @apply bg-gray-200 dark:bg-black/25;
 }
 
 /* Color variants - Checked */
@@ -298,7 +406,7 @@ body {
 }
 
 .toggle-switch--secondary.toggle-switch--checked {
-    @apply bg-blue-500;
+    @apply bg-blue-500 dark:bg-blue;
 }
 
 /* Disabled state */
@@ -306,9 +414,9 @@ body {
     @apply opacity-30 cursor-not-allowed pointer-events-none;
 }
 
-/* Focus state for accessibility */
-.toggle-switch__input:focus + .toggle-switch {
-    @apply outline-none ring-2 ring-lime rounded-full shadow-focus-visible;
+/* Focus ring for keyboard navigation only (not after a mouse click) */
+.toggle-switch__input:focus-visible + .toggle-switch {
+    @apply outline-none ring-2 ring-lime rounded-full shadow-[var(--shadow-focus-visible)];
 }
 
 /* Icon styling */
@@ -427,7 +535,8 @@ header {
 /* CARD */
 /* ======================================== */
 .card {
-    @apply bg-white/60 rounded-4xl p-4 sm:p-5 relative;
+    /* dark: 50% of the #262626 control surface = #1a1a1a over the page */
+    @apply bg-white/60 dark:bg-white/50 rounded-4xl p-4 sm:p-5 relative;
 }
 
 .card--error {
@@ -506,19 +615,19 @@ header {
                 }
 
                 .status--available {
-                    @apply bg-green text-white;
+                    @apply bg-green text-snow;
                 }
 
                 .status--not-available {
-                    @apply bg-red text-white;
+                    @apply bg-red text-snow;
                 }
 
                 .status--not-checked {
-                    @apply bg-blue text-white;
+                    @apply bg-blue text-snow;
                 }
 
                 .status--unknown {
-                    @apply bg-orange-500 text-white;
+                    @apply bg-orange-500 text-snow;
                 }
             }
 
@@ -661,7 +770,7 @@ header {
     }
 
     .black-bg-card {
-        @apply p-4 rounded-3xl bg-black/5;
+        @apply p-4 rounded-3xl bg-black/5 dark:bg-main-background/60;
     }
 
     .ui-view {
@@ -675,7 +784,7 @@ header {
             }
 
             .domain-card {
-                @apply p-3 rounded-2xl bg-white shadow-input-white mt-1.5;
+                @apply p-3 rounded-2xl bg-white shadow-[var(--shadow-input-white)] mt-1.5;
 
                 .row {
                     @apply flex gap-4 justify-between;
@@ -755,7 +864,7 @@ header {
 
 /* ===== INPUT STYLES ===== */
 .input {
-    @apply w-full rounded-full border transition-all duration-200 font-medium placeholder:text-black/30 shadow-input-white px-4 py-3 text-base h-[3.125rem];
+    @apply w-full rounded-full border transition-all duration-200 font-medium placeholder:text-black/30 dark:placeholder:text-black/45 shadow-[var(--shadow-input-white)] px-4 py-3 text-base h-[3.125rem];
 }
 
 /* Variant styles */
@@ -767,41 +876,44 @@ header {
 .input--error {
     @apply bg-red-50 border-red-300 text-red-900;
     @apply hover:border-red-400 focus:border-red-500 focus:ring-red-500/30;
+    /* After the light focus ring - same specificity, so order decides */
+    @apply dark:bg-red-950/40 dark:border-red-500/50 dark:text-red-200 dark:focus:ring-red-400/70;
 }
 
 .input--success {
     @apply bg-green-50 border-green-300 text-green-900;
     @apply hover:border-green-400 focus:border-green-500 focus:ring-green-500/30;
+    @apply dark:bg-green-950/40 dark:border-green-500/50 dark:text-green-200 dark:focus:ring-green-400/70;
 }
 
 /* Disabled state */
 .input--disabled {
-    @apply bg-neutral-100 border-black/10 text-black/30 cursor-not-allowed;
+    @apply bg-neutral-100 dark:bg-transparent border-black/10 text-black/30 cursor-not-allowed;
     @apply hover:border-black/10 focus:border-black/10 focus:ring-0;
 }
 
 /* ===== HELPER TEXT ===== */
 .input__helper {
-    @apply text-sm text-gray-600 transition-colors duration-200;
+    @apply text-sm text-gray-600 dark:text-black/60 transition-colors duration-200;
 }
 
 .input__helper--error {
-    @apply text-red-600;
+    @apply text-red-600 dark:text-red-400;
 }
 
 .input__helper--success {
-    @apply text-green-600;
+    @apply text-green-600 dark:text-green-400;
 }
 
 /* ======================================== */
 /* BLURED GRADIANTS MAIN */
 /* ======================================== */
 .blured-left {
-    @apply bg-lime size-[800px] rounded-full blur-[500px] fixed top-0 bottom-0 -z-10 -left-[500px] opacity-20;
+    @apply bg-lime size-[800px] rounded-full blur-[500px] fixed top-0 bottom-0 -z-10 -left-[500px] opacity-20 dark:opacity-[0.08];
 }
 
 .blured-right {
-    @apply bg-yellow size-[800px] rounded-full blur-[500px] fixed -bottom-[500px] -z-10 -right-[400px] opacity-20;
+    @apply bg-yellow size-[800px] rounded-full blur-[500px] fixed -bottom-[500px] -z-10 -right-[400px] opacity-20 dark:opacity-[0.05];
 }
 
 /* ======================================== */
@@ -858,7 +970,7 @@ header {
 /* ======================================== */
 
 .validate-input-error {
-    @apply text-sm px-2 py-1 bg-red text-white font-bold rounded-xl flex items-center justify-center gap-1;
+    @apply text-sm px-2 py-1 bg-red dark:bg-red-600 text-snow font-bold rounded-xl flex items-center justify-center gap-1;
 
     .icon {
         @apply size-4;
@@ -896,11 +1008,11 @@ header {
     }
 
     .component-nav-button:hover {
-        @apply -translate-y-0.5 shadow-lg shadow-black/5;
+        @apply -translate-y-0.5 shadow-lg shadow-black/5 dark:shadow-none;
     }
 
     .component-nav-button.active {
-        @apply bg-blue text-white shadow-lg shadow-blue/20;
+        @apply bg-blue text-snow shadow-lg shadow-blue/20;
     }
 
     .component-nav-button .icon {
@@ -912,7 +1024,7 @@ header {
     }
 
     .default-badge {
-        @apply absolute -top-1.5 -right-1.5 bg-amber-500 text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-xs font-bold;
+        @apply absolute -top-1.5 -right-1.5 bg-amber-500 text-snow rounded-full w-4.5 h-4.5 flex items-center justify-center text-xs font-bold;
     }
 
     .error-state {

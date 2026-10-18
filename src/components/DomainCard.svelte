@@ -211,7 +211,7 @@
                     tabindex={0}
                 >
                     <div
-                        class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
+                        class="bg-blue/10 text-blue-ink px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
                     >
                         Run check
                         <Icon icon="iconoir:info-circle" />
@@ -708,10 +708,10 @@
         <div class="text-green">Available</div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.REGISTERED}
-        <div class="text-red">Registered</div>
+        <div class="text-red-ink">Registered</div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.NOT_CHECKED}
-        <div class="text-blue">Not Checked</div>
+        <div class="text-blue-ink">Not Checked</div>
     {/if}
     {#if domainStatus === DOMAIN_STATUS.ERROR}
         <div class="text-orange-500 flex items-center gap-1">

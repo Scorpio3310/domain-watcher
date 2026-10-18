@@ -127,7 +127,7 @@
             {/key}
         {:else}
             <div
-                class="flex items-center justify-center h-96 text-gray-500 text-lg"
+                class="flex items-center justify-center h-96 text-gray-500 dark:text-black/50 text-lg"
             >
                 <p>⚠️ Component not found</p>
             </div>
