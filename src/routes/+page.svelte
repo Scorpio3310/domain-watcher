@@ -14,6 +14,11 @@
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
+
+    // Issues returned by the server (subdomain, duplicate) are kept by Kit
+    // while the client preflight passes - re-validate once on the server after
+    // a rejected submit so they disappear as soon as the user edits the field
+    let revalidateOnServer = false;
 </script>
 
 <!-- Page-specific tags only - shared og/twitter tags live in +layout.svelte -->
@@ -56,8 +61,8 @@
                         const result = addDomain.result;
                         if (result) toast.show(result);
                         // Only clear the input once the domain was added - a
-                        // rejected one (duplicate, demo mode, server error)
-                        // stays in the field so it can be fixed or retried
+                        // rejected one (demo mode, server error) stays in the
+                        // field so it can be fixed or retried
                         if (
                             result &&
                             result.status >= 200 &&
@@ -65,8 +70,11 @@
                         ) {
                             element.reset();
                         }
+                    } else {
+                        // invalid data (format, subdomain, duplicate) -> issues
+                        // render inline below the input
+                        revalidateOnServer = true;
                     }
-                    // invalid data -> issues render inline below the input
                 } catch {
                     toast.show({
                         status: 500,
@@ -75,7 +83,10 @@
                 }
             },
         )}
-        oninput={() => addDomain.validate({ preflightOnly: true })}
+        oninput={() => {
+            addDomain.validate({ preflightOnly: !revalidateOnServer });
+            revalidateOnServer = false;
+        }}
     >
         <div class="relative">
             <Input

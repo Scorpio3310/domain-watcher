@@ -15,6 +15,9 @@ export const domainIdFormSchema = z.object({
         .max(9999999, "Whoa, that ID is way too big - keep it under 9,999,999! 📏"),
 });
 
+// Also the client preflight schema (+page.svelte), so keep this module free of
+// heavy/server-only deps: the registrable-domain check (Public Suffix List via
+// tldts-icann) runs server-side only, see #lib/server/utils/domain-name.js
 export const addDomainSchema = z.object({
     domainName: z
         .string()

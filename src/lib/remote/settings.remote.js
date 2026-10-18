@@ -39,21 +39,45 @@ export const saveApiKey = form(whoIsApiKeySchema, async ({ apiKey: key }) => {
         // otherwise saving a key on a fresh install would silently flip the
         // resolved default from RDAP to WhoisJSON (the keyed-install default
         // exists only for installs that predate the provider setting).
-        // A failed read is NOT "never chosen": pinning then could overwrite
-        // an explicit choice, so skip the pin in that case.
+        // A failed read is NOT "never chosen" / "no key": pinning (or saving
+        // the key without the pin) could overwrite an explicit choice or flip
+        // the provider, so nothing is written from an unknown state.
+        const settingsReadError = {
+            status: 503,
+            message: "Couldn't read your settings - please try again 🔄",
+        };
+
         const providerConfig = await domainProvider.getConfig();
         if (providerConfig.error) {
             console.warn(
-                "⚠️ Provider setting could not be read - skipping provider pin"
+                "⚠️ Provider setting could not be read - API key not saved"
             );
-        } else if (providerConfig.provider === null) {
-            const hadKeyBefore = await apiKey.isConfigured();
-            await domainProvider.save(
-                hadKeyBefore
-                    ? DOMAIN_PROVIDER.WHOIS_JSON
-                    : DOMAIN_PROVIDER.RDAP,
-                providerConfig.whoisjsonFallback
+            return settingsReadError;
+        }
+
+        if (providerConfig.provider === null) {
+            const keyState = await apiKey.getConfiguredState();
+            if (keyState.error) {
+                console.warn(
+                    "⚠️ API key state could not be read - API key not saved"
+                );
+                return settingsReadError;
+            }
+
+            const pinResult = /** @type {ServiceResult} */ (
+                await domainProvider.save(
+                    keyState.configured
+                        ? DOMAIN_PROVIDER.WHOIS_JSON
+                        : DOMAIN_PROVIDER.RDAP,
+                    providerConfig.whoisjsonFallback
+                )
             );
+            if (pinResult.status < 200 || pinResult.status >= 300) {
+                return {
+                    status: pinResult.status,
+                    message: pinResult.message,
+                };
+            }
         }
 
         const result = /** @type {ServiceResult} */ (await apiKey.save(key));

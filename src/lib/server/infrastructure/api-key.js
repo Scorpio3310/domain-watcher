@@ -10,7 +10,7 @@ import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { WHOIS_JSON_API_STATUS } from "#lib/constants/constants.js";
 import { isDemo } from "#lib/utils/helpers.js";
 import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
-import { testApiKeyConnection } from "./whois-client";
+import { testApiKeyConnection } from "./whois-client.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
 
 // ========================================
@@ -29,18 +29,28 @@ import { validateDemoMode } from "#lib/server/utils/access.js";
 // CORE UTILITIES
 // ========================================
 /**
+ * Reads API settings from the database. DB and JSON errors propagate.
+ * @async
+ * @returns {Promise<ApiKeyConfig|null>} API configuration object or null
+ * @throws {Error} When the settings row can't be read or parsed
+ */
+const readApiSettings = async () => {
+    const result = await executeQueryFirst(
+        SETTINGS_QUERIES.SELECT_API_SETTINGS
+    );
+    return result?.json_config_data
+        ? /** @type {ApiKeyConfig} */ (JSON.parse(result.json_config_data))
+        : null;
+};
+
+/**
  * Retrieves API settings from database with error handling
  * @async
  * @returns {Promise<ApiKeyConfig|null>} API configuration object or null
  */
 const getApiSettings = async () => {
     try {
-        const result = await executeQueryFirst(
-            SETTINGS_QUERIES.SELECT_API_SETTINGS
-        );
-        return result?.json_config_data
-            ? /** @type {ApiKeyConfig} */ (JSON.parse(result.json_config_data))
-            : null;
+        return await readApiSettings();
     } catch (error) {
         console.error("❌ Failed to get API settings:", error);
         return null;
@@ -78,12 +88,36 @@ export const apiKey = {
      * @returns {Promise<boolean>} True if API key exists and is valid
      */
     async isConfigured() {
+        const { configured } = await apiKey.getConfiguredState();
+        return configured;
+    },
+
+    /**
+     * Error-aware variant of isConfigured(): tells "no key stored" apart from
+     * "the settings couldn't be read", so a failed read never drives a
+     * persisted settings write (e.g. the provider pin in saveApiKey).
+     * @async
+     * @returns {Promise<{configured: boolean, error: boolean}>} Key state;
+     *   error === true means the read failed and configured is unknown (false)
+     *
+     * @example
+     * const keyState = await apiKey.getConfiguredState();
+     * if (!keyState.error && keyState.configured) {
+     *   console.log('WhoisJSON key is stored');
+     * }
+     */
+    async getConfiguredState() {
         try {
-            const config = await getApiSettings();
-            return !!(config?.api_key && config.api_key.trim().length > 0);
+            const config = await readApiSettings();
+            return {
+                configured: !!(
+                    config?.api_key && config.api_key.trim().length > 0
+                ),
+                error: false,
+            };
         } catch (error) {
             console.error("❌ Error checking API key configuration:", error);
-            return false;
+            return { configured: false, error: true };
         }
     },
 

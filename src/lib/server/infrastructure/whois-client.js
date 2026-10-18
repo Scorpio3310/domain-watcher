@@ -176,6 +176,35 @@ const withTimeout = (call, operation) => {
     return Promise.race([call, timeout]).finally(() => clearTimeout(timer));
 };
 
+/**
+ * Whether a successful /whois payload is usable for a domain the availability
+ * endpoint reported as registered: it must be an object that doesn't contradict
+ * that answer (registered !== false) and either confirms it explicitly
+ * (registered === true - some ccTLDs publish almost no WHOIS data) or carries
+ * at least one real WHOIS field. Throttled WHOIS servers can come back as a 200
+ * with empty fields, and storing that would wipe the known expiry.
+ * @param {unknown} data - Raw lookup() result
+ * @returns {boolean} True when the payload can be stored
+ */
+const isUsableWhoisData = (data) => {
+    if (!data || typeof data !== "object") return false;
+
+    const whois = /** @type {Partial<import("@whoisjson/whoisjson").WhoisResponse>} */ (
+        data
+    );
+    if (whois.registered === false) return false;
+    if (whois.registered === true) return true;
+
+    return Boolean(
+        whois.expires ||
+            whois.registrar?.name ||
+            whois.created ||
+            whois.changed ||
+            whois.status?.length ||
+            whois.nameserver?.length
+    );
+};
+
 // ========================================
 // PUBLIC API FUNCTIONS
 // ========================================
@@ -184,10 +213,11 @@ const withTimeout = (call, operation) => {
  * Check domain availability with comprehensive error handling and validation.
  * Available domains cost ONE API call (/domain-availability); registered
  * domains also call /whois for expiry + registrar. Only a definitive answer
- * returns 200 — a non-boolean availability flag (502) or a failed /whois
- * lookup on a registered domain returns an error, so verifyDomain records a
- * failure and keeps the last known status/expiry instead of storing
- * "registered, no expiry".
+ * returns 200 — a non-boolean availability flag (502), a failed /whois
+ * lookup on a registered domain, or a /whois 200 with an unusable body (not
+ * an object, registered === false, or no WHOIS fields; 502) returns an error,
+ * so verifyDomain records a failure and keeps the last known status/expiry
+ * instead of storing "registered, no expiry".
  * @param {string} domainName - Domain to check
  * @param {string|null} [customApiKey] - Optional custom API key for testing
  * @returns {Promise<ServiceResult>} Domain availability result
@@ -247,6 +277,19 @@ export async function checkDomainAvailability(domainName, customApiKey = null) {
             );
         } catch (lookupError) {
             return handleWhoisError(lookupError, "WHOIS lookup", domainName);
+        }
+
+        // A 200 with an unusable body is a failed lookup too — keep the
+        // stored expiry instead of overwriting it with null
+        if (!isUsableWhoisData(fullData)) {
+            console.error(
+                `❌ Unusable WhoisJSON WHOIS response for ${domainName}:`,
+                fullData
+            );
+            return {
+                status: 502,
+                message: `WhoisJSON returned an unusable WHOIS response for ${domainName}`,
+            };
         }
 
         return {
@@ -329,7 +372,10 @@ export async function checkDomainSSL(domainName, customApiKey = null) {
 // ========================================
 
 /**
- * Test API key connection without saving to database
+ * Test API key connection without saving to database.
+ * Makes ONE authenticated /domain-availability call (with the per-call
+ * timeout) — /whois is not involved, so a flaky WHOIS lookup can't mark a
+ * valid key as invalid, and a key save costs a single quota call.
  * @param {string} testApiKey - API key to test
  * @param {string} [testDomain="example.com"] - Domain to test with
  * @returns {Promise<ServiceResult>} Test result
@@ -350,19 +396,32 @@ export async function testApiKeyConnection(
     }
 
     try {
-        const result = await checkDomainAvailability(testDomain, testApiKey);
+        const whois = await createWhoisClient(testApiKey);
+
+        console.log(`🔑 Testing WhoisJSON API key against ${testDomain}`);
+
+        const availability = await withTimeout(
+            whois.checkDomainAvailability(testDomain),
+            "availability check"
+        );
+
+        if (typeof availability?.available !== "boolean") {
+            console.error(
+                "❌ Unexpected WhoisJSON availability response while testing the API key:",
+                availability
+            );
+            return {
+                status: 502,
+                message:
+                    "WhoisJSON returned an unexpected response while testing the API key",
+            };
+        }
 
         return {
-            status: result.status === 200 ? 200 : result.status,
-            message:
-                result.status === 200
-                    ? "API key is working correctly"
-                    : `${result.message}`,
+            status: 200,
+            message: "API key is working correctly",
         };
     } catch (error) {
-        return {
-            status: 500,
-            message: getErrorMessage(error),
-        };
+        return handleWhoisError(error, "API key test", testDomain);
     }
 }

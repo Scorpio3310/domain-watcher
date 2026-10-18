@@ -12,6 +12,7 @@ import { getErrorMessage } from "#lib/utils/helpers.js";
 import { apiKey } from "#lib/server/infrastructure/api-key.js";
 import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
+import { getRegistrableDomainIssue } from "#lib/server/utils/domain-name.js";
 
 export { validateDemoMode };
 
@@ -276,6 +277,29 @@ export const verificationEngine = {
      */
     async verifyDomain(domain, lookupContext = null) {
         try {
+            // Subdomains added before the registrable-domain check existed:
+            // RDAP answers 404 for them, which would read as "available"
+            // every day - mark them as errors with a hint instead of looking up
+            const registrableIssue = getRegistrableDomainIssue(
+                domain.domain_name
+            );
+            if (registrableIssue) {
+                await withDbRetry(() =>
+                    executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
+                        registrableIssue,
+                        domain.id,
+                    ])
+                );
+                console.log(
+                    `⚠️ SKIPPED: ${domain.domain_name} - ${registrableIssue}`
+                );
+                return {
+                    success: false,
+                    domain: domain.domain_name,
+                    error: registrableIssue,
+                };
+            }
+
             console.log(`🔍 Checking ${domain.domain_name}...`);
 
             const result = await domainLookup.checkDomainAvailability(
