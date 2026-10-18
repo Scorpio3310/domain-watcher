@@ -10,22 +10,19 @@
     import { scale, fly } from "svelte/transition";
     import Tooltip from "#components/Tooltip.svelte";
     import { isDemo } from "#lib/utils/helpers.js";
-    import { page } from "$app/state";
 
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
 </script>
 
+<!-- Page-specific tags only - shared og/twitter tags live in +layout.svelte -->
 <svelte:head>
     <title>Domain Watcher // Never Lose a Domain Again</title>
     <meta
         name="description"
         content="Track domain expiration, SSL certificates, and website status in one place."
     />
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content={page?.url?.href} />
     <meta
         property="og:title"
         content="Domain Watcher // Never Lose a Domain Again"
@@ -34,14 +31,6 @@
         property="og:description"
         content="Track domain expiration, SSL certificates, and website status in one place."
     />
-    <meta property="og:image" content="{page?.url?.origin}/og_image.jpg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="Domain Watcher" />
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content={page?.url?.href} />
     <meta
         property="twitter:title"
         content="Domain Watcher // Never Lose a Domain Again"
@@ -50,7 +39,6 @@
         property="twitter:description"
         content="Track domain expiration, SSL certificates, and website status in one place."
     />
-    <meta property="twitter:image" content="{page?.url?.origin}/og_image.jpg" />
 </svelte:head>
 
 <div class="hero-section mt-16">
@@ -65,8 +53,18 @@
             async ({ submit, element }) => {
                 try {
                     if (await submit()) {
-                        element.reset();
-                        if (addDomain.result) toast.show(addDomain.result);
+                        const result = addDomain.result;
+                        if (result) toast.show(result);
+                        // Only clear the input once the domain was added - a
+                        // rejected one (duplicate, demo mode, server error)
+                        // stays in the field so it can be fixed or retried
+                        if (
+                            result &&
+                            result.status >= 200 &&
+                            result.status < 300
+                        ) {
+                            element.reset();
+                        }
                     }
                     // invalid data -> issues render inline below the input
                 } catch {
@@ -84,6 +82,7 @@
                 type="text"
                 id="domainName"
                 placeholder="Enter a domain name...."
+                aria-label="Domain name"
                 disabled={false}
                 class="pr-40!"
                 variant={addDomain.fields.domainName.issues()?.length
@@ -100,6 +99,7 @@
                         text="Domain adding disabled in Demo mode"
                         position="bottom"
                         hoverOpacity={false}
+                        tabindex={0}
                     >
                         <Button
                             type="submit"
@@ -150,54 +150,29 @@
             </h2>
         </div>
 
-        <svelte:boundary>
-            <div class="grid gap-2">
-                {#each data?.domains as domain (domain.id)}
-                    <div
-                        in:scale={{
-                            duration: 200,
-                            start: 0.7,
-                            opacity: 0,
-                            delay: 100,
-                        }}
-                        animate:flip={{ duration: 300 }}
-                    >
-                        <DomainCard
-                            data={domain}
-                            uiView={data?.viewMode}
-                            isApiConfigured={data?.isApiConfigured}
-                            lookupProvider={data?.lookupProvider}
-                            whoisjsonFallback={data?.whoisjsonFallback}
-                        />
-                    </div>
-                {/each}
-            </div>
-            {#snippet pending()}
-                <div class="space-y-2 opacity-50">
-                    {#each Array(4) as _, i (i)}
-                        <div class="card card-domain">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-4">
-                                    <div
-                                        class="size-10 rounded-full bg-white/80 animate-pulse flex-none"
-                                    ></div>
-                                    <div
-                                        class="h-5 bg-white/80 animate-pulse rounded-2xl w-20 sm:w-52 lg:w-60 flex-none"
-                                    ></div>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <div
-                                        class="h-10 bg-white/80 animate-pulse rounded-full w-32"
-                                    ></div>
-                                    <div
-                                        class="size-10 bg-white/80 animate-pulse rounded-full"
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-                    {/each}
+        <!-- Rendered directly (no <svelte:boundary> pending snippet): nothing
+             here awaits, and with experimental async a pending snippet makes
+             SSR emit only the placeholder instead of the domain list -->
+        <div class="grid gap-2">
+            {#each data?.domains as domain (domain.id)}
+                <div
+                    in:scale={{
+                        duration: 200,
+                        start: 0.7,
+                        opacity: 0,
+                        delay: 100,
+                    }}
+                    animate:flip={{ duration: 300 }}
+                >
+                    <DomainCard
+                        data={domain}
+                        uiView={data?.viewMode}
+                        isApiConfigured={data?.isApiConfigured}
+                        lookupProvider={data?.lookupProvider}
+                        whoisjsonFallback={data?.whoisjsonFallback}
+                    />
                 </div>
-            {/snippet}
-        </svelte:boundary>
+            {/each}
+        </div>
     </div>
 {/if}

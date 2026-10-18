@@ -10,7 +10,7 @@
      * @property {number} [duration=200] - Animation duration in milliseconds for show/hide transitions
      * @property {number} [offset=4] - Vertical distance in px between tooltip and trigger element
      * @property {boolean} [disabled=false] - Disable tooltip functionality completely
-     * @property {number} [tabindex=0] - Tab index for keyboard navigation accessibility
+     * @property {number} [tabindex] - Makes the wrapper itself focusable (and the tooltip trigger). Set it (to 0) only when the content has no focusable control of its own (icon, badge, disabled button); leave it unset around enabled buttons/links - focusing them shows the tooltip
      * @property {boolean} [hoverOpacity=true] - Automatically reduce opacity of child elements on hover
      * @property {import('svelte').Snippet} children - Child elements that trigger the tooltip
      */
@@ -23,97 +23,97 @@
         duration = 200,
         offset = 4,
         disabled = false,
-        tabindex = 0,
+        tabindex = undefined,
         children,
         hoverOpacity = true,
         ...restProps
     } = $props();
 
     let showTooltip = $state(false);
-    /** @type {ReturnType<typeof setTimeout>|null} */
-    let timeoutId = null;
-    let triggerElement = $state();
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    let timeoutId;
+
+    // SSR-stable ID for aria-describedby
+    const tooltipId = $props.id();
 
     const showTooltipWithDelay = () => {
         if (disabled || !text) return;
 
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
             showTooltip = true;
         }, delay);
     };
 
     const hideTooltip = () => {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
         showTooltip = false;
     };
 
-    // Mouse event handlers
-    const handleMouseEnter = () => {
-        showTooltipWithDelay();
-    };
-
-    const handleMouseLeave = () => {
-        hideTooltip();
-    };
-
-    // Keyboard event handlers
-    const handleFocus = () => {
-        showTooltipWithDelay();
-    };
-
-    const handleBlur = () => {
-        hideTooltip();
-    };
+    // Cleanup on component destruction - drop a pending show
+    $effect(() => {
+        return () => clearTimeout(timeoutId);
+    });
 
     /** @param {KeyboardEvent} event */
     const handleKeyDown = (event) => {
-        // Show tooltip on Enter or Space when focused
-        if (event.key === "Enter" || event.key === " ") {
-            if (!showTooltip) {
-                showTooltipWithDelay();
-            }
-        }
         // Hide tooltip on Escape
-        else if (event.key === "Escape") {
+        if (event.key === "Escape") {
             hideTooltip();
         }
     };
 
     // Animation configuration based on position
-    const flyConfig = $derived(() => ({
+    const flyConfig = $derived({
         y: (position === "top" ? -1 : 1) * (offset + 6),
         duration,
         opacity: 0,
-    }));
+    });
 
     // CSS classes for positioning
-    const tooltipClasses = $derived(() =>
-        ["tooltip", `tooltip--${position}`].join(" ")
+    const tooltipClasses = $derived(
+        ["tooltip", `tooltip--${position}`].join(" "),
     );
 
-    // Generate unique ID for accessibility
-    const tooltipId = `tooltip-${Math.random().toString(36).substr(2, 9)}`;
+    // The wrapper is focusable (and is the trigger) only when asked to and
+    // there is a tooltip to reveal
+    const effectiveTabindex = $derived(
+        disabled || !text ? undefined : tabindex,
+    );
+    const wrapperIsTrigger = $derived(effectiveTabindex !== undefined);
 
-    // Determine effective tabindex
-    const effectiveTabindex = $derived(() => {
-        if (disabled) return -1;
-        return tabindex;
-    });
+    /**
+     * Points the wrapped control (the real trigger) at the tooltip text when
+     * the wrapper itself is not focusable
+     * @type {import('svelte/attachments').Attachment<HTMLElement>}
+     */
+    const describeContent = (node) => {
+        if (wrapperIsTrigger || disabled || !text) return;
+
+        const control = node.querySelector(
+            "a[href], button, input, select, textarea",
+        );
+        if (!control || control.hasAttribute("aria-describedby")) return;
+
+        control.setAttribute("aria-describedby", tooltipId);
+        return () => control.removeAttribute("aria-describedby");
+    };
 </script>
 
+<!-- The wrapper only relays hover/focus of its content: keyboard users reach
+     the tooltip through the wrapped control's own focus (focusin bubbles),
+     or through the wrapper when `tabindex` is set for non-focusable content -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-    bind:this={triggerElement}
     class="tooltip-container"
-    role="button"
-    tabindex={effectiveTabindex()}
-    aria-describedby={showTooltip ? tooltipId : undefined}
-    aria-label={text || undefined}
-    onmouseenter={handleMouseEnter}
-    onmouseleave={handleMouseLeave}
-    onfocus={handleFocus}
-    onblur={handleBlur}
+    tabindex={effectiveTabindex}
+    aria-describedby={wrapperIsTrigger ? tooltipId : undefined}
+    onmouseenter={showTooltipWithDelay}
+    onmouseleave={hideTooltip}
+    onfocusin={showTooltipWithDelay}
+    onfocusout={hideTooltip}
     onkeydown={handleKeyDown}
+    {@attach describeContent}
     {...restProps}
 >
     <!-- Trigger element slot -->
@@ -125,15 +125,17 @@
         {@render children()}
     </div>
 
-    <!-- Tooltip -->
+    <!-- Description target - always in the DOM so aria-describedby resolves
+         before the tooltip is shown (hidden nodes still count when referenced) -->
+    <span id={tooltipId} hidden>{text}</span>
+
+    <!-- Tooltip (visual copy of the description above) -->
     {#if showTooltip && text}
         <div
-            id={tooltipId}
-            class={tooltipClasses()}
+            class={tooltipClasses}
             style:--tooltip-offset="{offset}px"
-            transition:fly={flyConfig()}
-            role="tooltip"
-            aria-hidden="false"
+            transition:fly={flyConfig}
+            aria-hidden="true"
         >
             {text}
         </div>

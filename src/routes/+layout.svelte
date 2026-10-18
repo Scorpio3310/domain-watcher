@@ -31,26 +31,17 @@
     const headerType = $derived(getHeaderType(page.url.pathname, page.status));
 </script>
 
+<!-- Page-independent tags only. Each page owns its title, description and
+     og/twitter title + description (Svelte de-duplicates only <title>; the
+     title below is just a fallback) -->
 <svelte:head>
     {#if dev}
         <link rel="shortcut icon" href="./favicon-dev.ico" />
     {/if}
     <title>Domain Watcher // Never Lose a Domain Again</title>
-    <meta
-        name="description"
-        content="Track domain expiration, SSL certificates, and website status in one place."
-    />
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content={page?.url?.href} />
-    <meta
-        property="og:title"
-        content="Domain Watcher // Never Lose a Domain Again"
-    />
-    <meta
-        property="og:description"
-        content="Track domain expiration, SSL certificates, and website status in one place."
-    />
     <meta property="og:image" content="{page?.url?.origin}/og_image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -59,14 +50,6 @@
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content={page?.url?.href} />
-    <meta
-        property="twitter:title"
-        content="Domain Watcher // Never Lose a Domain Again"
-    />
-    <meta
-        property="twitter:description"
-        content="Track domain expiration, SSL certificates, and website status in one place."
-    />
     <meta property="twitter:image" content="{page?.url?.origin}/og_image.jpg" />
 </svelte:head>
 

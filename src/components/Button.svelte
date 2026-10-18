@@ -96,6 +96,10 @@
         return classes.join(" ");
     });
 
+    // Keyboard activation is left to the browser: Enter/Space on a <button>
+    // and Enter on an <a> fire click natively, so links keep SvelteKit's
+    // client-side navigation and submit buttons keep native form submission.
+    //
     // Skip the custom handler when the `disabled` prop is set. A natively
     // disabled button never fires click - this branch is only reachable when
     // the DOM attribute was tampered away (devtools), in which case we let
@@ -105,44 +109,6 @@
     const handleClick = (event) => {
         if (disabled) return;
         onclick(event);
-    };
-
-    // Handle keyboard events (disabled: same tamper-only reasoning as handleClick)
-    /** @param {KeyboardEvent} event */
-    const handleKeyDown = (event) => {
-        if (disabled) return;
-
-        // For both links and buttons, Enter and Space should trigger action
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (isLink && href) {
-                // For links, navigate programmatically
-                if (target === "_blank") {
-                    window.open(href, "_blank");
-                } else {
-                    window.location.href = href;
-                }
-            } else {
-                // Check if this is a submit button in a form.
-                // .form honors the form="" attribute (external submitters);
-                // closest() covers non-button elements.
-                const target = /** @type {HTMLElement} */ (event.target);
-                const form =
-                    target instanceof HTMLButtonElement
-                        ? target.form
-                        : target.closest("form");
-
-                if (type === "submit" && form) {
-                    // Use requestSubmit to trigger form validation and submission
-                    form.requestSubmit(/** @type {HTMLElement} */ (target));
-                } else {
-                    // For regular buttons or buttons not in forms
-                    handleClick(event);
-                }
-            }
-        }
     };
 
     // Determine tabindex value
@@ -163,16 +129,16 @@
     this={isLink ? "a" : "button"}
     href={isLink ? href : undefined}
     target={isLink ? target : undefined}
+    rel={isLink && target === "_blank" ? "noopener noreferrer" : undefined}
     title={title || (iconOnly && text ? text : undefined)}
     type={isLink ? undefined : type}
     disabled={isLink ? undefined : disabled}
     tabindex={effectiveTabindex}
     aria-disabled={disabled ? "true" : "false"}
-    aria-label={ariaLabel ? ariaLabel : text}
+    aria-label={ariaLabel || text || undefined}
     role={isLink ? "link" : "button"}
     class={buttonClasses}
     onclick={handleClick}
-    onkeydown={handleKeyDown}
     {...filteredRestProps}
 >
     {#if hasIcon}

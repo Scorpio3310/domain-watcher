@@ -372,7 +372,7 @@
             </div>
         </div>
 
-        {#each radioTypes as radioType}
+        {#each radioTypes as radioType (radioType.type)}
             <div class="mb-20">
                 <h2
                     class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
@@ -380,7 +380,7 @@
                     {radioType.label}
                 </h2>
 
-                {#each variants as variant}
+                {#each variants as variant (variant)}
                     <div class="mb-8">
                         <h3 class="text-xl mb-4 flex items-center gap-2">
                             <span
@@ -399,19 +399,19 @@
                             </span>
                         </h3>
 
-                        {#each chunkArray(groupsByTypeAndVariant[radioType.type][variant], 2) as groupChunk}
+                        {#each chunkArray(groupsByTypeAndVariant[radioType.type][variant], 2) as groupChunk (groupChunk[0].groupId)}
                             <div class="mb-6">
                                 <div
                                     class="grid grid-cols-1 lg:grid-cols-2 gap-8"
                                 >
-                                    {#each groupChunk as group}
+                                    {#each groupChunk as group (group.groupId)}
                                         <div
                                             class="flex flex-col gap-4 p-6 bg-white shadow-button-white rounded-2xl"
                                         >
                                             <div
                                                 class="flex flex-wrap gap-3 items-center"
                                             >
-                                                {#each group.options as option}
+                                                {#each group.options as option (option.id)}
                                                     <div
                                                         class="flex items-center gap-2"
                                                     >
@@ -541,7 +541,7 @@
                 <div class="p-6 bg-white shadow-button-white rounded-2xl">
                     <h4 class="font-medium mb-4">Small Buttons</h4>
                     <div class="flex flex-col gap-3">
-                        {#each ["keyboard-sm-1", "keyboard-sm-2", "keyboard-sm-3"] as value, index}
+                        {#each ["keyboard-sm-1", "keyboard-sm-2", "keyboard-sm-3"] as value, index (value)}
                             <div class="flex items-center gap-2">
                                 <RadioButton
                                     name="keyboard-demo-sm"
@@ -568,7 +568,7 @@
                 <div class="p-6 bg-white shadow-button-white rounded-2xl">
                     <h4 class="font-medium mb-4">Medium Buttons</h4>
                     <div class="flex flex-col gap-3">
-                        {#each ["keyboard-md-1", "keyboard-md-2", "keyboard-md-3", "keyboard-md-4"] as value, index}
+                        {#each ["keyboard-md-1", "keyboard-md-2", "keyboard-md-3", "keyboard-md-4"] as value, index (value)}
                             <div class="flex items-center gap-2">
                                 <RadioButton
                                     name="keyboard-demo-md"
@@ -600,7 +600,7 @@
                 <div class="p-6 bg-white shadow-button-white rounded-2xl">
                     <h4 class="font-medium mb-4">Large Buttons</h4>
                     <div class="flex flex-col gap-3">
-                        {#each ["keyboard-lg-1", "keyboard-lg-2", "keyboard-lg-3"] as value, index}
+                        {#each ["keyboard-lg-1", "keyboard-lg-2", "keyboard-lg-3"] as value, index (value)}
                             <div class="flex items-center gap-2">
                                 <RadioButton
                                     name="keyboard-demo-lg"
@@ -635,7 +635,7 @@
                 <div>
                     <h4 class="font-medium text-black mb-2">Sizes:</h4>
                     <ul class="text-blue-700 space-y-1 text-sm">
-                        {#each sizes as size}
+                        {#each sizes as size (size)}
                             <li>
                                 <code
                                     class="bg-blue-100 px-2 py-1 rounded text-xs"
@@ -648,7 +648,7 @@
                 <div>
                     <h4 class="font-medium text-black mb-2">Variants:</h4>
                     <ul class="space-y-1 text-sm opacity-70">
-                        {#each variants as variant}
+                        {#each variants as variant (variant)}
                             <li>
                                 <code
                                     class="bg-blue-100 px-2 py-1 rounded text-xs"

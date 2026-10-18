@@ -39,7 +39,11 @@
 
 {#if shouldRender}
     {#if currentEnv.showTooltip}
-        <Tooltip text={currentEnv.tooltip ?? ""} position="bottom">
+        <Tooltip
+            text={currentEnv.tooltip ?? ""}
+            position="bottom"
+            tabindex={0}
+        >
             <div
                 class="environment-tag environment-tag--{currentEnv.modifier} hover-fade"
             >

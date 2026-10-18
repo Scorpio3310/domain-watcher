@@ -65,6 +65,11 @@
     const buttonText = $derived(isExpanded ? "Show Less" : "Show More");
 
     /**
+     * Domain name for accessible button labels (distinct per card)
+     */
+    const domainName = $derived(data?.domain_name || "domain");
+
+    /**
      * Get button icon with rotation based on expansion state
      */
     const buttonIcon = $derived("iconoir:nav-arrow-up");
@@ -116,6 +121,7 @@
                     text="Domains added to watchlist aren't auto-checked. Click 'Check Domains' for batch verification or use 'Scan Now' for individual verification."
                     position="bottom"
                     offset={8}
+                    tabindex={0}
                 >
                     <div
                         class="bg-blue/10 text-blue px-3 py-1 rounded-full flex-none w-max flex items-center gap-1"
@@ -142,7 +148,8 @@
                         iconClass={buttonIconClass}
                         color="white"
                         onclick={toggleExpansion}
-                        ariaLabel={buttonText}
+                        ariaLabel="{buttonText} details for {domainName}"
+                        aria-expanded={isExpanded}
                     />
 
                     <Button
@@ -152,7 +159,7 @@
                         icon="iconoir:trash"
                         color="white"
                         onclick={showDeleteDialog}
-                        ariaLabel="Are you sure you want to delete this domain?"
+                        ariaLabel="Delete {domainName}"
                     />
                 </div>
             {/if}
@@ -170,7 +177,7 @@
                         iconClass="text-gray-500"
                         color="black-outline"
                         onclick={cancelDelete}
-                        ariaLabel="Cancel"
+                        ariaLabel="Cancel deleting {domainName}"
                     />
 
                     <form
@@ -211,7 +218,7 @@
                                 icon="iconoir:trash"
                                 color="black"
                                 class="button--red "
-                                ariaLabel="Delete domain"
+                                ariaLabel="Confirm delete {domainName}"
                                 disabled={isDemo()}
                             />
                         {:else}
@@ -222,7 +229,7 @@
                                 icon="iconoir:trash"
                                 color="black"
                                 class="button--red "
-                                ariaLabel="Delete domain"
+                                ariaLabel="Confirm delete {domainName}"
                                 disabled={!!removeForm.pending}
                             />
                         {/if}
@@ -385,13 +392,14 @@
                     position="top"
                     offset={8}
                     hoverOpacity={false}
+                    tabindex={isDemo() ? 0 : undefined}
                 >
                     <Button
                         type="submit"
                         text="NS Lookup"
                         size="sm"
                         color="white"
-                        ariaLabel="NS Lookup - Check"
+                        ariaLabel="NS Lookup for {domainName}"
                         icon={isDemo()
                             ? "iconoir:dns"
                             : nsForm.pending
@@ -431,13 +439,14 @@
                         text="SSL checks run via WhoisJSON — add an API key in Settings"
                         position="top"
                         offset={8}
+                        tabindex={0}
                     >
                         <Button
                             type="submit"
                             text="SSL Lookup"
                             size="sm"
                             color="white"
-                            ariaLabel="SSL Lookup - Check"
+                            ariaLabel="SSL Lookup for {domainName}"
                             icon="iconoir:security-pass"
                             disabled={true}
                         />
@@ -448,13 +457,14 @@
                         position="top"
                         offset={8}
                         hoverOpacity={false}
+                        tabindex={isDemo() ? 0 : undefined}
                     >
                         <Button
                             type="submit"
                             text="SSL Lookup"
                             size="sm"
                             color="white"
-                            ariaLabel="SSL Lookup - Check"
+                            ariaLabel="SSL Lookup for {domainName}"
                             icon={isDemo()
                                 ? "iconoir:security-pass"
                                 : sslForm.pending
@@ -497,13 +507,14 @@
                         position="top"
                         offset={8}
                         hoverOpacity={false}
+                        tabindex={isDemo() || scanBlocked ? 0 : undefined}
                     >
                         <Button
                             type="submit"
                             text="Scan Now"
                             size="sm"
                             color="white"
-                            ariaLabel="Scan domain for latest status and details"
+                            ariaLabel="Scan Now for {domainName}"
                             icon={isDemo()
                                 ? "iconoir:search"
                                 : checkForm.pending
@@ -521,7 +532,7 @@
                         text="Scan Now"
                         size="sm"
                         color="white"
-                        ariaLabel="Scan domain for latest status and details"
+                        ariaLabel="Scan Now for {domainName}"
                         icon={isDemo()
                             ? "iconoir:search"
                             : checkForm.pending
@@ -580,7 +591,12 @@
         <div class="text-orange-500 flex items-center gap-1">
             Unable to Verify
             {#if data?.error_message}
-                <Tooltip text={data.error_message} position="bottom" offset={8}>
+                <Tooltip
+                    text={data.error_message}
+                    position="bottom"
+                    offset={8}
+                    tabindex={0}
+                >
                     <Icon icon="iconoir:info-circle" />
                 </Tooltip>
             {/if}

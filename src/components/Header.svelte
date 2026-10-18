@@ -114,6 +114,7 @@
                 <Button
                     href={resolve("settings")}
                     title="Settings"
+                    ariaLabel="Settings"
                     size="lg"
                     icon="iconoir:settings"
                     color="white-outline"
@@ -139,6 +140,7 @@
                         text="Domain checking disabled in Demo mode"
                         position="bottom"
                         hoverOpacity={false}
+                        tabindex={0}
                     >
                         <Button
                             type="submit"
@@ -155,6 +157,7 @@
                             icon="iconoir:search"
                             color="white"
                             class="flex! sm:hidden!"
+                            ariaLabel="Check Domains"
                             disabled={isDemo()}
                         />
                     </Tooltip>
@@ -182,6 +185,9 @@
                         iconClass={batchCheck.pending ? "animate-spin" : ""}
                         color="white"
                         class="flex! sm:hidden!"
+                        ariaLabel={batchCheck.pending
+                            ? "Checking Domains..."
+                            : "Check Domains"}
                         disabled={!!batchCheck.pending}
                     />
                 {/if}
@@ -195,6 +201,7 @@
             <Button
                 href="https://github.com/Scorpio3310/domain-watcher"
                 title="GitHub"
+                ariaLabel="GitHub"
                 target="_blank"
                 size="lg"
                 icon="iconoir:github"

@@ -158,7 +158,7 @@
         functionality.
     </p>
 
-    {#each sizes as size}
+    {#each sizes as size (size)}
         <div class="mb-20">
             <h2
                 class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
@@ -166,7 +166,7 @@
                 {size} Size Toggles
             </h2>
 
-            {#each toggleTypes as toggleType}
+            {#each toggleTypes as toggleType (toggleType.type)}
                 <div class="mb-8">
                     <h3 class="text-xl mb-4 flex items-center gap-2">
                         <span
@@ -180,12 +180,12 @@
                         </span>
                     </h3>
 
-                    {#each chunkArray(combinationsBySizeAndType[size][toggleType.type], 5) as group}
+                    {#each chunkArray(combinationsBySizeAndType[size][toggleType.type], 5) as group (group[0].uniqueId)}
                         <div class="mb-4">
                             <div
                                 class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4"
                             >
-                                {#each group as test}
+                                {#each group as test (test.uniqueId)}
                                     {@const currentState = getToggleState(
                                         test.uniqueId
                                     )}
@@ -244,7 +244,7 @@
             Disabled States
         </h2>
 
-        {#each sizes as size}
+        {#each sizes as size (size)}
             <div class="mb-4">
                 <h3 class="text-xl font-medium mb-6">
                     {size.toUpperCase()} - Disabled Examples
@@ -253,7 +253,7 @@
                 <div
                     class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4"
                 >
-                    {#each variants as variant}
+                    {#each variants as variant (variant)}
                         <div
                             class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
                         >
@@ -384,10 +384,10 @@
             <div>
                 <h4 class="font-medium text-black mb-2">Toggle Types:</h4>
                 <ul class="space-y-1 text-sm opacity-70">
-                    {#each toggleTypes as toggleType}
+                    {#each toggleTypes as toggleType (toggleType.type)}
                         <li>
                             <strong>{toggleType.label}:</strong>
-                            {#each sizes as size}
+                            {#each sizes as size (size)}
                                 {size.toUpperCase()}: {combinationsBySizeAndType[
                                     size
                                 ][toggleType.type].length}{size !==
