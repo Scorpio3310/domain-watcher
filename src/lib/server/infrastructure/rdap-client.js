@@ -8,6 +8,7 @@
 
 /** @import { ServiceResult } from '#lib/types.js' */
 
+import { waitUntil } from "cloudflare:workers";
 import { DOMAIN_STATUS } from "#lib/constants/constants.js";
 import { getErrorMessage } from "#lib/utils/helpers.js";
 
@@ -49,6 +50,13 @@ const NO_RDAP_TLDS = Object.freeze(
 let bootstrapCache = { map: null, fetchedAt: 0 };
 /** @type {Promise<Map<string, string>>|null} In-flight fetch shared by concurrent callers */
 let bootstrapPromise = null;
+/** When bootstrapPromise was started (ms epoch) — lets callers drop an abandoned one */
+let bootstrapPromiseStartedAt = 0;
+/**
+ * An in-flight fetch older than this can only be one whose continuation was
+ * cancelled (its own AbortSignal fires at BOOTSTRAP_FETCH_TIMEOUT_MS)
+ */
+const BOOTSTRAP_PROMISE_MAX_AGE_MS = BOOTSTRAP_FETCH_TIMEOUT_MS + 5_000;
 
 /**
  * Extracts the TLD used for bootstrap lookup (last label, lowercased)
@@ -100,7 +108,12 @@ const fetchBootstrapMap = async () => {
 /**
  * Loads the IANA RDAP bootstrap registry, cached in-memory for 24h.
  * Concurrent callers share one in-flight fetch (batch checks fire several
- * lookups in parallel on a cold isolate).
+ * lookups in parallel on a cold isolate). The fetch is registered with
+ * waitUntil so it survives the request that started it (e.g. a page load
+ * whose prediction deadline won the race) instead of being cancelled when
+ * that response completes. As a last resort, an in-flight promise older than
+ * BOOTSTRAP_PROMISE_MAX_AGE_MS is treated as abandoned and replaced, so the
+ * shared promise can never stay stuck for the isolate's lifetime.
  * @async
  * @returns {Promise<Map<string, string>>} TLD → RDAP base URL map
  * @throws {Error} When the bootstrap cannot be fetched and no cache exists
@@ -112,10 +125,26 @@ const loadBootstrapMap = async () => {
     ) {
         return bootstrapCache.map;
     }
-    if (!bootstrapPromise) {
-        bootstrapPromise = fetchBootstrapMap().finally(() => {
-            bootstrapPromise = null;
+    if (
+        !bootstrapPromise ||
+        Date.now() - bootstrapPromiseStartedAt > BOOTSTRAP_PROMISE_MAX_AGE_MS
+    ) {
+        /** @type {Promise<Map<string, string>>} */
+        const promise = fetchBootstrapMap().finally(() => {
+            // Only clear our own slot — a replaced (abandoned) promise
+            // settling late must not wipe out its successor
+            if (bootstrapPromise === promise) bootstrapPromise = null;
         });
+        bootstrapPromise = promise;
+        bootstrapPromiseStartedAt = Date.now();
+        try {
+            waitUntil(promise.catch(() => {}));
+        } catch (error) {
+            // No request context to extend — the fetch's own timeout still bounds it
+            console.warn(
+                `⚠️ waitUntil unavailable for RDAP bootstrap fetch: ${getErrorMessage(error)}`
+            );
+        }
     }
     return bootstrapPromise;
 };

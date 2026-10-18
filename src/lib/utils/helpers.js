@@ -1,11 +1,6 @@
 import { PUBLIC_ENVIRONMENT, PUBLIC_TIMEZONE } from "$app/env/public";
-import {
-    formatDistanceToNow,
-    parseISO,
-    differenceInDays,
-    isPast,
-    isValid,
-} from "date-fns";
+import { formatDistanceToNow, parseISO, isValid } from "date-fns";
+import { EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 
 // ============================================================================
 // UTILITY FUNCTIONS (internal helpers)
@@ -255,8 +250,39 @@ export const formatHumanDate = (dateInput, options = {}) => {
 // DOMAIN EXPIRATION FORMATTING
 // =============================================================================
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 /**
- * Formats expiration date with intelligent remaining time information
+ * Whole days until a domain expires — the ONE day-count rule shared by the UI
+ * (formatExpirationDate, getExpirationStatus) and the notification reports.
+ * Any started day counts as a full day, i.e. partial days round AWAY from
+ * zero: expiring in 16h → 1, in 9.5 days → 10, expired 12h ago → -1. So an
+ * expired domain never reads "0 days ago", and 1..EXPIRY_WARNING_DAYS lines
+ * up exactly with the report's "expires within EXPIRY_WARNING_DAYS × 24h"
+ * window. Pure arithmetic on instants — browser-safe and timezone-independent.
+ * @function getDaysUntilExpiration
+ * @param {string|Date|null} expirationDate - Domain expiration date
+ * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC if no timezone specified
+ * @returns {number|null} Signed whole days (negative = expired; 0 only at the
+ *   exact expiry instant) or null if the date is missing/invalid
+ * @example
+ * // Assuming now is 2025-07-29T12:00:00Z
+ * getDaysUntilExpiration('2025-07-30T04:00:00Z') // 1 (16 hours left)
+ * getDaysUntilExpiration('2025-08-15T12:00:00Z') // 17
+ * getDaysUntilExpiration('2025-07-29T00:00:00Z') // -1 (expired 12 hours ago)
+ * getDaysUntilExpiration(null) // null
+ */
+export const getDaysUntilExpiration = (expirationDate, assumeUTC = true) => {
+    const date = parseDate(expirationDate, assumeUTC);
+    if (!date || !isValid(date)) return null;
+
+    const diffMs = date.getTime() - Date.now();
+    return Math.sign(diffMs) * Math.ceil(Math.abs(diffMs) / MS_PER_DAY);
+};
+
+/**
+ * Formats expiration date with intelligent remaining time information.
+ * Day counts follow getDaysUntilExpiration (partial days round away from zero).
  * @function formatExpirationDate
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {Object} [options={}] - Advanced formatting configuration
@@ -268,7 +294,7 @@ export const formatHumanDate = (dateInput, options = {}) => {
  * @param {boolean} [options.assumeUTC=true] - Whether to assume input is UTC
  * @returns {string|null} Formatted expiration string with optional remaining time or null if invalid
  * @example
- * // Expired domain (assuming today is 2025-07-29)
+ * // Expired domain (all examples assume now is 2025-07-29T00:00:00Z)
  * formatExpirationDate('2025-07-20')
  * // Returns: "20 July 2025 (expired 9 days ago)"
  *
@@ -278,9 +304,11 @@ export const formatHumanDate = (dateInput, options = {}) => {
  * // Returns: "15 August 2025 (17 days remaining)"
  *
  * @example
- * // Expiring today
- * formatExpirationDate('2025-07-29')
- * // Returns: "29 July 2025 (0 days remaining)"
+ * // Expiring later today / expired a few hours ago (never "0 days")
+ * formatExpirationDate('2025-07-29T16:00:00Z', { onlyRemaining: true })
+ * // Returns: "1 day remaining"
+ * formatExpirationDate('2025-07-28T20:00:00Z', { onlyRemaining: true })
+ * // Returns: "expired 1 day ago"
  *
  * @example
  * // Only remaining text (compact format)
@@ -322,8 +350,8 @@ export const formatExpirationDate = (expirationDate, options = {}) => {
     if (!date || !isValid(date)) return null;
 
     try {
-        const daysUntilExpiration = differenceInDays(date, new Date());
-        const isExpired = isPast(date);
+        const daysUntilExpiration = getDaysUntilExpiration(date, false) ?? 0;
+        const isExpired = daysUntilExpiration < 0;
         const daysExpired = Math.abs(daysUntilExpiration);
 
         const getRemainingText = () =>
@@ -435,13 +463,15 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
 // =============================================================================
 
 /**
- * Analyzes expiration status and provides styling information
+ * Analyzes expiration status and provides styling information.
+ * Day counts follow getDaysUntilExpiration; "expiring soon" means within
+ * EXPIRY_WARNING_DAYS, the same window the notification reports use.
  * @function getExpirationStatus
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC
  * @returns {import('#lib/types.js').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
  * @example
- * // Expired domain (assuming today is 2025-07-29)
+ * // Expired domain (all examples assume now is 2025-07-29T00:00:00Z)
  * getExpirationStatus('2025-07-20')
  * // Returns: {
  * //   status: 'expired',
@@ -452,7 +482,7 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * // }
  *
  * @example
- * // Expiring soon (within 30 days)
+ * // Expiring soon (within EXPIRY_WARNING_DAYS)
  * getExpirationStatus('2025-08-10') // 12 days from now
  * // Returns: {
  * //   status: 'expiring_soon',
@@ -474,11 +504,11 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * // }
  *
  * @example
- * // Edge cases - expiring today
- * getExpirationStatus('2025-07-29') // Today
+ * // Edge cases - expiring later today (16 hours left)
+ * getExpirationStatus('2025-07-29T16:00:00Z')
  * // Returns: {
  * //   status: 'expiring_soon',
- * //   daysRemaining: 0,
+ * //   daysRemaining: 1,
  * //   isExpired: false,
  * //   isExpiringSoon: true,
  * //   className: 'text-orange'
@@ -523,10 +553,10 @@ export const getExpirationStatus = (expirationDate, assumeUTC = true) => {
         };
     }
 
-    const daysUntilExpiration = differenceInDays(date, new Date());
-    const isExpired = isPast(date);
+    const daysUntilExpiration = getDaysUntilExpiration(date, false) ?? 0;
+    const isExpired = daysUntilExpiration < 0;
     const isExpiringSoon =
-        daysUntilExpiration <= 30 && daysUntilExpiration >= 0;
+        !isExpired && daysUntilExpiration <= EXPIRY_WARNING_DAYS;
 
     return {
         status: isExpired

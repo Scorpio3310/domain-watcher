@@ -1,4 +1,7 @@
-import { formatHumanDate } from "#lib/utils/helpers.js";
+import {
+    formatHumanDate,
+    getDaysUntilExpiration,
+} from "#lib/utils/helpers.js";
 
 /**
  * @fileoverview Shared helpers for notification providers.
@@ -7,26 +10,23 @@ import { formatHumanDate } from "#lib/utils/helpers.js";
  */
 
 /**
- * Format date for display
+ * Format date for display — same calendar date and format as the dashboard
+ * (formatHumanDate in the configured PUBLIC_TIMEZONE, e.g. "19 October 2026")
  * @param {string} dateString - Date string to format
- * @returns {string} Formatted date
+ * @returns {string} Formatted date (falls back to the raw string when unparseable)
  */
 export const formatDate = (dateString) =>
-    new Date(dateString).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
+    formatHumanDate(dateString, { showTime: false }) ?? dateString;
 
 /**
- * Get days until domain expiry (negative if expired)
+ * Get days until domain expiry (negative if expired) — same rule as the
+ * dashboard (getDaysUntilExpiration: partial days round away from zero, so an
+ * expired domain is at least 1 day ago, never "0 days ago")
  * @param {string} expiryDate - Domain expiration date string
- * @returns {number} Days until expiry (negative if expired)
+ * @returns {number} Days until expiry (negative if expired, 0 when unparseable)
  */
-export const getDaysUntilExpiry = (expiryDate) => {
-    const diffTime = new Date(expiryDate).getTime() - Date.now();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-};
+export const getDaysUntilExpiry = (expiryDate) =>
+    getDaysUntilExpiration(expiryDate) ?? 0;
 
 /**
  * Current report timestamp in the configured timezone

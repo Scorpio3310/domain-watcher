@@ -1,3 +1,76 @@
+import { EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
+
+// =============================================================================
+// SHARED VERIFICATION PREDICATES
+// =============================================================================
+// Interpolated into BOTH selection queries (SELECT_DOMAINS_NEEDING_CHECK and
+// SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION) so the manual and cron paths can't
+// drift apart. `expires` is always wrapped in datetime(): it is stored as ISO
+// "YYYY-MM-DDTHH:MM:SSZ" while datetime('now') yields "YYYY-MM-DD HH:MM:SS",
+// and a raw TEXT comparison is off by up to a day ('T' sorts after ' ').
+// datetime() returns NULL for an unparseable value, which is treated like
+// "no expiry data". last_domain_checked is always written via
+// CURRENT_TIMESTAMP, so it already matches datetime('now') formatting.
+// Status values must match DOMAIN_STATUS in #lib/constants/constants.js.
+
+/** Daily refresh cadence (< 24h so a fixed daily cron time never just misses it) */
+const DAILY_REFRESH_AFTER = "-20 hours";
+/** Safety-net refresh cadence for every registered domain */
+const SAFETY_NET_REFRESH_AFTER = "-7 days";
+/** Scheduled cron runs skip domains checked within this window (see cronNotifications.checkDomains) */
+const RECENTLY_CHECKED_WITHIN = "-12 hours";
+
+/** End of the "expiring soon" window (EXPIRY_WARNING_DAYS from now) */
+const EXPIRY_WINDOW_END = `datetime('now', '+${EXPIRY_WARNING_DAYS} days')`;
+
+/** Registered, but the stored expiry has already passed */
+const IS_EXPIRED_REGISTERED = `(status = 'registered' AND datetime(expires) < datetime('now'))`;
+
+/** available/error/not_checked, or registered without (usable) expiry data (e.g. .de/.ch via RDAP) */
+const NEEDS_VERIFICATION = `(status IN ('available', 'error', 'not_checked') OR (status = 'registered' AND datetime(expires) IS NULL))`;
+
+/** Registered and expiring within the warning window (the report's "expiring" section) */
+const IS_EXPIRING_SOON = `(status = 'registered' AND datetime(expires) BETWEEN datetime('now') AND ${EXPIRY_WINDOW_END})`;
+
+/**
+ * Stored registry status shows a grace/deletion state. Walks every element of
+ * raw_domain_data → rawDomainData.status (the envelope verifyDomain stores):
+ * RDAP phrases ("redemption period", "pending delete", "auto renew period")
+ * and WhoisJSON EPP codes ("redemptionPeriod", "pendingDelete",
+ * "autoRenewPeriod", optionally followed by an icann.org URL). Each element
+ * is matched on its own after stripping spaces and folding case, so unrelated
+ * codes (e.g. "pending transfer" + "client delete prohibited") can't combine
+ * into a match. json_valid() guards malformed rows (json_each would throw).
+ */
+const IN_GRACE_OR_DELETION_STATE = `EXISTS (
+            SELECT 1
+            FROM json_each(CASE WHEN json_valid(raw_domain_data) THEN raw_domain_data ELSE '{}' END, '$.rawDomainData.status') AS registry_status
+            WHERE lower(replace(registry_status.value, ' ', '')) LIKE '%redemptionperiod%'
+               OR lower(replace(registry_status.value, ' ', '')) LIKE '%pendingdelete%'
+               OR lower(replace(registry_status.value, ' ', '')) LIKE '%autorenewperiod%'
+        )`;
+
+/**
+ * Daily refresh of a registered domain with a future expiry that is either
+ * expiring soon (catches renewals) or in a grace/deletion state (catches a
+ * drop after a registry auto-renew moved the expiry a year ahead)
+ */
+const NEEDS_DAILY_REFRESH = `(status = 'registered'
+            AND datetime(expires) >= datetime('now')
+            AND (datetime(expires) <= ${EXPIRY_WINDOW_END} OR ${IN_GRACE_OR_DELETION_STATE})
+            AND (last_domain_checked IS NULL OR last_domain_checked < datetime('now', '${DAILY_REFRESH_AFTER}')))`;
+
+/** Safety net: any registered domain with a future expiry not checked for a week (early deletions etc.) */
+const NEEDS_SAFETY_NET_REFRESH = `(status = 'registered'
+            AND datetime(expires) >= datetime('now')
+            AND (last_domain_checked IS NULL OR last_domain_checked < datetime('now', '${SAFETY_NET_REFRESH_AFTER}')))`;
+
+/** Registered domain with a future expiry that is due for a refresh check */
+const NEEDS_REFRESH = `(${NEEDS_DAILY_REFRESH} OR ${NEEDS_SAFETY_NET_REFRESH})`;
+
+/** Checked recently enough that a scheduled run reuses the stored state */
+const IS_RECENTLY_CHECKED = `(last_domain_checked >= datetime('now', '${RECENTLY_CHECKED_WITHIN}'))`;
+
 /**
  * Database queries for domain management and monitoring
  * Handles domain CRUD operations, verification checks, and status updates
@@ -192,44 +265,57 @@ export const DOMAIN_QUERIES = {
     // =============================================================================
 
     /**
-     * Finds domains requiring basic verification checks
+     * Finds domains requiring a check (manual "Check Domains" button)
      * @type {string}
-     * @description Returns domains that need status verification: no expiry,
-     * expired, or a non-registered status. Status values must match
-     * DOMAIN_STATUS in #lib/constants/constants.js and the status set used by
-     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below.
-     * Registered domains with NULL expires (TLDs without public expiry data,
-     * e.g. .de/.ch via RDAP) sort last so they don't crowd out the per-run
-     * check limit for domains that actually need attention.
-     * @returns {Array<Object>} Domains with: no expiry, expired, or non-registered status
+     * @description Returns domains that need status verification: no (usable)
+     * expiry, expired, a non-registered status, or a registered domain due for
+     * a refresh — daily when expiring soon or in a grace/deletion state, weekly
+     * otherwise. Built from the same shared predicates as
+     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below, so both paths agree.
+     * Sort order (the caller slices to CONFIG.LIMIT_DOMAIN_CHECKS): expired /
+     * non-registered first, then registered without expiry data (.de/.ch via
+     * RDAP), then daily refreshes, then weekly safety-net refreshes — each
+     * oldest-checked first, so the remainder rotates fairly across runs.
+     * @returns {Array<Object>} Domains needing a check, in processing order
      */
     SELECT_DOMAINS_NEEDING_CHECK: `
         SELECT *
         FROM domains
-        WHERE expires IS NULL
-           OR expires <= datetime('now')
+        WHERE datetime(expires) IS NULL
+           OR datetime(expires) <= datetime('now')
            OR status IN ('not_checked', 'available', 'error')
-        ORDER BY CASE WHEN status = 'registered' AND expires IS NULL THEN 1 ELSE 0 END ASC,
+           OR ${NEEDS_REFRESH}
+        ORDER BY CASE
+                     WHEN status = 'registered' AND datetime(expires) IS NULL THEN 1
+                     WHEN ${NEEDS_DAILY_REFRESH} THEN 2
+                     WHEN ${NEEDS_SAFETY_NET_REFRESH} THEN 3
+                     ELSE 0
+                 END ASC,
                  last_domain_checked ASC
     `,
 
     /**
      * UNIFIED query for comprehensive domain monitoring (SINGLE DB CALL)
      * @type {string}
-     * @description Returns ALL domains needing attention with smart prioritization.
-     * Must stay in sync with SELECT_DOMAINS_NEEDING_CHECK above: same status set
-     * AND same registered-with-NULL-expires inclusion (TLDs without public
-     * expiry data, e.g. .de/.ch via RDAP, would otherwise never be re-checked).
+     * @description Single source of truth for the cron path: returns every
+     * domain the cron must verify or report, with SQL-computed category flags
+     * (domainVerification.getAllDomainsForVerification partitions by them —
+     * no JS date re-derivation). Uses the same shared predicates as
+     * SELECT_DOMAINS_NEEDING_CHECK above; the warning window comes from
+     * EXPIRY_WARNING_DAYS in #lib/constants/constants.js.
      * @returns {Array<Object>} Prioritized domains with verification flags and categories
      * @example
      * // Returns domains with these additional fields:
-     * // - verification_priority: 1-6 (1=CRITICAL, 6=LOWEST)
-     * // - is_expired_registered: 1/0 (registered but expired)
-     * // - needs_verification: 1/0 (available/error/unchecked/registered-no-expiry)
-     * // - is_expiring_soon: 1/0 (expires within 30 days)
-     *
-     * NOTE: the '+30 days' window below must stay in sync with
-     * EXPIRY_WARNING_DAYS in #lib/constants/constants.js
+     * // - verification_priority: 1-8 processing order
+     * //     1 expired registered, 2 error, 3 not_checked, 4 available,
+     * //     5 registered without expiry data, 6 daily refresh (expiring soon /
+     * //     grace-deletion state), 7 weekly safety-net refresh,
+     * //     8 report-only (expiring soon, refreshed recently)
+     * // - is_expired_registered: 1/0 (registered but expired) → verify + report
+     * // - needs_verification: 1/0 (available/error/unchecked/registered-no-expiry) → verify
+     * // - is_expiring_soon: 1/0 (expires within EXPIRY_WARNING_DAYS) → report
+     * // - needs_refresh: 1/0 (registered, future expiry, refresh due) → verify only
+     * // - is_recently_checked: 1/0 (checked within 12h) → scheduled runs skip it
      */
     SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION: `
         SELECT
@@ -238,29 +324,28 @@ export const DOMAIN_QUERIES = {
             status,
             expires,
             last_domain_checked,
-            -- Smart prioritization for processing order
+            -- Processing order (cron verifies in this order, capped per run)
             CASE
-                WHEN expires < datetime('now') AND status = 'registered' THEN 1  -- CRITICAL: Expired registered
-                WHEN status = 'error' THEN 2                                      -- HIGH: Error retry
-                WHEN status = 'not_checked' THEN 3                               -- MEDIUM: Never checked
-                WHEN status = 'available' THEN 4                                 -- LOW: Re-check available
-                WHEN expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered' THEN 5  -- INFO: Expiring soon
-                ELSE 6                                                           -- LOWEST: Registered without expiry data
+                WHEN ${IS_EXPIRED_REGISTERED} THEN 1
+                WHEN status = 'error' THEN 2
+                WHEN status = 'not_checked' THEN 3
+                WHEN status = 'available' THEN 4
+                WHEN status = 'registered' AND datetime(expires) IS NULL THEN 5
+                WHEN ${NEEDS_DAILY_REFRESH} THEN 6
+                WHEN ${NEEDS_SAFETY_NET_REFRESH} THEN 7
+                ELSE 8
             END as verification_priority,
-            -- Category flags for easy filtering and processing
-            CASE WHEN expires < datetime('now') AND status = 'registered' THEN 1 ELSE 0 END as is_expired_registered,
-            CASE WHEN status IN ('available', 'error', 'not_checked') OR (status = 'registered' AND expires IS NULL) THEN 1 ELSE 0 END as needs_verification,
-            CASE WHEN expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered' THEN 1 ELSE 0 END as is_expiring_soon
+            -- Category flags (the single source of truth for categorization)
+            CASE WHEN ${IS_EXPIRED_REGISTERED} THEN 1 ELSE 0 END as is_expired_registered,
+            CASE WHEN ${NEEDS_VERIFICATION} THEN 1 ELSE 0 END as needs_verification,
+            CASE WHEN ${IS_EXPIRING_SOON} THEN 1 ELSE 0 END as is_expiring_soon,
+            CASE WHEN ${NEEDS_REFRESH} THEN 1 ELSE 0 END as needs_refresh,
+            CASE WHEN ${IS_RECENTLY_CHECKED} THEN 1 ELSE 0 END as is_recently_checked
         FROM domains
-        WHERE
-            -- CRITICAL: Expired registered domains
-            (expires < datetime('now') AND status = 'registered')
-            -- OR needs verification (available/error/unchecked)
-            OR status IN ('available', 'error', 'not_checked')
-            -- OR expiring within 30 days
-            OR (expires BETWEEN datetime('now') AND datetime('now', '+30 days') AND status = 'registered')
-            -- OR registered without expiry data (would otherwise be excluded forever)
-            OR (status = 'registered' AND expires IS NULL)
+        WHERE ${IS_EXPIRED_REGISTERED}
+           OR ${NEEDS_VERIFICATION}
+           OR ${IS_EXPIRING_SOON}
+           OR ${NEEDS_REFRESH}
         ORDER BY verification_priority ASC, last_domain_checked ASC
     `,
 };

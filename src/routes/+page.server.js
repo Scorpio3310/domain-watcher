@@ -42,6 +42,8 @@ export async function load() {
         const PREDICTION_DEADLINE_MS = 2500;
         /** @type {Array<('rdap'|'whoisjson'|'none')|null>} */
         const unknownPredictions = domainRecords.map(() => null);
+        /** @type {ReturnType<typeof setTimeout>|undefined} */
+        let deadlineTimer;
         const predictions = lookupContext
             ? await Promise.race([
                   Promise.all(
@@ -56,10 +58,13 @@ export async function load() {
                           }
                       })
                   ),
-                  new Promise((resolve) =>
-                      setTimeout(resolve, PREDICTION_DEADLINE_MS)
-                  ).then(() => unknownPredictions),
-              ])
+                  new Promise((resolve) => {
+                      deadlineTimer = setTimeout(
+                          resolve,
+                          PREDICTION_DEADLINE_MS
+                      );
+                  }).then(() => unknownPredictions),
+              ]).finally(() => clearTimeout(deadlineTimer))
             : unknownPredictions;
 
         const processedDomains = domainRecords.map((domainRecord, index) => ({

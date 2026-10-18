@@ -15,6 +15,8 @@ import { getErrorMessage } from "#lib/utils/helpers.js";
 // CONSTANTS & CONFIG
 // ========================================
 const TEST_DOMAIN = "example.com";
+/** Per-call cap — the SDK's axios instance has no timeout of its own */
+const WHOIS_TIMEOUT_MS = 10_000;
 
 // ========================================
 // TYPES & INTERFACES
@@ -146,12 +148,46 @@ const createWhoisClient = async (customApiKey = null) => {
     return new WhoisJson({ apiKey: keyToUse });
 };
 
+/**
+ * Races a WhoisJSON SDK call against WHOIS_TIMEOUT_MS so one stalled
+ * connection can't hold a whole verification batch. The rejection message
+ * contains "timeout", which classifyWhoisError maps to 502.
+ * @template T
+ * @param {Promise<T>} call - Pending SDK call
+ * @param {string} operation - Operation label used in the timeout message
+ * @returns {Promise<T>} The SDK result, or a rejection after the timeout
+ */
+const withTimeout = (call, operation) => {
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    let timer;
+    const timeout = /** @type {Promise<never>} */ (
+        new Promise((_, reject) => {
+            timer = setTimeout(
+                () =>
+                    reject(
+                        new Error(
+                            `WhoisJSON ${operation} timeout after ${WHOIS_TIMEOUT_MS}ms`
+                        )
+                    ),
+                WHOIS_TIMEOUT_MS
+            );
+        })
+    );
+    return Promise.race([call, timeout]).finally(() => clearTimeout(timer));
+};
+
 // ========================================
 // PUBLIC API FUNCTIONS
 // ========================================
 
 /**
- * Check domain availability with comprehensive error handling and validation
+ * Check domain availability with comprehensive error handling and validation.
+ * Available domains cost ONE API call (/domain-availability); registered
+ * domains also call /whois for expiry + registrar. Only a definitive answer
+ * returns 200 — a non-boolean availability flag (502) or a failed /whois
+ * lookup on a registered domain returns an error, so verifyDomain records a
+ * failure and keeps the last known status/expiry instead of storing
+ * "registered, no expiry".
  * @param {string} domainName - Domain to check
  * @param {string|null} [customApiKey] - Optional custom API key for testing
  * @returns {Promise<ServiceResult>} Domain availability result
@@ -168,18 +204,49 @@ export async function checkDomainAvailability(domainName, customApiKey = null) {
 
         console.log(`🔍 Domain availability check for ${domainName}`);
 
-        // Only call checkDomainAvailability - it should contain all needed info
-        const availability = await whois.checkDomainAvailability(domainName);
+        const availability = await withTimeout(
+            whois.checkDomainAvailability(domainName),
+            "availability check"
+        );
 
-        // Optionally get full WHOIS data if needed
-        let fullData = null;
-        try {
-            fullData = await whois.lookup(domainName);
-        } catch (lookupError) {
-            // Lookup might fail for available domains, that's OK
-            console.log(
-                `Lookup failed for ${domainName}, likely available domain`
+        // Anything but a boolean is not a definitive answer — never guess
+        if (typeof availability?.available !== "boolean") {
+            console.error(
+                `❌ Unexpected WhoisJSON availability response for ${domainName}:`,
+                availability
             );
+            return {
+                status: 502,
+                message: `WhoisJSON returned an unexpected availability response for ${domainName}`,
+            };
+        }
+
+        if (availability.available) {
+            return {
+                status: 200,
+                message: "Domain availability checked successfully",
+                data: {
+                    domain: domainName,
+                    status: DOMAIN_STATUS.AVAILABLE,
+                    expires: null,
+                    registrar: null,
+                    rawDomainData: availability,
+                    source: "whoisjson",
+                },
+            };
+        }
+
+        // Registered → full WHOIS data supplies expiry + registrar. A failed
+        // lookup (429, 5xx, timeout) must surface as an error, not as
+        // "registered with no expiry" that would wipe the stored date.
+        let fullData;
+        try {
+            fullData = await withTimeout(
+                whois.lookup(domainName),
+                "WHOIS lookup"
+            );
+        } catch (lookupError) {
+            return handleWhoisError(lookupError, "WHOIS lookup", domainName);
         }
 
         return {
@@ -187,9 +254,7 @@ export async function checkDomainAvailability(domainName, customApiKey = null) {
             message: "Domain availability checked successfully",
             data: {
                 domain: domainName,
-                status: availability?.available
-                    ? DOMAIN_STATUS.AVAILABLE
-                    : DOMAIN_STATUS.REGISTERED,
+                status: DOMAIN_STATUS.REGISTERED,
                 expires: fullData?.expires || null,
                 registrar: fullData?.registrar || null,
                 rawDomainData: fullData || availability,
@@ -212,7 +277,10 @@ export async function checkDomainNS(domainName, customApiKey = null) {
         const whois = await createWhoisClient(customApiKey);
 
         console.log(`🔍 NS lookup for ${domainName}`);
-        const dnsResult = await whois.nslookup(domainName);
+        const dnsResult = await withTimeout(
+            whois.nslookup(domainName),
+            "NS lookup"
+        );
 
         return {
             status: 200,
@@ -238,7 +306,10 @@ export async function checkDomainSSL(domainName, customApiKey = null) {
         const whois = await createWhoisClient(customApiKey);
 
         console.log(`🔍 SSL lookup check for ${domainName}`);
-        const sslResult = await whois.ssl(domainName);
+        const sslResult = await withTimeout(
+            whois.ssl(domainName),
+            "SSL lookup"
+        );
 
         return {
             status: 200,

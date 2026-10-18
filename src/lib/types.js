@@ -35,6 +35,19 @@
  */
 
 /**
+ * Row from SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION: a domain plus the
+ * SQL-computed processing order and category flags (1/0)
+ * @typedef {DomainRecord & {
+ *   verification_priority: number,
+ *   is_expired_registered: number,
+ *   needs_verification: number,
+ *   is_expiring_soon: number,
+ *   needs_refresh: number,
+ *   is_recently_checked: number
+ * }} VerificationCandidate
+ */
+
+/**
  * Normalized domain lookup result (provider-agnostic envelope stored in raw_domain_data)
  * @typedef {Object} DomainLookupData
  * @property {string} domain - The domain name that was checked
@@ -196,9 +209,9 @@
  * Expiration analysis with UI styling info (see getExpirationStatus)
  * @typedef {Object} ExpirationStatus
  * @property {('expired'|'expiring_soon'|'unknown'|undefined)} status - Current expiration status category
- * @property {number|null} daysRemaining - Absolute days until/since expiration (always positive)
+ * @property {number|null} daysRemaining - Absolute days until/since expiration (see getDaysUntilExpiration; ≥ 1 once expired)
  * @property {boolean} isExpired - True if domain has already expired
- * @property {boolean} isExpiringSoon - True if expires within 30 days (and not expired)
+ * @property {boolean} isExpiringSoon - True if expires within EXPIRY_WARNING_DAYS (and not expired)
  * @property {string} className - CSS class name for conditional styling
  */
 

@@ -26,12 +26,17 @@ export { validateDemoMode };
  * @namespace CONFIG
  * @readonly
  * @memberof module:DomainUtils
- * @property {number} LIMIT_DOMAIN_CHECKS - Maximum number of domains to check in a single batch operation
+ * @property {number} LIMIT_DOMAIN_CHECKS - Maximum number of domains to check in a single run (manual bulk check and each cron run)
  * @property {number} DELAY_BETWEEN_DOMAINS - Delay in milliseconds between domain checks to avoid rate limiting
  * @property {number} BATCH_SIZE - Number of domains to process simultaneously in each batch
  */
 export const CONFIG = {
-    /** Maximum number of domains to check in a single batch */
+    /**
+     * Maximum number of domains to check in a single run (manual bulk check
+     * and each cron run). Worst case 20 × 2 fetches (RDAP retry / WhoisJSON
+     * availability + lookup) + IANA bootstrap + 3 notification sends stays
+     * under the Workers Free 50-subrequest budget; the rest rolls over.
+     */
     LIMIT_DOMAIN_CHECKS: 20,
     /** Delay between domain checks in milliseconds to avoid rate limiting */
     DELAY_BETWEEN_DOMAINS: 100,

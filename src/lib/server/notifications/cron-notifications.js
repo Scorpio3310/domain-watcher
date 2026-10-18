@@ -1,6 +1,7 @@
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { domainVerification } from "../services/domain.js";
+import { CONFIG } from "#lib/server/utils/domain-utils.js";
 import {
     getCurrentTimeInTimezone,
     formatHumanDate,
@@ -45,6 +46,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * known status), while failures come from this run's live batch results.
  * @typedef {Object} DomainCheckResult
  * @property {number} checked - Total number of domains verified via API
+ * @property {number} deferred - Domains due for a check but left for later runs by the per-run cap
  * @property {DomainRecord[]} available - Domains currently available
  * @property {DomainRecord[]} expiring - Domains approaching expiration
  * @property {DomainRecord[]} expired - Domains that are expired but still registered
@@ -59,7 +61,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {"skipped"|"executed"} action - Whether the run executed or was skipped
  * @property {string} [reason] - Reason for skipping (if action is "skipped")
  * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
- * @property {{checked: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain verification counts (if executed)
+ * @property {{checked: number, deferred: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain verification counts (if executed)
  * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
  */
 
@@ -99,7 +101,8 @@ export const cronNotifications = {
     /**
      * Main entry point - orchestrates domain checking and notification sending
      *
-     * @param {boolean} [force=false] - Bypass time checking and force execution
+     * @param {boolean} [force=false] - Manual run: bypass time checking, force
+     *   execution and also re-verify domains checked within the last 12 hours
      * @returns {Promise<CronExecutionResult>} Execution results with timing and notification details
      *
      * @example
@@ -140,7 +143,7 @@ export const cronNotifications = {
 
             // First get domain data, then send notifications
             console.log("🔍 Checking domains...");
-            const domains = await this.checkDomains();
+            const domains = await this.checkDomains(force);
 
             console.log("📨 Sending notifications...");
             const notifications = await this.sendNotifications(
@@ -153,6 +156,7 @@ export const cronNotifications = {
                 action: "executed",
                 domains: {
                     checked: domains.checked,
+                    deferred: domains.deferred,
                     available: domains.available.length,
                     expiring: domains.expiring.length,
                     expired: domains.expired.length,
@@ -226,71 +230,97 @@ export const cronNotifications = {
     },
 
     /**
-     * Performs intelligent domain verification in parallel
+     * Verifies the domains that are due, then reads the report from DB state
      *
-     * Handles three types of domain checks:
-     * 1. Expired registered domains - verifies if they became available
-     * 2. Regular domains - standard availability verification
-     * 3. Expiring domains - fetches domains approaching expiration
+     * Builds ONE verification list in priority order from the SQL-computed
+     * categories (each already sorted by verification_priority, then
+     * last_domain_checked ASC):
+     * 1. Expired registered domains - did they become available?
+     * 2. error → not_checked → available → registered without expiry data
+     * 3. Daily refresh - registered domains expiring soon or in a
+     *    grace/deletion state (catches renewals and drops after auto-renew)
+     * 4. Weekly safety-net refresh of every other registered domain
      *
-     * Report sections are read back from DB state AFTER the verification
-     * batches: failed checks preserve the last known status, so a transient
-     * lookup/DB failure can't silently drop a domain from the daily report.
-     * The failures list comes from this run's live batch results.
+     * Scheduled runs skip domains checked within the last 12 hours, so a
+     * second provider later the same day reuses fresh DB state instead of
+     * re-spending lookups (WhoisJSON quota). The list is capped at
+     * CONFIG.LIMIT_DOMAIN_CHECKS so lookups + notification sends stay under
+     * the Workers Free 50-subrequest budget; the remainder rolls over to later
+     * runs (oldest-checked first, so rotation stays fair).
      *
+     * Report sections are read back from DB state AFTER verification: failed
+     * checks preserve the last known status, so a transient lookup/DB failure
+     * (or a domain deferred by the cap) can't silently drop a domain from the
+     * daily report. Refresh-only domains never appear in it. The failures
+     * list comes from this run's live batch results.
+     *
+     * @param {boolean} [manual=false] - Manual run: also re-verify recently checked domains
      * @returns {Promise<DomainCheckResult>} Comprehensive domain verification results
      *
      * @example
      * const results = await cronNotifications.checkDomains();
      * console.log(`Checked ${results.checked} domains, found ${results.available.length} available`);
      */
-    async checkDomains() {
-        // ONE unified SELECT, partitioned in JS (was 3 identical queries)
-        const { expiredRegistered, needingVerification } =
+    async checkDomains(manual = false) {
+        // ONE unified SELECT; categories come from its SQL flags
+        const { expiredRegistered, needingVerification, needingRefresh } =
             await domainVerification.getAllDomainsForVerification();
 
-        // Verify domains in parallel (if any exist)
-        if (expiredRegistered.length > 0) {
+        // Disjoint categories, concatenated in verification_priority order
+        const dueDomains = [
+            ...expiredRegistered,
+            ...needingVerification,
+            ...needingRefresh,
+        ];
+        const eligibleDomains = manual
+            ? dueDomains
+            : dueDomains.filter((d) => d.is_recently_checked !== 1);
+        const domainsToVerify = eligibleDomains.slice(
+            0,
+            CONFIG.LIMIT_DOMAIN_CHECKS
+        );
+        const skippedRecent = dueDomains.length - eligibleDomains.length;
+        const deferred = eligibleDomains.length - domainsToVerify.length;
+
+        if (skippedRecent > 0) {
             console.log(
-                `🚨 Verifying ${expiredRegistered.length} expired domains...`
+                `⏭️ Skipping ${skippedRecent} recently checked domains (reusing stored state)`
             );
         }
-        if (needingVerification.length > 0) {
+        if (deferred > 0) {
             console.log(
-                `📊 Verifying ${needingVerification.length} regular domains...`
+                `⏳ Deferring ${deferred} domains to later runs (limit ${CONFIG.LIMIT_DOMAIN_CHECKS} per run)`
+            );
+        }
+        if (domainsToVerify.length > 0) {
+            const expiredCount = domainsToVerify.filter(
+                (d) => d.is_expired_registered === 1
+            ).length;
+            console.log(
+                `🚨 Verifying ${domainsToVerify.length} domains (${expiredCount} expired)...`
             );
         }
 
-        const [expiredResults, verificationResults] = await Promise.all([
-            expiredRegistered.length > 0
-                ? domainVerification.verifyExpiredDomainsBatch(
-                      expiredRegistered
-                  )
-                : null,
-            needingVerification.length > 0
-                ? domainVerification.verifyDomainsBatch(needingVerification)
-                : null,
-        ]);
+        const verificationResults =
+            domainsToVerify.length > 0
+                ? await domainVerification.verifyDomainsBatch(domainsToVerify)
+                : null;
 
         // Post-check DB state drives the report sections
         const reportState = await domainVerification.getDomainReportState();
 
         /** @type {DomainCheckResult} */
         const results = {
-            checked:
-                (expiredResults?.checked ?? 0) +
-                (verificationResults?.checked ?? 0),
+            checked: verificationResults?.checked ?? 0,
+            deferred,
             available: reportState.available,
             expiring: reportState.expiring,
             expired: reportState.expired,
-            failures: [
-                ...(expiredResults?.failures ?? []),
-                ...(verificationResults?.failures ?? []),
-            ],
+            failures: verificationResults?.failures ?? [],
         };
 
         console.log(
-            `✅ Domains: ${results.checked} checked, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring, ${results.failures.length} failed`
+            `✅ Domains: ${results.checked} checked, ${results.deferred} deferred, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring, ${results.failures.length} failed`
         );
         return results;
     },

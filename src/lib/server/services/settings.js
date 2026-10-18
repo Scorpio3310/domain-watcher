@@ -126,13 +126,15 @@ export const domainProvider = {
      * Gets the stored domain lookup provider configuration
      * @async
      * @memberof domainProvider
-     * @returns {Promise<{provider: ('rdap'|'whoisjson')|null, whoisjsonFallback: boolean}>}
-     *   Stored provider (null when unset/invalid) and whether RDAP-unsupported
-     *   TLDs may fall back to WhoisJSON (absent on legacy rows = true)
+     * @returns {Promise<{provider: ('rdap'|'whoisjson')|null, whoisjsonFallback: boolean, error: boolean}>}
+     *   Stored provider (null when unset/invalid), whether RDAP-unsupported
+     *   TLDs may fall back to WhoisJSON (absent on legacy rows = true), and
+     *   `error: true` when the DB read failed — the defaults are then returned
+     *   for display/resolution paths, but must never drive a settings write
      *
      * @example
      * const { provider, whoisjsonFallback } = await domainProvider.getConfig();
-     * // Returns: { provider: "rdap", whoisjsonFallback: true }
+     * // Returns: { provider: "rdap", whoisjsonFallback: true, error: false }
      */
     async getConfig() {
         try {
@@ -152,10 +154,11 @@ export const domainProvider = {
             return {
                 provider,
                 whoisjsonFallback: parsedConfig.whoisjson_fallback !== false,
+                error: false,
             };
         } catch (error) {
             console.error("❌ Failed to get domain provider config:", error);
-            return { provider: null, whoisjsonFallback: true };
+            return { provider: null, whoisjsonFallback: true, error: true };
         }
     },
 

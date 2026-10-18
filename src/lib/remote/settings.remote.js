@@ -39,8 +39,14 @@ export const saveApiKey = form(whoIsApiKeySchema, async ({ apiKey: key }) => {
         // otherwise saving a key on a fresh install would silently flip the
         // resolved default from RDAP to WhoisJSON (the keyed-install default
         // exists only for installs that predate the provider setting).
+        // A failed read is NOT "never chosen": pinning then could overwrite
+        // an explicit choice, so skip the pin in that case.
         const providerConfig = await domainProvider.getConfig();
-        if (providerConfig.provider === null) {
+        if (providerConfig.error) {
+            console.warn(
+                "⚠️ Provider setting could not be read - skipping provider pin"
+            );
+        } else if (providerConfig.provider === null) {
             const hadKeyBefore = await apiKey.isConfigured();
             await domainProvider.save(
                 hadKeyBefore

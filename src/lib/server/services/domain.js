@@ -14,9 +14,9 @@ import {
     verificationEngine,
     CONFIG,
 } from "#lib/server/utils/domain-utils.js";
-import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
+import { DOMAIN_STATUS } from "#lib/constants/constants.js";
 
-/** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
+/** @import { DomainRecord, VerificationCandidate, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT
@@ -108,7 +108,13 @@ export const domains = {
  */
 export const domainVerification = {
     /**
-     * Retrieves all domains categorized by their verification and expiration status
+     * Retrieves all domains categorized by their verification and expiration status.
+     * Categories come straight from the flags computed by
+     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION (the single source of truth), and
+     * every list keeps the query's order (verification_priority, then
+     * last_domain_checked ASC). needingVerification, expiredRegistered and
+     * needingRefresh are disjoint; expiring overlaps needingRefresh for
+     * domains whose daily refresh is due.
      * @async
      * @memberof domainVerification
      * @returns {Promise<CategorizedDomains>} Categorized domain lists
@@ -120,48 +126,31 @@ export const domainVerification = {
      * console.log(`${categories.needingVerification.length} domains need verification`);
      * console.log(`${categories.expiredRegistered.length} expired domains still registered`);
      * console.log(`${categories.expiring.length} domains expiring soon`);
+     * console.log(`${categories.needingRefresh.length} registered domains due for a refresh`);
      */
     async getAllDomainsForVerification() {
         try {
             const result = await executeSql(
                 DOMAIN_QUERIES.SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION
             );
-            const domains = /** @type {DomainRecord[]} */ (
+            const domains = /** @type {VerificationCandidate[]} */ (
                 result?.results || []
             );
 
             /** @type {CategorizedDomains} */
             const categorized = {
                 needingVerification: domains.filter(
-                    (d) =>
-                        ["available", "error", "not_checked"].includes(
-                            d.status ?? ""
-                        ) ||
-                        // Registered without expiry data (.de/.ch style TLDs) —
-                        // only a re-check can ever notice these becoming available
-                        (d.status === "registered" && !d.expires)
+                    (d) => d.needs_verification === 1
                 ),
                 expiredRegistered: domains.filter(
-                    (d) =>
-                        d.expires &&
-                        new Date(d.expires) < new Date() &&
-                        d.status === "registered"
+                    (d) => d.is_expired_registered === 1
                 ),
-                expiring: domains.filter(
-                    (d) =>
-                        d.expires &&
-                        new Date(d.expires) > new Date() &&
-                        new Date(d.expires) <=
-                            new Date(
-                                Date.now() +
-                                    EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000
-                            ) &&
-                        d.status === "registered"
-                ),
+                expiring: domains.filter((d) => d.is_expiring_soon === 1),
+                needingRefresh: domains.filter((d) => d.needs_refresh === 1),
             };
 
             console.log(
-                `📊 Found ${categorized.needingVerification.length} needing verification, ${categorized.expiredRegistered.length} expired registered, ${categorized.expiring.length} expiring`
+                `📊 Found ${categorized.needingVerification.length} needing verification, ${categorized.expiredRegistered.length} expired registered, ${categorized.expiring.length} expiring, ${categorized.needingRefresh.length} due for refresh`
             );
             return categorized;
         } catch (error) {
@@ -174,7 +163,9 @@ export const domainVerification = {
      * Snapshot of current DB state shaped for the daily report sections.
      * Derived from ONE unified SELECT: available = status 'available',
      * expired = registered with expires in the past, expiring = registered
-     * within the warning window. Meant to run AFTER a verification batch so
+     * within the warning window. Domains selected only for a refresh
+     * (needingRefresh, future expiry outside the window) are never reported.
+     * Meant to run AFTER a verification batch so
      * the report reflects stored state (which failed checks preserve) instead
      * of only the checks that happened to succeed in this run.
      * @async
@@ -218,7 +209,8 @@ export const domainVerification = {
     },
 
     /**
-     * Selects all domains needing a check and verifies them in one batch,
+     * Selects all domains needing a check (SELECT_DOMAINS_NEEDING_CHECK, incl.
+     * due refreshes of registered domains) and verifies them in one batch,
      * capped at `limit` to respect WHOIS API rate limits
      * @async
      * @memberof domainVerification
@@ -295,9 +287,10 @@ export const domainVerification = {
 
 /**
  * @typedef {Object} CategorizedDomains
- * @property {DomainRecord[]} needingVerification - Domains that need status verification
- * @property {DomainRecord[]} expiredRegistered - Expired domains still showing as registered
- * @property {DomainRecord[]} expiring - Domains expiring within 30 days
+ * @property {VerificationCandidate[]} needingVerification - available/error/not_checked, or registered without expiry data (verify every run)
+ * @property {VerificationCandidate[]} expiredRegistered - Expired domains still showing as registered (verify every run)
+ * @property {VerificationCandidate[]} expiring - Registered domains expiring within EXPIRY_WARNING_DAYS (report section)
+ * @property {VerificationCandidate[]} needingRefresh - Registered domains with a future expiry whose refresh is due (verify only, never reported)
  * @memberof module:DomainsServer
  */
 

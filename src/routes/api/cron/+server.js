@@ -57,6 +57,10 @@ function authenticateRequest(request) {
  * - Forces immediate domain verification and notification check
  * - Useful for testing and immediate execution
  *
+ * **Demo Mode:**
+ * - Responds 200 `{ success: true, action: "skipped", reason }` without doing
+ *   any work, so the every-minute cron isn't logged as a failed run
+ *
  * @example
  * // Regular cron execution
  * fetch('/api/cron', {
@@ -93,20 +97,25 @@ function authenticateRequest(request) {
  * @throws {401} Unauthorized - Invalid or missing x-cron-secret header
  * @throws {403} Forbidden - Missing Content-Type header (SvelteKit CSRF protection)
  * @throws {500} Internal Server Error - Cron execution failure
+ * @throws {502} Bad Gateway - The run executed but no notification was sent
+ *   and at least one provider failed (`success: false`, details in
+ *   `notifications.errors`), so the scheduled run is marked as failed
  */
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
     const startTime = Date.now();
 
     try {
-        // Validate demo mode
+        // Demo mode: no work, but a 200 so the every-minute cron trigger
+        // isn't recorded as ~1440 failed runs per day
         const demoError = validateDemoMode();
         if (demoError) {
-            console.warn("❌ Demo mode detected - cron execution blocked");
-            return Response.json(
-                { error: "Unauthorized", message: demoError?.message },
-                { status: demoError?.status }
-            );
+            console.warn("⏭️ Demo mode detected - cron execution skipped");
+            return Response.json({
+                success: true,
+                action: "skipped",
+                reason: demoError.message,
+            });
         }
 
         // Authentication check
@@ -135,12 +144,27 @@ export async function POST({ request }) {
         const executionTime = Date.now() - startTime;
         console.log(`⏱️ Cron job completed in ${executionTime}ms`);
 
-        return Response.json({
-            success: true,
-            executionTime: `${executionTime}ms`,
-            manual: isManual,
-            ...result,
-        });
+        // Every selected provider failed → non-2xx so cron.js marks the
+        // scheduled run as failed instead of "successful" with no report
+        const allSendsFailed =
+            result.action === "executed" &&
+            result.notifications?.sent === 0 &&
+            (result.notifications.errors?.length ?? 0) > 0;
+        if (allSendsFailed) {
+            console.error(
+                "❌ Cron run sent no notifications - all providers failed"
+            );
+        }
+
+        return Response.json(
+            {
+                success: !allSendsFailed,
+                executionTime: `${executionTime}ms`,
+                manual: isManual,
+                ...result,
+            },
+            { status: allSendsFailed ? 502 : 200 }
+        );
     } catch (error) {
         const executionTime = Date.now() - startTime;
         console.error("❌ Cron job failed:", error);

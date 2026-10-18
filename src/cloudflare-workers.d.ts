@@ -6,4 +6,6 @@ declare module "cloudflare:workers" {
 		/** D1 database binding (`d1_databases[].binding` in wrangler.jsonc) */
 		DB?: import("#lib/database/db.js").D1Database;
 	};
+	/** Extends the current request's lifetime until the promise settles (`ctx.waitUntil`) */
+	export function waitUntil(promise: Promise<unknown>): void;
 }
