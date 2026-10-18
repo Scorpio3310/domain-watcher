@@ -17,6 +17,7 @@
         getExpirationStatus,
     } from "#lib/utils/helpers.js";
     import { ssl, ns, check, remove } from "#lib/remote/domain-card.remote.js";
+    import { getDomainDetails } from "#lib/remote/domain-details.remote.js";
 
     //// PROPS ////
     /** @type {{data: import('#lib/types.js').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */
@@ -76,6 +77,45 @@
     const buttonIconClass = $derived(
         `transition-all duration-200 ease-in-out ${isExpanded ? "rotate-180" : ""}`,
     );
+
+    //// RAW LOOKUP DATA (loaded on demand) ////
+    // The page data carries no raw RDAP/WhoisJSON/NS/SSL JSON - it is fetched
+    // only while the card is expanded. The NS/SSL/scan forms below refresh
+    // every active query after a successful submission, so an open card shows
+    // the new data without extra wiring.
+    const details = $derived(isExpanded ? getDomainDetails(data.id) : null);
+
+    /**
+     * Query started before the card expands - kept referenced so its cached
+     * result is still there when `details` above asks for the same domain
+     * @type {ReturnType<typeof getDomainDetails> | null}
+     */
+    let prefetchedDetails = null;
+
+    /**
+     * Starts loading the raw lookup data on hover/focus of "Show More", so the
+     * slide-open animation measures the loaded content instead of the
+     * one-line loading placeholder (which made the card snap at the end)
+     */
+    const prefetchDetails = () => {
+        if (isExpanded || prefetchedDetails) return;
+        prefetchedDetails = getDomainDetails(data.id);
+        // Errors surface on the expanded card's own query
+        prefetchedDetails.catch(() => {});
+    };
+
+    /**
+     * Pretty-prints stored JSON for the <pre> blocks
+     * @param {string|null} rawJson - Stored JSON string
+     * @returns {string} Indented JSON, or the raw text if it isn't valid JSON
+     */
+    const formatJson = (rawJson) => {
+        try {
+            return JSON.stringify(JSON.parse(rawJson || "{}"), null, 2);
+        } catch {
+            return rawJson ?? "";
+        }
+    };
 
     //// PROVIDER TRANSPARENCY ////
     const tld = $derived(data?.domain_name?.split(".").pop() ?? "");
@@ -148,6 +188,8 @@
                         iconClass={buttonIconClass}
                         color="white"
                         onclick={toggleExpansion}
+                        onpointerenter={prefetchDetails}
+                        onfocus={prefetchDetails}
                         ariaLabel="{buttonText} details for {domainName}"
                         aria-expanded={isExpanded}
                     />
@@ -218,7 +260,7 @@
                                 icon="iconoir:trash"
                                 color="black"
                                 class="button--red "
-                                ariaLabel="Confirm delete {domainName}"
+                                ariaLabel="Delete {domainName} (confirm)"
                                 disabled={isDemo()}
                             />
                         {:else}
@@ -229,7 +271,7 @@
                                 icon="iconoir:trash"
                                 color="black"
                                 class="button--red "
-                                ariaLabel="Confirm delete {domainName}"
+                                ariaLabel="Delete {domainName} (confirm)"
                                 disabled={!!removeForm.pending}
                             />
                         {/if}
@@ -323,41 +365,73 @@
         {formatHumanDate(data?.created_at ?? null) || "/"}
     </p>
     <hr />
-    <div>
-        <span class="opacity-50 text-inline">
-            <Icon icon="iconoir:globe" class="icon" />Domain Data:</span
-        >
-        <pre>
-{JSON.stringify(JSON.parse(data?.raw_domain_data || "{}"), null, 2)}
-        </pre>
-    </div>
-    <hr />
-
-    {#if data?.raw_ns_data && data.raw_ns_data !== "{}" && data.raw_ns_data !== "null"}
-        <div>
-            <span class="opacity-50 text-inline">
-                <Icon icon="iconoir:dns" class="icon" />NS Data:</span
-            >
-            <pre>
-{JSON.stringify(JSON.parse(data.raw_ns_data), null, 2)}
-            </pre>
-        </div>
-        <hr />
-    {/if}
-
-    {#if data?.raw_ssl_data && data.raw_ssl_data !== "{}" && data.raw_ssl_data !== "null"}
-        <div>
-            <span class="opacity-50 text-inline">
-                <Icon icon="iconoir:security-pass" class="icon" />SSL Data:</span
-            >
-            <pre>
-{JSON.stringify(JSON.parse(data.raw_ssl_data), null, 2)}
-            </pre>
-        </div>
-        <hr />
-    {/if}
-
+    {@render rawData()}
     {@render otherButtons()}
+{/snippet}
+
+{#snippet rawData()}
+    {#if details?.error}
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-orange-500">
+                Couldn't load the lookup data{details.error.message
+                    ? ` (${details.error.message})`
+                    : ""}.
+            </span>
+            <Button
+                text="Retry"
+                size="sm"
+                color="white"
+                icon="iconoir:refresh-double"
+                iconClass={details.loading ? "animate-spin" : ""}
+                disabled={details.loading}
+                onclick={() => details?.refresh()}
+                ariaLabel="Retry loading lookup data for {domainName}"
+            />
+        </div>
+        <hr />
+    {:else if !details?.ready}
+        <p class="text-inline opacity-50">
+            <Icon icon="iconoir:refresh-double" class="icon animate-spin" />
+            Loading lookup data…
+        </p>
+        <hr />
+    {:else if details.current}
+        <!-- current is null only for a just-deleted domain (card is leaving) -->
+        {@const { rawDomainData, rawNsData, rawSslData } = details.current}
+        <div>
+            <span class="opacity-50 text-inline">
+                <Icon icon="iconoir:globe" class="icon" />Domain Data:</span
+            >
+            <pre>
+{formatJson(rawDomainData)}
+            </pre>
+        </div>
+        <hr />
+
+        {#if rawNsData}
+            <div>
+                <span class="opacity-50 text-inline">
+                    <Icon icon="iconoir:dns" class="icon" />NS Data:</span
+                >
+                <pre>
+{formatJson(rawNsData)}
+                </pre>
+            </div>
+            <hr />
+        {/if}
+
+        {#if rawSslData}
+            <div>
+                <span class="opacity-50 text-inline">
+                    <Icon icon="iconoir:security-pass" class="icon" />SSL Data:</span
+                >
+                <pre>
+{formatJson(rawSslData)}
+                </pre>
+            </div>
+            <hr />
+        {/if}
+    {/if}
 {/snippet}
 
 {#snippet otherButtons()}

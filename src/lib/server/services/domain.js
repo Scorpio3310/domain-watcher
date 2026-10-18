@@ -5,7 +5,7 @@
  * @module DomainsServer
  */
 
-import { executeSql } from "#lib/database/db.js";
+import { executeSql, executeQueryFirst } from "#lib/database/db.js";
 import { DOMAIN_QUERIES } from "#lib/database/domain-queries.js";
 import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
@@ -28,7 +28,10 @@ import { DOMAIN_STATUS } from "#lib/constants/constants.js";
  */
 export const domains = {
     /**
-     * Retrieves all domains from the watchlist
+     * Retrieves all domains from the watchlist for the home page list:
+     * only the columns a domain card shows up front, with registrar and
+     * lookup source derived in SQL. The raw lookup/NS/SSL JSON is left out -
+     * an expanded card loads it on demand via {@link domains.getDetails}.
      * @async
      * @memberof domains
      * @returns {Promise<DomainListResponse>} Response object with domain list
@@ -50,6 +53,50 @@ export const domains = {
                 domains.length !== 1 ? "s" : ""
             }`,
             data: domains,
+        };
+    },
+
+    /**
+     * Retrieves the raw lookup data of one domain - the JSON an expanded
+     * domain card shows. NS/SSL data that was never fetched (NULL, "null" or
+     * "{}") comes back as null, so the card can simply hide that section.
+     * @async
+     * @memberof domains
+     * @param {number} domainId - Domain ID
+     * @returns {Promise<DomainDetails|null>} Raw JSON strings, or null when
+     *   the domain doesn't exist
+     * @throws {Error} Database errors propagate to the caller
+     *
+     * @example
+     * const details = await domains.getDetails(42);
+     * if (details?.rawNsData) console.log(JSON.parse(details.rawNsData));
+     */
+    async getDetails(domainId) {
+        const row = await executeQueryFirst(
+            DOMAIN_QUERIES.SELECT_DOMAIN_DETAILS_BY_ID,
+            [domainId]
+        );
+        if (!row) return null;
+
+        /**
+         * @param {unknown} value - Stored JSON column value
+         * @returns {string|null} The JSON string, or null when nothing was stored
+         */
+        const storedJsonOrNull = (value) =>
+            typeof value === "string" &&
+            value !== "" &&
+            value !== "null" &&
+            value !== "{}"
+                ? value
+                : null;
+
+        return {
+            rawDomainData:
+                typeof row.raw_domain_data === "string"
+                    ? row.raw_domain_data
+                    : null,
+            rawNsData: storedJsonOrNull(row.raw_ns_data),
+            rawSslData: storedJsonOrNull(row.raw_ssl_data),
         };
     },
 
@@ -243,27 +290,6 @@ export const domainVerification = {
             processed: domainsToProcess.length,
         };
     },
-
-    /**
-     * Performs batch verification specifically for expired domains that might now be available
-     * This is a specialized version of verifyDomainsBatch for high-priority expired domains
-     * @async
-     * @memberof domainVerification
-     * @param {DomainRecord[]} expiredDomains - Array of expired domain objects to verify
-     * @param {BatchOptions} [options={}] - Configuration options for batch processing
-     * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
-     *
-     * @example
-     * const { expiredRegistered } = await domainVerification.getAllDomainsForVerification();
-     * const results = await domainVerification.verifyExpiredDomainsBatch(expiredRegistered);
-     * if (results.available.length > 0) {
-     *   console.log(`${results.available.length} expired domains are now available!`);
-     *   // Send notifications or trigger alerts
-     * }
-     */
-    async verifyExpiredDomainsBatch(expiredDomains, options = {}) {
-        return verificationEngine.verifyBatch(expiredDomains, options);
-    },
 };
 
 // ========================================
@@ -274,7 +300,16 @@ export const domainVerification = {
  * @typedef {Object} DomainListResponse
  * @property {number} status - HTTP status code (200 for success, 500 for error)
  * @property {string} message - Human-readable status message
- * @property {DomainRecord[]} data - Array of domain objects
+ * @property {DomainRecord[]} data - Domain list rows (SELECT_ALL_DOMAINS columns - no raw_* JSON)
+ * @memberof module:DomainsServer
+ */
+
+/**
+ * Raw lookup data of one domain, loaded on demand by an expanded domain card
+ * @typedef {Object} DomainDetails
+ * @property {string|null} rawDomainData - Stored lookup envelope JSON (RDAP/WhoisJSON), null if never checked
+ * @property {string|null} rawNsData - NS lookup JSON, null if never fetched
+ * @property {string|null} rawSslData - SSL certificate JSON, null if never fetched
  * @memberof module:DomainsServer
  */
 

@@ -10,7 +10,7 @@
         { checked: "iconoir:check", unchecked: "" },
         { checked: "iconoir:eye", unchecked: "iconoir:eye-off" },
         { checked: "iconoir:check", unchecked: "iconoir:xmark" },
-        { checked: "iconoir:check", unchecked: "iconoir:cross" },
+        { checked: "iconoir:check", unchecked: "iconoir:xmark-circle" },
         { checked: "", unchecked: "" }, // No icons
     ];
 

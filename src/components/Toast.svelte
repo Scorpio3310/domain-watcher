@@ -69,11 +69,14 @@
 </script>
 
 {#if visible && message?.message}
+    <!-- Success text is announced by the persistent live region in
+         +layout.svelte (a role="status" inserted together with its content is
+         often missed); errors announce themselves via role="alert" -->
     <div
         class="toast-notification"
         in:fly|global={{ x: 500, duration: 500 }}
         out:fly={{ x: 500, duration: 500 }}
-        role={isSuccess ? "status" : "alert"}
+        role={isSuccess ? undefined : "alert"}
     >
         <div class="panel {isSuccess ? 'panel--success' : 'panel--error'}">
             <div class="bg-blur"></div>

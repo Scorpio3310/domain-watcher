@@ -82,15 +82,53 @@ export const DOMAIN_QUERIES = {
     // =============================================================================
 
     /**
-     * Retrieves all domains ordered by most recent
+     * Retrieves the home page domain list ordered by most recent
      * @type {string}
-     * @description Returns complete domain records sorted by ID (newest first)
-     * @returns {Array<Object>} Domain objects with all fields including metadata
+     * @description Returns only the columns a domain card shows up front,
+     * sorted by ID (newest first). The raw RDAP/WhoisJSON/NS/SSL JSON never
+     * leaves the database here (an expanded card loads it on demand via
+     * SELECT_DOMAIN_DETAILS_BY_ID); registrar and lookup source are derived
+     * from the stored lookup envelope (raw_domain_data) in SQL instead.
+     * json_valid() guards malformed rows (json_extract would throw).
+     * @returns {Array<Object>} Domain list rows: id, domain_name, status,
+     *   expires, error_message, last_domain_checked, created_at,
+     *   registrar (registrar name or NULL), source ("RDAP" / "WhoisJSON" /
+     *   NULL for legacy rows)
      */
     SELECT_ALL_DOMAINS: `
-        SELECT *
-        FROM domains 
+        SELECT
+            id,
+            domain_name,
+            status,
+            expires,
+            error_message,
+            last_domain_checked,
+            created_at,
+            CASE WHEN json_valid(raw_domain_data)
+                THEN NULLIF(json_extract(raw_domain_data, '$.registrar.name'), '')
+            END AS registrar,
+            CASE WHEN json_valid(raw_domain_data)
+                THEN CASE json_extract(raw_domain_data, '$.source')
+                    WHEN 'rdap' THEN 'RDAP'
+                    WHEN 'whoisjson' THEN 'WhoisJSON'
+                END
+            END AS source
+        FROM domains
         ORDER BY id DESC
+    `,
+
+    /**
+     * Retrieves the raw lookup data of a single domain
+     * @type {string}
+     * @description The JSON an expanded domain card shows (lookup envelope,
+     * NS and SSL responses), loaded on demand instead of with the list
+     * @param {number} id - The domain ID to lookup
+     * @returns {Object|null} {raw_domain_data, raw_ns_data, raw_ssl_data} or null
+     */
+    SELECT_DOMAIN_DETAILS_BY_ID: `
+        SELECT raw_domain_data, raw_ns_data, raw_ssl_data
+        FROM domains
+        WHERE id = ?
     `,
 
     /**

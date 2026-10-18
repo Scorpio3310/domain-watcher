@@ -1,12 +1,7 @@
 /** @import { DomainRecord, ServiceResult } from '#lib/types.js' */
 
 import { error } from "@sveltejs/kit";
-import {
-    getErrorMessage,
-    getHttpStatus,
-    getRegistrar,
-    getLookupSource,
-} from "#lib/utils/helpers.js";
+import { getErrorMessage, getHttpStatus } from "#lib/utils/helpers.js";
 import { domains } from "#lib/server/services/domain.js";
 import { ui } from "#lib/server/services/settings.js";
 import {
@@ -67,10 +62,12 @@ export async function load() {
               ]).finally(() => clearTimeout(deadlineTimer))
             : unknownPredictions;
 
+        // Rows carry only the list columns (registrar + lookup source are
+        // derived in SQL): the raw lookup/NS/SSL JSON stays out of the page
+        // data and is loaded on demand when a card is expanded
+        // (#lib/remote/domain-details.remote.js)
         const processedDomains = domainRecords.map((domainRecord, index) => ({
             ...domainRecord,
-            registrar: getRegistrar(domainRecord.raw_domain_data ?? null),
-            source: getLookupSource(domainRecord.raw_domain_data ?? null),
             willCheckVia: predictions[index],
         }));
 

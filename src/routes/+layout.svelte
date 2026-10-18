@@ -4,11 +4,24 @@
     import { page } from "$app/state";
     import { toast } from "#lib/stores/toast.svelte.js";
     import "../app.css";
+    // Registers the bundled icon subset (server + browser) before any icon renders
+    import "#lib/icons/register.js";
     import NoJavascript from "#components/NoJavascript.svelte";
     import { dev } from "$app/env";
 
     /** @type {import('./$types').LayoutProps} */
     let { children, data } = $props();
+
+    /**
+     * Text of the current success toast, announced by the polite live region
+     * below (error toasts announce themselves via role="alert")
+     */
+    const successAnnouncement = $derived.by(() => {
+        const status = toast.current?.text.status ?? 0;
+        return status >= 200 && status < 300
+            ? (toast.current?.text.message ?? "")
+            : "";
+    });
 
     /**
      * Determines header type based on current route
@@ -70,6 +83,17 @@
 </div>
 
 <!-- Global Toast System -->
+<!-- Persistent live region: it must already exist when its content changes
+     for screen readers to announce it reliably. Keyed on the toast id so a
+     repeated identical message is announced again. -->
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {#key toast.current?.id}
+        {#if successAnnouncement}
+            <p>{successAnnouncement}</p>
+        {/if}
+    {/key}
+</div>
+
 {#if toast.current}
     {#key toast.current.id}
         <Toast message={toast.current.text} onClose={toast.clear} />

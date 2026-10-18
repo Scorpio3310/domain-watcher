@@ -11,7 +11,7 @@
         { checked: "iconoir:check", unchecked: "iconoir:circle" },
         { checked: "iconoir:heart-solid", unchecked: "iconoir:heart" },
         { checked: "iconoir:star-solid", unchecked: "iconoir:star" },
-        { checked: "iconoir:thumb-up", unchecked: "iconoir:thumb-down" },
+        { checked: "iconoir:thumbs-up", unchecked: "iconoir:thumbs-down" },
         { checked: "iconoir:eye", unchecked: "iconoir:eye-off" },
     ];
 

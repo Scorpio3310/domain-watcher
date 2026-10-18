@@ -202,7 +202,8 @@ const extractExpires = (events) => {
 
 /**
  * Extracts the registrar from RDAP entities (jCard format, RFC 7095).
- * Shape matches the WhoisJSON `registrar` object so getRegistrar() keeps working.
+ * Shape matches the WhoisJSON `registrar` object, so both providers expose the
+ * registrar name at the same JSON path (see SELECT_ALL_DOMAINS).
  * @param {Array<Record<string, any>>} [entities] - RDAP entities array
  * @returns {{name: string, url: string|null}|null} Registrar info or null
  */
