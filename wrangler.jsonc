@@ -18,12 +18,12 @@
     },
 
     // LOCAL DEVELOPMENT CONFIGURATION
-    // Environment variables for local development
-    // These variables are used in the development environment
-    // and are not used in production.
-    "vars": {
-        "CRON_SECRET": "dev-super-secure-key"
-    },
+    // Used by `wrangler dev` / `pnpm preview` only, never in production.
+    // There is intentionally no "vars" block: CRON_SECRET and ADMIN_PASSWORD are runtime
+    // secrets. `wrangler dev` reads them from .env (or from .dev.vars, which then replaces
+    // .env completely), so the cron handler (env.CRON_SECRET) and /api/cron ($app/env/private)
+    // always see the same value. Keep secrets out of this file - top-level "vars" would also
+    // make wrangler ask to copy them into "env.production.vars" on every production deploy.
     "d1_databases": [
         {
             "binding": "DB",
@@ -43,16 +43,17 @@
 
     // PRODUCTION ENVIRONMENT CONFIGURATION
     // This section is used for production deployment
-    // It contains environment variables and database bindings
+    // It contains the database and service bindings
     // that are different from the development environment.
     // Make sure to replace the database_id with your actual production database ID.
     // This section is not used in local development.
     // It is only used when deploying to Cloudflare Workers.
     "env": {
         "production": {
-            "vars": {
-                "CRON_SECRET": "strong-secret-key-here" // Replace with a secure random string (32+ characters)
-            },
+            // Runtime secrets are NOT configured here - set them once with:
+            //   npx wrangler secret put CRON_SECRET --env production     (secure random string, 32+ characters)
+            //   npx wrangler secret put ADMIN_PASSWORD --env production  (password for the browser login prompt)
+            // Secrets survive deploys; a "vars" entry with the same name would conflict with them.
             "d1_databases": [
                 {
                     "binding": "DB",

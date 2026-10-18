@@ -25,3 +25,6 @@ vite.config.ts.timestamp-*
 
 # VSCode
 .vscode
+# Wrangler local secrets
+.dev.vars*
+!.dev.vars.example

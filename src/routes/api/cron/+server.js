@@ -2,27 +2,29 @@ import { CRON_SECRET } from "$app/env/private";
 import { cronNotifications } from "#lib/server/notifications/cron-notifications.js";
 import { getErrorMessage } from "#lib/utils/helpers.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
+import { timingSafeEqual } from "#lib/server/utils/crypto.js";
 
 /**
  * Validates cron request authentication using secret header
  *
  * Checks for the presence and validity of the x-cron-secret header against
- * the configured CRON_SECRET environment variable to ensure only authorized
- * cron services can trigger the endpoint.
+ * the configured CRON_SECRET runtime secret (compared in constant time) to
+ * ensure only authorized cron services can trigger the endpoint.
  *
  * @param {Request} request - The incoming HTTP request object
- * @returns {{success: boolean, reason?: string}} Authentication result
+ * @param {string} secret - The configured CRON_SECRET
+ * @returns {Promise<{success: boolean, reason?: string}>} Authentication result
  *
  * @example
- * const authResult = authenticateRequest(request);
+ * const authResult = await authenticateRequest(request, CRON_SECRET);
  * if (!authResult.success) {
  *   return Response.json({ error: authResult.reason }, { status: 401 });
  * }
  */
-function authenticateRequest(request) {
+async function authenticateRequest(request, secret) {
     const authHeader = request.headers.get("x-cron-secret");
 
-    if (!authHeader || authHeader !== CRON_SECRET) {
+    if (!authHeader || !(await timingSafeEqual(authHeader, secret))) {
         return { success: false, reason: "Invalid or missing cron secret!" };
     }
 
@@ -37,7 +39,8 @@ function authenticateRequest(request) {
  *
  * @route POST /api/cron
  *
- * Requires the `x-cron-secret` request header for authentication and a
+ * Requires the `x-cron-secret` request header (matching the CRON_SECRET
+ * runtime secret) for authentication and a
  * `Content-Type: application/json` header (SvelteKit rejects cross-site POST
  * requests without a Content-Type as CSRF with 403). Accepts an
  * optional JSON body `{ manual?: boolean }` to force execution bypassing time
@@ -49,8 +52,11 @@ function authenticateRequest(request) {
  * @description
  * **Regular Operation:**
  * - Call every minute from cron service
- * - Verification only happens at user's scheduled notification times
- * - Prevents unnecessary API calls and respects rate limits
+ * - Each provider's daily report goes out once, at its notification time or
+ *   up to 60 minutes later (failed sends and missed ticks are retried within
+ *   that window; retries reuse the stored domain state)
+ * - Verification only happens when a report is due (at most
+ *   LIMIT_DOMAIN_CHECKS domains per run), respecting API rate limits
  *
  * **Manual Trigger:**
  * - Bypasses time checking when manual=true in request body
@@ -95,11 +101,16 @@ function authenticateRequest(request) {
  * - Body (raw JSON): {"manual": true}
  *
  * @throws {401} Unauthorized - Invalid or missing x-cron-secret header
+ * @throws {503} Service Unavailable - CRON_SECRET is not configured, so every
+ *   request is rejected (fail closed)
  * @throws {403} Forbidden - Missing Content-Type header (SvelteKit CSRF protection)
  * @throws {500} Internal Server Error - Cron execution failure
  * @throws {502} Bad Gateway - The run executed but no notification was sent
  *   and at least one provider failed (`success: false`, details in
- *   `notifications.errors`), so the scheduled run is marked as failed
+ *   `notifications.errors`), so the scheduled run is marked as failed; failed
+ *   sends are retried on the next ticks within 60 minutes of the scheduled time
+ * @throws {503} Service Unavailable - A due report slot couldn't be claimed
+ *   because of a database error (details in `claimErrors`)
  */
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
@@ -118,8 +129,22 @@ export async function POST({ request }) {
             });
         }
 
+        // Fail closed: without a configured secret no request can be authenticated
+        if (!CRON_SECRET) {
+            console.error(
+                '❌ CRON_SECRET is not configured - cron request rejected. Run "npx wrangler secret put CRON_SECRET --env production" (locally: set it in .env)'
+            );
+            return Response.json(
+                {
+                    error: "Service Unavailable",
+                    message: "Cron secret is not configured",
+                },
+                { status: 503 }
+            );
+        }
+
         // Authentication check
-        const authResult = authenticateRequest(request);
+        const authResult = await authenticateRequest(request, CRON_SECRET);
         if (!authResult.success) {
             console.warn("❌ Unauthorized cron request:", authResult.reason);
             return Response.json(
@@ -156,14 +181,24 @@ export async function POST({ request }) {
             );
         }
 
+        // A due report couldn't be claimed (DB error) → don't report success
+        const claimFailed =
+            result.action === "skipped" &&
+            (result.claimErrors?.length ?? 0) > 0;
+        if (claimFailed) {
+            console.error(
+                "❌ Cron run could not claim a due report - database error"
+            );
+        }
+
         return Response.json(
             {
-                success: !allSendsFailed,
+                success: !allSendsFailed && !claimFailed,
                 executionTime: `${executionTime}ms`,
                 manual: isManual,
                 ...result,
             },
-            { status: allSendsFailed ? 502 : 200 }
+            { status: allSendsFailed ? 502 : claimFailed ? 503 : 200 }
         );
     } catch (error) {
         const executionTime = Date.now() - startTime;
