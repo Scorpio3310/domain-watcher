@@ -1,0 +1,9 @@
+# pnpm 11+
+allowBuilds:
+  esbuild: true
+  sharp: false
+  workerd: false
+
+# pnpm 10 (e.g. Cloudflare Workers Builds default) - removed in pnpm 11
+onlyBuiltDependencies:
+  - esbuild
