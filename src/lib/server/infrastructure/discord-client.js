@@ -1,6 +1,5 @@
 /** @import { ServiceResult, DiscordConfig } from '#lib/types.js' */
 
-import { PUBLIC_TIMEZONE } from "$app/env/public";
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { isDemo } from "#lib/utils/helpers.js";
@@ -8,10 +7,15 @@ import { DISCORD_CONNECTION_STATUS } from "#lib/constants/constants.js";
 import {
     formatHumanDate,
     getErrorMessage,
+    getTimezone,
     maskApiKey,
 } from "#lib/utils/helpers.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
-import { truncateError } from "#lib/server/notifications/providers/shared.js";
+import {
+    formatApiError,
+    getScheduleResetDate,
+    getScheduleSeedDate,
+} from "#lib/server/utils/notification-utils.js";
 
 // ========================================
 // CORE UTILITIES
@@ -40,30 +44,6 @@ const createDiscordConfiguration = ({
     version,
 });
 
-/**
- * Timezone the scheduled notification time is interpreted in (same fallback
- * as the cron's schedule check)
- */
-const NOTIFICATION_TIMEZONE = PUBLIC_TIMEZONE || "UTC";
-
-/**
- * Short, single-line detail from a failed webhook response: Discord's JSON
- * `message` when present. The raw body is never passed through to the UI.
- * @param {string} body - Response body text
- * @returns {string} Collapsed, truncated detail ("" for empty or HTML bodies)
- */
-const summarizeErrorBody = (body) => {
-    let detail = body;
-    try {
-        const parsed = JSON.parse(body);
-        if (typeof parsed?.message === "string") detail = parsed.message;
-    } catch {
-        // Not JSON - fall back to the plain text body
-    }
-    detail = detail.replace(/\s+/g, " ").trim();
-    return detail.startsWith("<") ? "" : truncateError(detail, 100);
-};
-
 // ========================================
 // DISCORD WEBHOOK TESTING
 // ========================================
@@ -84,6 +64,7 @@ const summarizeErrorBody = (body) => {
 export async function testDiscordWebhook(webhook, notificationTime) {
     try {
         const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+        const timezone = getTimezone();
 
         // Create test message
         const testMessage = {
@@ -91,7 +72,7 @@ export async function testDiscordWebhook(webhook, notificationTime) {
             embeds: [
                 {
                     title: "Domain Watcher Test ✨",
-                    description: `Your notifications just passed the vibe check!\nThis notification was sent at ${sentAt} (${NOTIFICATION_TIMEZONE})\n\n**Scheduled notification time:** ${notificationTime} (${NOTIFICATION_TIMEZONE})\n\nIf you received this message, your webhook is working correctly! 🎉`,
+                    description: `Your notifications just passed the vibe check!\nThis notification was sent on ${sentAt} (${timezone})\n\n**Scheduled notification time:** ${notificationTime} (${timezone})\n\nIf you received this message, your webhook is working correctly! 🎉`,
                     color: 0x2ba805,
                 },
             ],
@@ -119,12 +100,9 @@ export async function testDiscordWebhook(webhook, notificationTime) {
                 response.status,
                 errorText
             );
-            const detail = summarizeErrorBody(errorText);
             return {
                 status: response.status,
-                message: `Discord API error (${response.status})${
-                    detail ? `: ${detail}` : ""
-                }`,
+                message: formatApiError("Discord", response.status, errorText),
             };
         }
     } catch (error) {
@@ -295,16 +273,23 @@ export const discord = {
                 notificationTime,
                 connectionStatus: DISCORD_CONNECTION_STATUS.READY,
             });
+            // The cron's schedule state survives the save; a changed time
+            // that is still ahead today re-allows today's report, a first
+            // save with a time that already passed starts tomorrow
+            const scheduleResetDate = getScheduleResetDate(notificationTime);
+            const scheduleSeedDate = getScheduleSeedDate(notificationTime);
+            const timezone = getTimezone();
 
             await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
                 JSON.stringify(initialDiscordConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             if (!shouldTestConnection) {
                 return {
                     status: 201,
-                    message:
-                        "Discord Webhook saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
+                    message: `Discord Webhook saved! ⭐ Daily report at ${notificationTime} (${timezone}). Pro tip: Test it out to make sure everything's smooth`,
                 };
             }
 
@@ -325,10 +310,12 @@ export const discord = {
 
             await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
                 JSON.stringify(finalDiscordConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             const responseMessage = isConnectionSuccessful
-                ? `Test message sent! Discord is ready to ping you at ${notificationTime} ⏰`
+                ? `Test message sent! Discord is ready to ping you at ${notificationTime} (${timezone}) ⏰`
                 : `Connection test stumbled: ${webhookTestResult.message} 🔧`;
 
             return {

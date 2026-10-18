@@ -16,7 +16,7 @@
     } from "#lib/constants/constants.js";
     import RadioButton from "#components/RadioButton.svelte";
     import ToggleSwitch from "#components/ToggleSwitch.svelte";
-    import { formatLastChecked } from "#lib/utils/helpers.js";
+    import { formatLastChecked, getTimezone } from "#lib/utils/helpers.js";
     import {
         saveApiKey,
         updateDomainProvider,
@@ -38,6 +38,10 @@
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
+
+    // Timezone the daily notification times are interpreted in
+    // (PUBLIC_TIMEZONE, falling back to UTC - same rule as the cron)
+    const notificationTimeHint = `Daily at this time (${getTimezone()})`;
 
     //// REMOTE FORMS ////
     // Seed the radio selections (as("radio") has no initial-value argument)
@@ -852,7 +856,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateSlackWebhook.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateSlackWebhook.fields.notificationTime.as(
                                 "time",
                                 data?.slackWebhookConfig?.notification_time ??
@@ -1037,7 +1041,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateDiscordWebhook.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateDiscordWebhook.fields.notificationTime.as(
                                 "time",
                                 data?.discordWebhookConfig
@@ -1261,7 +1265,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateResendConfig.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateResendConfig.fields.notificationTime.as(
                                 "time",
                                 data?.resendConfig?.notification_time ?? "",

@@ -1,6 +1,5 @@
 /** @import { ServiceResult, SlackConfig } from '#lib/types.js' */
 
-import { PUBLIC_TIMEZONE } from "$app/env/public";
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { isDemo } from "#lib/utils/helpers.js";
@@ -8,10 +7,15 @@ import { SLACK_CONNECTION_STATUS } from "#lib/constants/constants.js";
 import {
     formatHumanDate,
     getErrorMessage,
+    getTimezone,
     maskApiKey,
 } from "#lib/utils/helpers.js";
 import { validateDemoMode } from "#lib/server/utils/access.js";
-import { truncateError } from "#lib/server/notifications/providers/shared.js";
+import {
+    formatApiError,
+    getScheduleResetDate,
+    getScheduleSeedDate,
+} from "#lib/server/utils/notification-utils.js";
 
 // ========================================
 // CORE UTILITIES
@@ -40,23 +44,6 @@ const createSlackConfiguration = ({
     version,
 });
 
-/**
- * Timezone the scheduled notification time is interpreted in (same fallback
- * as the cron's schedule check)
- */
-const NOTIFICATION_TIMEZONE = PUBLIC_TIMEZONE || "UTC";
-
-/**
- * Short, single-line detail from a failed webhook response. The raw body is
- * never passed through to the UI (it can be large or an HTML error page).
- * @param {string} body - Response body text
- * @returns {string} Collapsed, truncated detail ("" for empty or HTML bodies)
- */
-const summarizeErrorBody = (body) => {
-    const detail = body.replace(/\s+/g, " ").trim();
-    return detail.startsWith("<") ? "" : truncateError(detail, 100);
-};
-
 // ========================================
 // SLACK WEBHOOK TESTING
 // ========================================
@@ -77,6 +64,7 @@ const summarizeErrorBody = (body) => {
 export async function testSlackWebhook(webhook, notificationTime) {
     try {
         const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+        const timezone = getTimezone();
 
         // Create test message
         const testMessage = {
@@ -86,7 +74,7 @@ export async function testSlackWebhook(webhook, notificationTime) {
                     type: "section",
                     text: {
                         type: "mrkdwn",
-                        text: `*Domain Watcher Test ✨*\n\nYour notifications just passed the vibe check!\nThis notification was sent at ${sentAt} (${NOTIFICATION_TIMEZONE})\n\n*Scheduled notification time:* ${notificationTime} (${NOTIFICATION_TIMEZONE})`,
+                        text: `*Domain Watcher Test ✨*\n\nYour notifications just passed the vibe check!\nThis notification was sent on ${sentAt} (${timezone})\n\n*Scheduled notification time:* ${notificationTime} (${timezone})`,
                     },
                 },
                 {
@@ -123,12 +111,9 @@ export async function testSlackWebhook(webhook, notificationTime) {
                 response.status,
                 errorText
             );
-            const detail = summarizeErrorBody(errorText);
             return {
                 status: response.status,
-                message: `Slack API error (${response.status})${
-                    detail ? `: ${detail}` : ""
-                }`,
+                message: formatApiError("Slack", response.status, errorText),
             };
         }
     } catch (error) {
@@ -299,16 +284,23 @@ export const slack = {
                 notificationTime,
                 connectionStatus: SLACK_CONNECTION_STATUS.READY,
             });
+            // The cron's schedule state survives the save; a changed time
+            // that is still ahead today re-allows today's report, a first
+            // save with a time that already passed starts tomorrow
+            const scheduleResetDate = getScheduleResetDate(notificationTime);
+            const scheduleSeedDate = getScheduleSeedDate(notificationTime);
+            const timezone = getTimezone();
 
             await executeSql(SETTINGS_QUERIES.UPDATE_SLACK_VALUE_ONLY, [
                 JSON.stringify(initialSlackConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             if (!shouldTestConnection) {
                 return {
                     status: 201,
-                    message:
-                        "Slack Webhook saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
+                    message: `Slack Webhook saved! ⭐ Daily report at ${notificationTime} (${timezone}). Pro tip: Test it out to make sure everything's smooth`,
                 };
             }
 
@@ -329,10 +321,12 @@ export const slack = {
 
             await executeSql(SETTINGS_QUERIES.UPDATE_SLACK_VALUE_ONLY, [
                 JSON.stringify(finalSlackConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             const responseMessage = isConnectionSuccessful
-                ? `Test message sent! Slack is ready to ping you at ${notificationTime} ⏰`
+                ? `Test message sent! Slack is ready to ping you at ${notificationTime} (${timezone}) ⏰`
                 : `Connection test stumbled: ${webhookTestResult.message} 🔧`;
 
             return {

@@ -5,9 +5,13 @@ import {
 
 /**
  * @fileoverview Shared helpers for notification providers.
- * Used by both the Slack and Resend notifiers to render report content.
+ * Used by the Slack, Discord and Resend notifiers to render report content.
  * @module NotifierShared
  */
+
+// Message-size helper lives in the neutral server utils module (also used by
+// the provider clients); re-exported for the notifiers
+export { truncateError } from "#lib/server/utils/notification-utils.js";
 
 /**
  * Format date for display — same calendar date and format as the dashboard
@@ -20,13 +24,49 @@ export const formatDate = (dateString) =>
 
 /**
  * Get days until domain expiry (negative if expired) — same rule as the
- * dashboard (getDaysUntilExpiration: partial days round away from zero, so an
- * expired domain is at least 1 day ago, never "0 days ago")
+ * dashboard (getDaysUntilExpiration: remaining days round up, elapsed days
+ * round down, so an expired domain is at least 1 day ago, never "0 days ago")
  * @param {string} expiryDate - Domain expiration date string
  * @returns {number} Days until expiry (negative if expired, 0 when unparseable)
  */
 export const getDaysUntilExpiry = (expiryDate) =>
     getDaysUntilExpiration(expiryDate) ?? 0;
+
+/**
+ * Day count with the correct plural
+ * @param {number} days - Whole number of days (sign is ignored)
+ * @returns {string} "1 day" or "N days"
+ * @example
+ * pluralizeDays(1) // "1 day"
+ * pluralizeDays(-3) // "3 days"
+ */
+export const pluralizeDays = (days) => {
+    const count = Math.abs(days);
+    return `${count} ${count === 1 ? "day" : "days"}`;
+};
+
+/**
+ * "... and N more <noun>" overflow line with the right singular/plural
+ * @param {number} count - Number of items left out
+ * @param {string} singular - Noun for one item ("domain")
+ * @param {string} plural - Noun for several items ("domains")
+ * @returns {string} e.g. "... and 1 more domain" / "... and 3 more domains"
+ */
+export const formatMoreText = (count, singular, plural) =>
+    `... and ${count} more ${count === 1 ? singular : plural}`;
+
+/**
+ * Expiry detail for one report line (plain text; HTML callers escape it)
+ * @param {string} expires - Domain expiration date string
+ * @returns {string} "expired 17 October 2026 (1 day ago)" for a past date,
+ *   otherwise e.g. "expires 19 November 2026 (32 days)"
+ */
+export const formatExpiryDetail = (expires) => {
+    const days = getDaysUntilExpiry(expires);
+    return days < 0
+        ? `expired ${formatDate(expires)} (${pluralizeDays(days)} ago)`
+        : `expires ${formatDate(expires)} (${pluralizeDays(days)})`;
+};
 
 /**
  * Current report timestamp in the configured timezone
@@ -49,16 +89,6 @@ export const escapeHtml = (value) =>
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
-
-/**
- * Trim an error message for report rendering (protects notifier size limits,
- * e.g. Discord's 4096-character embed description)
- * @param {string} error - Raw error message
- * @param {number} [maxLength=200] - Maximum length before truncation
- * @returns {string} Error message capped at maxLength characters
- */
-export const truncateError = (error, maxLength = 200) =>
-    error.length > maxLength ? `${error.slice(0, maxLength - 1)}…` : error;
 
 /**
  * Get a fun message for quiet days (no domain updates)

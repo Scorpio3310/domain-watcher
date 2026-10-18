@@ -53,7 +53,7 @@
  * @property {string} domain - The domain name that was checked
  * @property {string} status - Domain status (DOMAIN_STATUS value)
  * @property {string|null} expires - Expiration date as ISO-8601 UTC string (e.g. "2028-09-14T04:00:00Z")
- * @property {{name: string, url?: string|null}|null} registrar - Registrar info (name consumed by getRegistrar)
+ * @property {{name: string, url?: string|null}|null} registrar - Registrar info (name read by SELECT_ALL_DOMAINS)
  * @property {Record<string, any>} rawDomainData - Raw provider response (whoisjson or RDAP JSON)
  * @property {('rdap'|'whoisjson')} [source] - Which provider produced the data
  */
@@ -160,6 +160,7 @@
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
  * @property {string|null} [connection_verified_at] - When the connection was last verified
+ * @property {string} [last_sent_on] - Local date (YYYY-MM-DD, PUBLIC_TIMEZONE) of the last scheduled report slot claimed by the cron; kept across settings saves (see getScheduleDecision)
  * @property {number} [version] - Config schema version
  */
 
@@ -170,6 +171,7 @@
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
  * @property {string|null} [connection_verified_at] - When the connection was last verified
+ * @property {string} [last_sent_on] - Local date (YYYY-MM-DD, PUBLIC_TIMEZONE) of the last scheduled report slot claimed by the cron; kept across settings saves (see getScheduleDecision)
  * @property {number} [version] - Config schema version
  */
 
@@ -182,6 +184,7 @@
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
  * @property {string|null} [connection_verified_at] - When the connection was last verified
+ * @property {string} [last_sent_on] - Local date (YYYY-MM-DD, PUBLIC_TIMEZONE) of the last scheduled report slot claimed by the cron; kept across settings saves (see getScheduleDecision)
  * @property {number} [version] - Config schema version
  */
 
@@ -189,13 +192,34 @@
  * Provider settings as loaded for cron notification dispatch
  * @typedef {Object} ProviderSettings
  * @property {boolean} enabled - Whether the provider is enabled
- * @property {string} [webhook_url] - Slack webhook URL
+ * @property {string} [webhook_url] - Slack/Discord webhook URL
  * @property {string} [api_key] - Resend API key
  * @property {string} [from_email] - Sender email address
  * @property {string} [to_email] - Recipient email address
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
+ * @property {string} [last_sent_on] - Local date (YYYY-MM-DD) of the last claimed scheduled report slot
+ * @property {string} [last_attempt_on] - Local date (YYYY-MM-DD) of the last slot a run claimed, kept when a failed send releases the claim (marks the next tick as a retry)
  * @property {string} [error] - Set when loading/parsing the settings failed (provider is NOT just disabled)
+ */
+
+/**
+ * Calendar date and wall-clock time of an instant in a timezone (see getLocalDateTime)
+ * @typedef {Object} LocalDateTime
+ * @property {string} date - Local calendar date "YYYY-MM-DD"
+ * @property {string} time - Local wall-clock time "HH:MM" (24-hour)
+ * @property {number} minutes - Minutes since local midnight (0-1439)
+ */
+
+/**
+ * Whether a provider's daily report is due on a scheduled cron tick (see getScheduleDecision)
+ * @typedef {Object} ScheduleDecision
+ * @property {boolean} due - True when this tick should claim slotDate and send the report
+ * @property {("due"|"already_sent"|"before_time"|"outside_window"|"no_time")} reason - Why it is (not) due
+ * @property {string|null} slotDate - Local date of the slot whose catch-up window is open (the claim key), null when none is
+ * @property {number|null} minutesLate - Minutes past that slot's notification time, null when no window is open
+ * @property {string} localDate - Current local date "YYYY-MM-DD"
+ * @property {string} localTime - Current local time "HH:MM"
  */
 
 /**

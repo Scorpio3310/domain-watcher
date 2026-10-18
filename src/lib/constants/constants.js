@@ -57,6 +57,15 @@ export const DOMAIN_PROVIDER = Object.freeze({
 export const EXPIRY_WARNING_DAYS = 30;
 
 /**
+ * Minutes after a provider's notification time during which scheduled cron
+ * ticks may still send that day's report (retries after a failed send,
+ * missed/late ticks, a DST-skipped time). Later ticks skip the day, so e.g.
+ * deploying a schedule change late in the day can't send a duplicate report.
+ * @constant {number}
+ */
+export const NOTIFICATION_CATCH_UP_MINUTES = 60;
+
+/**
  * UI domain view mode constants
  * @readonly
  * @enum {string}

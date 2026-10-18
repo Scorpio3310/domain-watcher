@@ -38,9 +38,9 @@ export const toggleFormSchema = z.object({
     enabled: checkboxBoolean(),
 });
 
-// Strict zero-padded HH:MM (00:00-23:59). The cron compares the stored value
-// as a string against the zero-padded current time, so "9:30" or "24:00"
-// would save fine but never fire.
+// Strict zero-padded HH:MM (00:00-23:59) — the only format the cron's
+// schedule check (parseTimeToMinutes) accepts, so "9:30" or "24:00" would
+// save fine but never fire.
 const notificationTimeSchema = z
     .string()
     .regex(

@@ -1,7 +1,12 @@
 import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
-    formatDate,
-    getDaysUntilExpiry,
+    formatApiError,
+    joinLinesWithinLimit,
+} from "#lib/server/utils/notification-utils.js";
+import { isDiscordWebhookUrl } from "#src/routes/settings/validation.js";
+import {
+    formatExpiryDetail,
+    formatMoreText,
     getQuietMessage,
     getReportTimestamp,
     truncateError,
@@ -19,24 +24,6 @@ const DISCORD_TOTAL_BUDGET = 5900;
 const MAX_LIST_LINES = 20;
 
 /**
- * Join list lines, stopping before the text would exceed the character budget
- * @param {string[]} lines - Rendered list lines, in display order
- * @param {number} maxChars - Character budget for the joined text
- * @returns {{text: string, shown: number}} Joined text and how many lines fit
- */
-const joinLinesWithinLimit = (lines, maxChars) => {
-    let text = "";
-    let shown = 0;
-    for (const line of lines) {
-        const next = shown === 0 ? line : `${text}\n${line}`;
-        if (next.length > maxChars) break;
-        text = next;
-        shown++;
-    }
-    return { text, shown };
-};
-
-/**
  * Render a list embed description within a character budget, ending with
  * "... and N more" when items had to be left out
  * @param {{lines: string[], total: number, label: string}} list - Rendered lines (first MAX_LIST_LINES), total item count and item label
@@ -45,7 +32,8 @@ const joinLinesWithinLimit = (lines, maxChars) => {
  */
 const formatListDescription = ({ lines, total, label }, maxChars) => {
     /** @param {number} hidden */
-    const formatMore = (hidden) => `_... and ${hidden} more ${label}_`;
+    const formatMore = (hidden) =>
+        `_${formatMoreText(hidden, label.replace(/s$/, ""), label)}_`;
 
     const fullList = lines.join("\n");
     const full =
@@ -103,6 +91,17 @@ export const discordNotifier = {
                 };
             }
 
+            // Re-validate the stored URL: never POST the report anywhere but
+            // a Discord webhook (e.g. a row edited outside the settings form)
+            if (!isDiscordWebhookUrl(settings.webhook_url)) {
+                console.error("❌ Stored Discord webhook URL is invalid");
+                return {
+                    success: false,
+                    message:
+                        "Stored webhook URL is not a valid Discord webhook URL - save it again in Settings",
+                };
+            }
+
             const message = this.formatDomainMessage(domainUpdates);
             const response = await fetch(settings.webhook_url, {
                 method: "POST",
@@ -122,7 +121,7 @@ export const discordNotifier = {
             console.error("❌ Discord API error:", response.status, errorText);
             return {
                 success: false,
-                message: `Discord API error: ${response.status} - ${errorText}`,
+                message: formatApiError("Discord", response.status, errorText),
             };
         } catch (error) {
             console.error("❌ Failed to send Discord notification:", error);
@@ -177,52 +176,33 @@ export const discordNotifier = {
                 domains: expired,
                 title: "🚨 Expired but Still Registered",
                 color: 0xed0000,
-                urgent: true,
             },
             {
                 domains: available,
                 title: "🟢 Available Domains",
                 color: 0x2ba805,
-                urgent: false,
             },
             {
                 domains: expiring,
                 title: "⚠️ Expiring Soon",
                 color: 0xeb700a,
-                urgent: false,
             },
         ];
 
-        sections.forEach(({ domains, title, color, urgent }) => {
+        sections.forEach(({ domains, title, color }) => {
             if (domains.length === 0) return;
 
             lists.push({
                 title: `${title} (${domains.length})`,
-                lines: domains.slice(0, MAX_LIST_LINES).map((domain) => {
-                    if (urgent && domain.expires) {
-                        const daysExpired = Math.abs(
-                            getDaysUntilExpiry(domain.expires)
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expired ${formatDate(
-                            domain.expires
-                        )} (${daysExpired} days ago)`;
-                    }
-
-                    if (domain.expires) {
-                        const daysUntilExpiry = getDaysUntilExpiry(
-                            domain.expires
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expires ${formatDate(
-                            domain.expires
-                        )} (${daysUntilExpiry} days)`;
-                    }
-
-                    return `• \`${domain.domain_name}\``;
-                }),
+                lines: domains
+                    .slice(0, MAX_LIST_LINES)
+                    .map((domain) =>
+                        domain.expires
+                            ? `• \`${domain.domain_name}\` - ${formatExpiryDetail(
+                                  domain.expires
+                              )}`
+                            : `• \`${domain.domain_name}\``
+                    ),
                 total: domains.length,
                 label: "domains",
                 color,
@@ -284,9 +264,13 @@ export const discordNotifier = {
             content:
                 totalCount === 0 && failures.length === 0
                     ? "🌐 Domain Watcher: All quiet on the western front! 🤠"
-                    : `🌐 Domain Watcher: ${totalCount} updates${
+                    : `🌐 Domain Watcher: ${totalCount} update${
+                          totalCount !== 1 ? "s" : ""
+                      }${
                           failures.length > 0
-                              ? `, ${failures.length} check failures`
+                              ? `, ${failures.length} check failure${
+                                    failures.length !== 1 ? "s" : ""
+                                }`
                               : ""
                       }`,
             embeds,

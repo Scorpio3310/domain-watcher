@@ -1,6 +1,5 @@
 /** @import { ServiceResult, ResendConfig } from '#lib/types.js' */
 
-import { PUBLIC_TIMEZONE } from "$app/env/public";
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { isDemo } from "#lib/utils/helpers.js";
@@ -8,10 +7,15 @@ import { RESEND_CONNECTION_STATUS } from "#lib/constants/constants.js";
 import {
     formatHumanDate,
     getErrorMessage,
+    getTimezone,
     maskApiKey,
 } from "#lib/utils/helpers.js";
 import { Resend } from "resend";
 import { validateDemoMode } from "#lib/server/utils/access.js";
+import {
+    getScheduleResetDate,
+    getScheduleSeedDate,
+} from "#lib/server/utils/notification-utils.js";
 
 // ========================================
 // CORE UTILITIES
@@ -45,12 +49,6 @@ const createResendConfiguration = ({
     connection_verified_at: verifiedAt,
     version,
 });
-
-/**
- * Timezone the scheduled notification time is interpreted in (same fallback
- * as the cron's schedule check)
- */
-const NOTIFICATION_TIMEZONE = PUBLIC_TIMEZONE || "UTC";
 
 // ========================================
 // RESEND EMAIL TESTING
@@ -102,6 +100,7 @@ export async function testResendEmail(
         const resend = new Resend(apiKey);
 
         const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+        const timezone = getTimezone();
 
         // Create enhanced HTML email template
         const htmlTemplate = `
@@ -132,14 +131,14 @@ export async function testResendEmail(
             <div
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
             >
-                <p style="opacity: 0.5; margin: 0;">Send at:</p>
-                <p style="margin: 0;">${sentAt} (${NOTIFICATION_TIMEZONE})</p>
+                <p style="opacity: 0.5; margin: 0;">Sent on:</p>
+                <p style="margin: 0;">${sentAt} (${timezone})</p>
             </div>
             <div
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
             >
                 <p style="opacity: 0.5; margin: 0;">Scheduled notification time:</p>
-                <p style="margin: 0;">${notificationTime} (${NOTIFICATION_TIMEZONE})</p>
+                <p style="margin: 0;">${notificationTime} (${timezone})</p>
             </div>
             <div
                 style="color: #1A1A1A; font-size: 14px; margin-bottom: 4px; display: flex; flex-direction: row; gap: 4px;"
@@ -155,7 +154,7 @@ export async function testResendEmail(
             </div>
             <hr style="border: 1px dashed #1A1A1A; opacity: 0.10; margin: 16px 0px"/>
             <p style="color: #1A1A1A; font-size: 14px; line-height: 1.5; margin: 0;">
-                You're all set to catch those domain alerts at ${notificationTime} (${NOTIFICATION_TIMEZONE}) daily. No more missed renewals on our watch!
+                You're all set to catch those domain alerts at ${notificationTime} (${timezone}) daily. No more missed renewals on our watch!
             </p>
         </div>
     </div>
@@ -175,12 +174,12 @@ Domain Watcher Test ✨
 Your notifications just passed the vibe check!
 
 Test Details:
-• Sent at: ${sentAt} (${NOTIFICATION_TIMEZONE})
-• Notification time: ${notificationTime} (${NOTIFICATION_TIMEZONE})
+• Sent on: ${sentAt} (${timezone})
+• Notification time: ${notificationTime} (${timezone})
 • From: ${fromEmail}
 • To: ${toEmail}
 
-You're all set to catch those domain alerts at ${notificationTime} (${NOTIFICATION_TIMEZONE}) daily. No more missed renewals on our watch!
+You're all set to catch those domain alerts at ${notificationTime} (${timezone}) daily. No more missed renewals on our watch!
 
 This is an automated test email from Domain Watcher.
             `.trim(),
@@ -452,16 +451,23 @@ export const resend = {
                 notificationTime,
                 connectionStatus: RESEND_CONNECTION_STATUS.READY,
             });
+            // The cron's schedule state survives the save; a changed time
+            // that is still ahead today re-allows today's report, a first
+            // save with a time that already passed starts tomorrow
+            const scheduleResetDate = getScheduleResetDate(notificationTime);
+            const scheduleSeedDate = getScheduleSeedDate(notificationTime);
+            const timezone = getTimezone();
 
             await executeSql(SETTINGS_QUERIES.UPDATE_RESEND_VALUE_ONLY, [
                 JSON.stringify(initialResendConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             if (!shouldTestConnection) {
                 return {
                     status: 201,
-                    message:
-                        "Resend config saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
+                    message: `Resend config saved! ⭐ Daily report at ${notificationTime} (${timezone}). Pro tip: Test it out to make sure everything's smooth`,
                 };
             }
 
@@ -487,10 +493,12 @@ export const resend = {
 
             await executeSql(SETTINGS_QUERIES.UPDATE_RESEND_VALUE_ONLY, [
                 JSON.stringify(finalResendConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             const responseMessage = isConnectionSuccessful
-                ? `Test email sent! Resend is ready to deliver at ${notificationTime} 🚀`
+                ? `Test email sent! Resend is ready to deliver at ${notificationTime} (${timezone}) 🚀`
                 : `Connection test stumbled: ${emailTestResult.message} 🔧`;
 
             return {

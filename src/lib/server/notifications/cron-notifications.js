@@ -2,13 +2,23 @@ import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { domainVerification } from "../services/domain.js";
 import { CONFIG } from "#lib/server/utils/domain-utils.js";
+import { getScheduleDecision } from "#lib/server/utils/notification-utils.js";
 import {
-    getCurrentTimeInTimezone,
+    DOMAIN_STATUS,
+    NOTIFICATION_CATCH_UP_MINUTES,
+} from "#lib/constants/constants.js";
+import {
+    isDiscordWebhookUrl,
+    isSlackWebhookUrl,
+} from "#src/routes/settings/validation.js";
+import {
+    getLocalDateTime,
+    getTimezone,
     formatHumanDate,
     getErrorMessage,
 } from "#lib/utils/helpers.js";
 
-/** @import { CheckFailure, DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig } from "#lib/types.js" */
+/** @import { CheckFailure, DomainRecord, ProviderSettings, ScheduleDecision, SlackConfig, DiscordConfig, ResendConfig, VerificationCandidate } from "#lib/types.js" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY
@@ -24,12 +34,23 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {string} name - Human-readable provider name
  * @property {keyof typeof SETTINGS_QUERIES} query - Database query key for settings
  * @property {typeof slackNotifier | typeof discordNotifier | typeof resendNotifier} service - Notification service implementation
- * @property {(settings: ProviderSettings) => boolean} validate - Validation function for provider settings
+ * @property {(settings: ProviderSettings) => boolean} validate - Whether the provider is fully configured (checked before selecting it)
+ * @property {string} missing - What is missing when validate fails (for logs)
  */
 
 /**
- * Provider selected for sending, including its loaded settings
- * @typedef {ProviderConfig & {key: string, settings: ProviderSettings}} ActiveProvider
+ * Provider selected for sending, including its loaded settings. Scheduled
+ * runs also carry the report slot (local date) the provider is due for.
+ * @typedef {ProviderConfig & {key: string, settings: ProviderSettings, slotDate?: string}} ActiveProvider
+ */
+
+/**
+ * This run's verification list (see cronNotifications.planVerification)
+ * @typedef {Object} VerificationPlan
+ * @property {VerificationCandidate[]} domainsToVerify - Domains to verify now, in order
+ * @property {number} critical - How many of them are alert-critical (expired registered / never checked)
+ * @property {number} skippedRecent - Due domains skipped because they were checked within 12h (scheduled runs)
+ * @property {number} deferred - Eligible domains left for later runs by the per-run cap
  */
 
 /**
@@ -61,6 +82,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {"skipped"|"executed"} action - Whether the run executed or was skipped
  * @property {string} [reason] - Reason for skipping (if action is "skipped")
  * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
+ * @property {Array<{provider: string, error: string}>} [claimErrors] - Due providers whose report slot couldn't be claimed because of a DB error
  * @property {{checked: number, deferred: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain verification counts (if executed)
  * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
  */
@@ -71,20 +93,53 @@ const PROVIDERS = {
         name: "Slack",
         query: "SELECT_SLACK_SETTINGS",
         service: slackNotifier,
-        validate: (s) => !!s.webhook_url,
+        validate: (s) => isSlackWebhookUrl(s.webhook_url ?? ""),
+        missing: "missing or invalid webhook URL",
     },
     discord: {
         name: "Discord",
         query: "SELECT_DISCORD_SETTINGS",
         service: discordNotifier,
-        validate: (s) => !!s.webhook_url,
+        validate: (s) => isDiscordWebhookUrl(s.webhook_url ?? ""),
+        missing: "missing or invalid webhook URL",
     },
     resend: {
         name: "Resend Email",
         query: "SELECT_RESEND_SETTINGS",
         service: resendNotifier,
         validate: (s) => !!(s.api_key && s.to_email && s.from_email),
+        missing: "missing API key or email address",
     },
+};
+
+/**
+ * Share of the per-run verification cap kept for the round-robin tier while
+ * it has due domains, so alert-critical rows (e.g. many domains sitting in a
+ * registry grace period) can't take every slot and starve the rest forever
+ */
+const ROUND_ROBIN_MIN_SHARE = 0.25;
+
+/**
+ * Alert-critical verification rows: expired but still registered (did it
+ * drop?) and never checked
+ * @param {VerificationCandidate} domain - Unified-query row
+ * @returns {boolean} True for alert-critical rows
+ */
+const isAlertCritical = (domain) =>
+    domain.is_expired_registered === 1 ||
+    domain.status === DOMAIN_STATUS.NOT_CHECKED;
+
+/**
+ * Staleness order: never checked first, then oldest last_domain_checked
+ * (stored via CURRENT_TIMESTAMP, so the strings compare chronologically)
+ * @param {VerificationCandidate} a - Row
+ * @param {VerificationCandidate} b - Row
+ * @returns {number} Sort comparator result
+ */
+const byStaleness = (a, b) => {
+    const aChecked = a.last_domain_checked ?? "";
+    const bChecked = b.last_domain_checked ?? "";
+    return aChecked < bChecked ? -1 : aChecked > bChecked ? 1 : 0;
 };
 
 // ============================================================================
@@ -101,8 +156,14 @@ export const cronNotifications = {
     /**
      * Main entry point - orchestrates domain checking and notification sending
      *
-     * @param {boolean} [force=false] - Manual run: bypass time checking, force
-     *   execution and also re-verify domains checked within the last 12 hours
+     * Scheduled runs claim each due provider's daily report slot before any
+     * work (so overlapping cron runs can't send the same report twice) and
+     * give the slot back when the send fails, so the next tick retries
+     * within the catch-up window.
+     *
+     * @param {boolean} [force=false] - Manual run: bypass the schedule (and
+     *   its state), force execution and also re-verify domains checked within
+     *   the last 12 hours
      * @returns {Promise<CronExecutionResult>} Execution results with timing and notification details
      *
      * @example
@@ -116,18 +177,44 @@ export const cronNotifications = {
      * @throws {Error} Domain verification or notification sending failures
      */
     async checkAndSend(force = false) {
-        const currentTime = getCurrentTimeInTimezone();
-        console.log(`🕐 Check at: ${currentTime} ${force ? "(FORCED)" : ""}`);
+        const now = new Date();
+        const local = getLocalDateTime(now);
+        console.log(
+            `🕐 Check at: ${local.date} ${local.time} (${getTimezone()}) ${
+                force ? "(FORCED)" : ""
+            }`
+        );
 
         try {
             // Get providers to send to
-            const { providers: providersToSend, settingsErrors } =
-                await this.getProviders(currentTime, force);
+            const { providers: selectedProviders, settingsErrors } =
+                await this.getProviders(now, force);
+
+            // Scheduled runs own a provider only after claiming its slot;
+            // manual runs neither need nor touch the schedule state
+            /** @type {ActiveProvider[]} */
+            const providersToSend = [];
+            /** @type {Array<{provider: string, error: string}>} */
+            const claimErrors = [];
+            for (const provider of selectedProviders) {
+                const claim = force
+                    ? "claimed"
+                    : await this.claimSlot(provider);
+                if (claim === "claimed") {
+                    providersToSend.push(provider);
+                } else if (claim === "error") {
+                    claimErrors.push({
+                        provider: provider.key,
+                        error: "Could not claim the scheduled report slot",
+                    });
+                }
+            }
 
             const baseResponse = {
                 timestamp: new Date().toISOString(),
                 timestampLocal: formatHumanDate(new Date().toISOString()),
                 ...(settingsErrors.length > 0 && { settingsErrors }),
+                ...(claimErrors.length > 0 && { claimErrors }),
             };
 
             if (providersToSend.length === 0) {
@@ -135,35 +222,71 @@ export const cronNotifications = {
                     ...baseResponse,
                     action: "skipped",
                     reason:
-                        settingsErrors.length > 0
-                            ? "No providers scheduled (some provider settings failed to load)"
-                            : "No providers scheduled",
+                        claimErrors.length > 0
+                            ? "Due report could not be claimed (database error)"
+                            : selectedProviders.length > 0
+                              ? "Due report already claimed by another run"
+                              : settingsErrors.length > 0
+                              ? "No providers scheduled (some provider settings failed to load)"
+                              : "No providers scheduled",
                 };
             }
 
-            // First get domain data, then send notifications
-            console.log("🔍 Checking domains...");
-            const domains = await this.checkDomains(force);
+            /** @type {NotificationSendResult|undefined} */
+            let notifications;
+            try {
+                // A retry tick (every provider's earlier attempt today
+                // failed) reuses the stored domain state: a broken webhook
+                // must not spend another batch of lookups every minute
+                const isRetry =
+                    !force &&
+                    providersToSend.every(
+                        (provider) =>
+                            provider.settings.last_attempt_on ===
+                            provider.slotDate
+                    );
 
-            console.log("📨 Sending notifications...");
-            const notifications = await this.sendNotifications(
-                providersToSend,
-                domains
-            );
+                // First get domain data, then send notifications
+                console.log(
+                    isRetry
+                        ? "🔁 Retrying today's report - reusing stored domain state"
+                        : "🔍 Checking domains..."
+                );
+                const domains = await this.checkDomains(force, {
+                    verify: !isRetry,
+                });
 
-            return {
-                ...baseResponse,
-                action: "executed",
-                domains: {
-                    checked: domains.checked,
-                    deferred: domains.deferred,
-                    available: domains.available.length,
-                    expiring: domains.expiring.length,
-                    expired: domains.expired.length,
-                    failed: domains.failures.length,
-                },
-                notifications,
-            };
+                console.log("📨 Sending notifications...");
+                notifications = await this.sendNotifications(
+                    providersToSend,
+                    domains
+                );
+
+                return {
+                    ...baseResponse,
+                    action: "executed",
+                    domains: {
+                        checked: domains.checked,
+                        deferred: domains.deferred,
+                        available: domains.available.length,
+                        expiring: domains.expiring.length,
+                        expired: domains.expired.length,
+                        failed: domains.failures.length,
+                    },
+                    notifications,
+                };
+            } finally {
+                // Unsent providers (failed send, or the run threw) give their
+                // slot back so the next tick retries
+                if (!force) {
+                    const sent = new Set(notifications?.providers ?? []);
+                    await Promise.all(
+                        providersToSend
+                            .filter((provider) => !sent.has(provider.key))
+                            .map((provider) => this.releaseSlot(provider))
+                    );
+                }
+            }
         } catch (error) {
             console.error("❌ Notification failed:", error);
             throw error;
@@ -173,22 +296,26 @@ export const cronNotifications = {
     /**
      * Determines which notification providers should send notifications
      *
-     * For scheduled mode: only includes providers with matching notification times
-     * For forced mode: includes all enabled providers regardless of time
+     * Skips (with a log line saying why) providers whose settings failed to
+     * load, that are disabled or not fully configured. Forced mode selects
+     * every remaining provider; scheduled mode only those whose daily report
+     * is due per getScheduleDecision (not sent for that day yet, and now is
+     * within NOTIFICATION_CATCH_UP_MINUTES after the notification time in
+     * PUBLIC_TIMEZONE).
      *
-     * @param {string} currentTime - Current time in HH:MM format
-     * @param {boolean} [force=false] - Bypass time checking for all enabled providers
+     * @param {Date} [now=new Date()] - Current instant
+     * @param {boolean} [force=false] - Bypass the schedule for all enabled providers
      * @returns {Promise<{providers: ActiveProvider[], settingsErrors: Array<{provider: string, error: string}>}>} Providers to use plus any settings load failures
      *
      * @example
-     * // Get providers for current time
-     * const { providers } = await cronNotifications.getProviders("14:30");
+     * // Get providers whose report is due now
+     * const { providers } = await cronNotifications.getProviders(new Date());
      *
      * @example
      * // Get all enabled providers
-     * const { providers } = await cronNotifications.getProviders("14:30", true);
+     * const { providers } = await cronNotifications.getProviders(new Date(), true);
      */
-    async getProviders(currentTime, force = false) {
+    async getProviders(now = new Date(), force = false) {
         /** @type {ActiveProvider[]} */
         const providers = [];
         /** @type {Array<{provider: string, error: string}>} */
@@ -206,22 +333,45 @@ export const cronNotifications = {
             }
 
             if (!settings.enabled) {
-                console.log(`⏭️ ${config.name} disabled`);
+                console.log(`⏭️ ${config.name} skipped: disabled`);
                 continue;
             }
 
-            // For forced mode, include all enabled providers
-            // For scheduled mode, only include providers with matching time
-            if (force || settings.notification_time === currentTime) {
+            if (!config.validate(settings)) {
                 console.log(
-                    `✅ ${config.name} selected ${
-                        force ? "(forced)" : `(time: ${currentTime})`
-                    }`
+                    `⚠️ ${config.name} skipped: enabled but not configured (${config.missing})`
                 );
+                continue;
+            }
+
+            if (force) {
+                console.log(`✅ ${config.name} selected (forced)`);
                 providers.push({ key, ...config, settings });
+                continue;
+            }
+
+            const decision = getScheduleDecision({
+                notificationTime: settings.notification_time,
+                lastSentOn: settings.last_sent_on,
+                now,
+            });
+
+            if (decision.due && decision.slotDate) {
+                console.log(
+                    `✅ ${config.name} selected (scheduled ${settings.notification_time}, now ${decision.localTime} ${getTimezone()}, ${decision.minutesLate} min late, report for ${decision.slotDate})`
+                );
+                providers.push({
+                    key,
+                    ...config,
+                    settings,
+                    slotDate: decision.slotDate,
+                });
             } else {
                 console.log(
-                    `⏭️ ${config.name} time mismatch (${settings.notification_time} vs ${currentTime})`
+                    `⏭️ ${config.name} skipped: ${this.describeSkip(
+                        decision,
+                        settings
+                    )}`
                 );
             }
         }
@@ -230,43 +380,122 @@ export const cronNotifications = {
     },
 
     /**
-     * Verifies the domains that are due, then reads the report from DB state
-     *
-     * Builds ONE verification list in priority order from the SQL-computed
-     * categories (each already sorted by verification_priority, then
-     * last_domain_checked ASC):
-     * 1. Expired registered domains - did they become available?
-     * 2. error → not_checked → available → registered without expiry data
-     * 3. Daily refresh - registered domains expiring soon or in a
-     *    grace/deletion state (catches renewals and drops after auto-renew)
-     * 4. Weekly safety-net refresh of every other registered domain
-     *
-     * Scheduled runs skip domains checked within the last 12 hours, so a
-     * second provider later the same day reuses fresh DB state instead of
-     * re-spending lookups (WhoisJSON quota). The list is capped at
-     * CONFIG.LIMIT_DOMAIN_CHECKS so lookups + notification sends stay under
-     * the Workers Free 50-subrequest budget; the remainder rolls over to later
-     * runs (oldest-checked first, so rotation stays fair).
-     *
-     * Report sections are read back from DB state AFTER verification: failed
-     * checks preserve the last known status, so a transient lookup/DB failure
-     * (or a domain deferred by the cap) can't silently drop a domain from the
-     * daily report. Refresh-only domains never appear in it. The failures
-     * list comes from this run's live batch results.
-     *
-     * @param {boolean} [manual=false] - Manual run: also re-verify recently checked domains
-     * @returns {Promise<DomainCheckResult>} Comprehensive domain verification results
-     *
-     * @example
-     * const results = await cronNotifications.checkDomains();
-     * console.log(`Checked ${results.checked} domains, found ${results.available.length} available`);
+     * Human-readable reason a scheduled provider was not selected
+     * @param {ScheduleDecision} decision - Schedule decision for the provider
+     * @param {ProviderSettings} settings - Provider settings
+     * @returns {string} Reason for the skip log line
      */
-    async checkDomains(manual = false) {
-        // ONE unified SELECT; categories come from its SQL flags
-        const { expiredRegistered, needingVerification, needingRefresh } =
-            await domainVerification.getAllDomainsForVerification();
+    describeSkip(decision, settings) {
+        const timing = `scheduled ${settings.notification_time || "-"}, now ${
+            decision.localTime
+        } ${getTimezone()}`;
 
-        // Disjoint categories, concatenated in verification_priority order
+        switch (decision.reason) {
+            case "already_sent":
+                return `already sent (report for ${settings.last_sent_on}; ${timing})`;
+            case "before_time":
+                return `not due yet (${timing})`;
+            case "outside_window":
+                return `outside the ${NOTIFICATION_CATCH_UP_MINUTES}-minute catch-up window, today's report was missed (${timing})`;
+            case "no_time":
+                return `no valid notification time ("${
+                    settings.notification_time ?? ""
+                }")`;
+            default:
+                return timing;
+        }
+    },
+
+    /**
+     * Atomically claims a provider's daily report slot (scheduled runs only)
+     *
+     * One conditional UPDATE: of two overlapping runs only one changes the
+     * row. A DB error counts as "not claimed" (the next tick tries again) but
+     * is reported, so a broken settings table can't silently drop reports.
+     *
+     * @param {ActiveProvider} provider - Provider selected by getProviders (with slotDate)
+     * @returns {Promise<"claimed"|"taken"|"error">} "claimed" when this run
+     *   owns the slot, "taken" when another run (or a settings change) got
+     *   there first, "error" when the claim query failed
+     */
+    async claimSlot(provider) {
+        try {
+            const result = await executeSql(
+                SETTINGS_QUERIES.CLAIM_NOTIFICATION_SLOT,
+                [
+                    provider.key,
+                    provider.slotDate,
+                    provider.settings.notification_time,
+                ]
+            );
+
+            if ((result?.meta?.changes ?? 0) > 0) {
+                console.log(
+                    `🔒 ${provider.name} claimed the report for ${provider.slotDate}`
+                );
+                return "claimed";
+            }
+
+            console.log(
+                `⏭️ ${provider.name} skipped: report for ${provider.slotDate} already claimed by another run (or settings changed)`
+            );
+            return "taken";
+        } catch (error) {
+            console.error(`❌ ${provider.name} claim failed:`, error);
+            return "error";
+        }
+    },
+
+    /**
+     * Gives a claimed slot back after a failed send so the next tick retries.
+     * Never throws (a failed release is logged; that day's retry is lost).
+     *
+     * @param {ActiveProvider} provider - Provider whose claim should be released
+     * @returns {Promise<void>}
+     */
+    async releaseSlot(provider) {
+        try {
+            await executeSql(SETTINGS_QUERIES.RELEASE_NOTIFICATION_SLOT, [
+                provider.key,
+                provider.slotDate,
+                provider.settings.last_sent_on ?? null,
+            ]);
+            console.log(
+                `🔓 ${provider.name} report for ${provider.slotDate} not sent - released for a retry on the next tick`
+            );
+        } catch (error) {
+            console.error(
+                `❌ ${provider.name} release failed - no retry for ${provider.slotDate}:`,
+                error
+            );
+        }
+    },
+
+    /**
+     * Picks this run's verification list from the SQL-computed categories
+     *
+     * 1. Alert-critical rows strictly first: expired registered domains (did
+     *    they become available?) and never-checked ("not_checked") ones.
+     * 2. Everything else that is due - error, available, registered without
+     *    expiry data, daily/grace refresh, weekly safety net - round-robin by
+     *    staleness (never checked first, then oldest last_domain_checked), so
+     *    no category can starve another.
+     * Scheduled runs then skip domains checked within the last 12 hours, and
+     * the list is capped at `limit`. While round-robin rows are waiting,
+     * critical rows get at most (1 - ROUND_ROBIN_MIN_SHARE) of the cap.
+     *
+     * Every verified domain gets a fresh last_domain_checked (failures too),
+     * so it moves to the back of its tier: each due domain is verified within
+     * a bounded number of runs.
+     *
+     * @param {{expiredRegistered: VerificationCandidate[], needingVerification: VerificationCandidate[], needingRefresh: VerificationCandidate[]}} categories - Disjoint categories from getAllDomainsForVerification
+     * @param {{manual?: boolean, limit?: number}} [options={}] - manual: also re-verify recently checked domains; limit: per-run cap
+     * @returns {VerificationPlan} Domains to verify now plus skip/defer counts
+     */
+    planVerification(
+        { expiredRegistered, needingVerification, needingRefresh },
+        { manual = false, limit = CONFIG.LIMIT_DOMAIN_CHECKS } = {}
+    ) {
         const dueDomains = [
             ...expiredRegistered,
             ...needingVerification,
@@ -275,12 +504,83 @@ export const cronNotifications = {
         const eligibleDomains = manual
             ? dueDomains
             : dueDomains.filter((d) => d.is_recently_checked !== 1);
-        const domainsToVerify = eligibleDomains.slice(
-            0,
-            CONFIG.LIMIT_DOMAIN_CHECKS
+
+        const critical = eligibleDomains
+            .filter(isAlertCritical)
+            .sort(byStaleness);
+        const roundRobin = eligibleDomains
+            .filter((d) => !isAlertCritical(d))
+            .sort(byStaleness);
+
+        // Never reserve the whole cap: critical rows always keep a slot
+        const reserved = Math.min(
+            roundRobin.length,
+            Math.ceil(limit * ROUND_ROBIN_MIN_SHARE),
+            Math.max(0, limit - 1)
         );
-        const skippedRecent = dueDomains.length - eligibleDomains.length;
-        const deferred = eligibleDomains.length - domainsToVerify.length;
+        const criticalToVerify = critical.slice(0, limit - reserved);
+        const domainsToVerify = [
+            ...criticalToVerify,
+            ...roundRobin.slice(0, limit - criticalToVerify.length),
+        ];
+
+        return {
+            domainsToVerify,
+            critical: criticalToVerify.length,
+            skippedRecent: dueDomains.length - eligibleDomains.length,
+            deferred: eligibleDomains.length - domainsToVerify.length,
+        };
+    },
+
+    /**
+     * Verifies the domains that are due, then reads the report from DB state
+     *
+     * The verification list comes from planVerification: alert-critical
+     * domains (expired registered, never checked) first, then every other due
+     * domain (error, available, registered without expiry data, daily/grace
+     * refresh, weekly safety net) round-robin by staleness.
+     *
+     * Scheduled runs skip domains checked within the last 12 hours, so a
+     * second provider later the same day (or a retry tick) reuses fresh DB
+     * state instead of re-spending lookups (WhoisJSON quota). The list is
+     * capped at CONFIG.LIMIT_DOMAIN_CHECKS so lookups + notification sends
+     * stay under the Workers Free 50-subrequest budget; the remainder rolls
+     * over to later runs (oldest-checked first, so rotation stays fair).
+     *
+     * Report sections are read back from DB state AFTER verification: failed
+     * checks preserve the last known status, so a transient lookup/DB failure
+     * (or a domain deferred by the cap) can't silently drop a domain from the
+     * daily report. Refresh-only domains never appear in it. The failures
+     * list comes from this run's live batch results.
+     *
+     * @param {boolean} [manual=false] - Manual run: also re-verify recently checked domains
+     * @param {{verify?: boolean}} [options] - verify: false skips verification
+     *   and only reads the report from stored DB state (retry ticks)
+     * @returns {Promise<DomainCheckResult>} Comprehensive domain verification results
+     *
+     * @example
+     * const results = await cronNotifications.checkDomains();
+     * console.log(`Checked ${results.checked} domains, found ${results.available.length} available`);
+     */
+    async checkDomains(manual = false, { verify = true } = {}) {
+        if (!verify) {
+            const reportState =
+                await domainVerification.getDomainReportState();
+            return {
+                checked: 0,
+                deferred: 0,
+                available: reportState.available,
+                expiring: reportState.expiring,
+                expired: reportState.expired,
+                failures: [],
+            };
+        }
+
+        // ONE unified SELECT; categories come from its SQL flags
+        const categories =
+            await domainVerification.getAllDomainsForVerification();
+        const { domainsToVerify, critical, skippedRecent, deferred } =
+            this.planVerification(categories, { manual });
 
         if (skippedRecent > 0) {
             console.log(
@@ -297,7 +597,9 @@ export const cronNotifications = {
                 (d) => d.is_expired_registered === 1
             ).length;
             console.log(
-                `🚨 Verifying ${domainsToVerify.length} domains (${expiredCount} expired)...`
+                `🚨 Verifying ${domainsToVerify.length} domains (${critical} critical incl. ${expiredCount} expired, ${
+                    domainsToVerify.length - critical
+                } by staleness)...`
             );
         }
 
@@ -326,17 +628,17 @@ export const cronNotifications = {
     },
 
     /**
-     * Sends domain reports to all configured notification providers
+     * Sends domain reports to all selected notification providers
      *
-     * Validates each provider configuration before sending and handles failures gracefully.
-     * Sends notifications in parallel for better performance.
+     * Providers arrive already validated (getProviders skips unconfigured
+     * ones); failures are captured per provider. Sends in parallel.
      *
      * @param {ActiveProvider[]} providers - Array of provider configurations from getProviders()
      * @param {DomainCheckResult} domains - Domain verification results from checkDomains()
      * @returns {Promise<NotificationSendResult>} Notification sending results
      *
      * @example
-     * const providers = await cronNotifications.getProviders("14:30");
+     * const { providers } = await cronNotifications.getProviders(new Date());
      * const domains = await cronNotifications.checkDomains();
      * const results = await cronNotifications.sendNotifications(providers, domains);
      *
@@ -361,14 +663,9 @@ export const cronNotifications = {
         console.log(`📨 Sending to ${providers.length} provider(s)...`);
 
         // Send to all providers in parallel
-        /** @type {Array<Promise<{key: string, success: boolean, error?: string} | null>>} */
+        /** @type {Array<Promise<{key: string, success: boolean, error?: string}>>} */
         const sendPromises = providers.map(async (provider) => {
             try {
-                if (!provider.validate(provider.settings)) {
-                    console.log(`⚠️ ${provider.name} not configured`);
-                    return null;
-                }
-
                 const result = await provider.service.sendDomainReport(
                     /** @type {ProviderSettings & SlackConfig & DiscordConfig & ResendConfig} */ (
                         provider.settings
@@ -409,16 +706,14 @@ export const cronNotifications = {
 
         // Collect results
         sendResults.forEach((result) => {
-            if (result) {
-                if (result.success) {
-                    results.sent++;
-                    results.providers.push(result.key);
-                } else {
-                    results.errors.push({
-                        provider: result.key,
-                        error: result.error,
-                    });
-                }
+            if (result.success) {
+                results.sent++;
+                results.providers.push(result.key);
+            } else {
+                results.errors.push({
+                    provider: result.key,
+                    error: result.error,
+                });
             }
         });
 

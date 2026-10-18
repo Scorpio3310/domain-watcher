@@ -1,7 +1,12 @@
 import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
-    formatDate,
-    getDaysUntilExpiry,
+    formatApiError,
+    joinLinesWithinLimit,
+} from "#lib/server/utils/notification-utils.js";
+import { isSlackWebhookUrl } from "#src/routes/settings/validation.js";
+import {
+    formatExpiryDetail,
+    formatMoreText,
     getQuietMessage,
     getReportTimestamp,
     truncateError,
@@ -15,29 +20,6 @@ import {
 const SLACK_TEXT_BUDGET = 2800;
 const SLACK_MAX_BLOCKS = 50;
 const MAX_LIST_LINES = 20;
-
-/**
- * Join list lines, stopping before the text would exceed the character budget
- * @param {string[]} lines - Rendered list lines, in display order
- * @param {number} maxChars - Character budget for the joined text
- * @returns {{text: string, shown: number}} Joined text and how many lines fit
- */
-const joinLinesWithinLimit = (lines, maxChars) => {
-    let text = "";
-    let shown = 0;
-    for (const line of lines) {
-        const next = shown === 0 ? line : `${text}\n${line}`;
-        if (next.length > maxChars) break;
-        text = next;
-        shown++;
-    }
-
-    // A section needs non-empty text: cut an oversized first line instead
-    if (shown === 0 && lines.length > 0)
-        return { text: truncateError(lines[0], maxChars), shown: 1 };
-
-    return { text, shown };
-};
 
 /**
  * Slack notification service for formatting and sending messages
@@ -55,6 +37,17 @@ export const slackNotifier = {
                 return {
                     success: false,
                     message: "Webhook URL not configured",
+                };
+            }
+
+            // Re-validate the stored URL: never POST the report anywhere but
+            // a Slack webhook (e.g. a row edited outside the settings form)
+            if (!isSlackWebhookUrl(settings.webhook_url)) {
+                console.error("❌ Stored Slack webhook URL is invalid");
+                return {
+                    success: false,
+                    message:
+                        "Stored webhook URL is not a valid Slack webhook URL - save it again in Settings",
                 };
             }
 
@@ -77,7 +70,7 @@ export const slackNotifier = {
             console.error("❌ Slack API error:", response.status, errorText);
             return {
                 success: false,
-                message: `Slack API error: ${response.status} - ${errorText}`,
+                message: formatApiError("Slack", response.status, errorText),
             };
         } catch (error) {
             console.error("❌ Failed to send Slack notification:", error);
@@ -136,21 +129,13 @@ export const slackNotifier = {
 
         // Add each section if it has domains
         const sections = [
-            {
-                domains: expired,
-                title: "🚨 Expired but Still Registered",
-                urgent: true,
-            },
-            {
-                domains: available,
-                title: "🟢 Available Domains",
-                urgent: false,
-            },
-            { domains: expiring, title: "⚠️ Expiring Soon", urgent: false },
+            { domains: expired, title: "🚨 Expired but Still Registered" },
+            { domains: available, title: "🟢 Available Domains" },
+            { domains: expiring, title: "⚠️ Expiring Soon" },
         ];
 
         let addedSection = false;
-        sections.forEach(({ domains, title, urgent }) => {
+        sections.forEach(({ domains, title }) => {
             if (domains.length === 0) return;
 
             // Add divider between sections
@@ -165,32 +150,18 @@ export const slackNotifier = {
             });
 
             const { text: domainList, shown } = joinLinesWithinLimit(
-                domains.slice(0, MAX_LIST_LINES).map((domain) => {
-                    if (urgent && domain.expires) {
-                        const daysExpired = Math.abs(
-                            getDaysUntilExpiry(domain.expires)
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expired ${formatDate(
-                            domain.expires
-                        )} (${daysExpired} days ago)`;
-                    }
-
-                    if (domain.expires) {
-                        const daysUntilExpiry = getDaysUntilExpiry(
-                            domain.expires
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expires ${formatDate(
-                            domain.expires
-                        )} (${daysUntilExpiry} days)`;
-                    }
-
-                    return `• \`${domain.domain_name}\``;
-                }),
-                SLACK_TEXT_BUDGET
+                domains
+                    .slice(0, MAX_LIST_LINES)
+                    .map((domain) =>
+                        domain.expires
+                            ? `• \`${domain.domain_name}\` - ${formatExpiryDetail(
+                                  domain.expires
+                              )}`
+                            : `• \`${domain.domain_name}\``
+                    ),
+                SLACK_TEXT_BUDGET,
+                // A section needs non-empty text: cut an oversized first line
+                { truncateOversizedFirstLine: true }
             );
 
             blocks.push({
@@ -204,9 +175,11 @@ export const slackNotifier = {
                     elements: [
                         {
                             type: "mrkdwn",
-                            text: `... and ${
-                                domains.length - shown
-                            } more ${title.toLowerCase()} domains`,
+                            text: formatMoreText(
+                                domains.length - shown,
+                                "domain",
+                                "domains"
+                            ),
                         },
                     ],
                 });
@@ -237,7 +210,8 @@ export const slackNotifier = {
                                 failure.error
                             )}`
                     ),
-                SLACK_TEXT_BUDGET
+                SLACK_TEXT_BUDGET,
+                { truncateOversizedFirstLine: true }
             );
 
             blocks.push({
@@ -251,9 +225,11 @@ export const slackNotifier = {
                     elements: [
                         {
                             type: "mrkdwn",
-                            text: `... and ${
-                                failures.length - shown
-                            } more check failures`,
+                            text: formatMoreText(
+                                failures.length - shown,
+                                "check failure",
+                                "check failures"
+                            ),
                         },
                     ],
                 });
@@ -290,9 +266,13 @@ export const slackNotifier = {
             text:
                 totalCount === 0 && failures.length === 0
                     ? `🌐 Domain Watcher: All quiet on the western front! 🤠`
-                    : `🌐 Domain Watcher: ${totalCount} updates${
+                    : `🌐 Domain Watcher: ${totalCount} update${
+                          totalCount !== 1 ? "s" : ""
+                      }${
                           failures.length > 0
-                              ? `, ${failures.length} check failures`
+                              ? `, ${failures.length} check failure${
+                                    failures.length !== 1 ? "s" : ""
+                                }`
                               : ""
                       }`,
             blocks,
