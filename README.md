@@ -80,6 +80,7 @@ A daily summary keeps you informed and helps you act fast.
 -   **Settings Panel**: Pick the domain lookup provider, configure the optional WhoisJSON API key, choose your preferred view mode for the interface, and manage notification settings for Slack, Discord and Resend.
 -   **Web Interface**: A clean and functional UI where you can add new domains, view and manually refresh domain status, perform bulk checks, and manage your domain list with ease.
 -   **Password Protection**: The whole app sits behind a browser login prompt (`ADMIN_PASSWORD`), see [Protect Your Deployment](#-protect-your-deployment).
+-   **Dark Mode**: Follows your system's light/dark setting automatically, also live (e.g. macOS "Auto" switching at sunset). The sun/moon button in the header (on phones: in the Settings header) overrides it - the choice is remembered per browser, and switching back to your system's theme returns to automatic.
 
 ## 📦 Setup
 
@@ -184,6 +185,16 @@ Icons come from the [iconoir](https://icon-sets.iconify.design/iconoir/) set and
 
 -   Write icon names as full literals, e.g. `icon="iconoir:globe"` - a dynamically built name can't be bundled and fails the generator
 -   The subset is regenerated automatically before `pnpm run dev` and `pnpm run build`; run `pnpm icons` manually after adding an icon (and commit the updated JSON), or `pnpm icons:check` to verify it is up to date
+
+### Dark Mode
+
+The theme is the `data-theme` attribute on `<html>`: a small inline script in `src/app.html` sets it before the first paint (saved choice, else the system setting), and `src/lib/stores/theme.svelte.js` keeps it in sync (toggle, system changes, other tabs, always light when printing). The colors live in [src/app.css](src/app.css):
+
+-   `white` is the **surface** and `black` the **ink** color: `[data-theme="dark"]` swaps them, so `bg-white`, `text-black` or `border-black/10` work in both themes without extra classes
+-   Text or icons on a colored fill (red/green/blue badges and buttons) use `text-snow` (always white); red/blue status text uses `text-red-ink` / `text-blue-ink` (brighter in dark mode)
+-   Elements that are black in the light theme (header, toast, tooltip, primary button) stay black in dark mode - see the "islands" rule in `app.css`
+-   For anything else use the `dark:` variant (e.g. `dark:bg-red-950/40`)
+-   Custom shadows are applied as `shadow-[var(--shadow-button-white)]` instead of `shadow-button-white`: Tailwind inlines theme shadows into the utility, so only the `var()` form picks up the dark-mode values
 
 ### Useful Commands
 

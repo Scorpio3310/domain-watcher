@@ -8,9 +8,14 @@
     import "#lib/icons/register.js";
     import NoJavascript from "#components/NoJavascript.svelte";
     import { dev } from "$app/env";
+    import { onMount } from "svelte";
+    import { theme } from "#lib/stores/theme.svelte.js";
 
     /** @type {import('./$types').LayoutProps} */
     let { children, data } = $props();
+
+    // Follow system theme changes, other tabs and printing
+    onMount(() => theme.watch());
 
     /**
      * Text of the current success toast, announced by the polite live region

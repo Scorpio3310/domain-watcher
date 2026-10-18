@@ -103,7 +103,7 @@
     {#each sizes as size (size)}
         <div class="mb-20">
             <h2
-                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
             >
                 {size} Size Buttons
             </h2>
@@ -112,7 +112,7 @@
                 <div class="mb-8">
                     <h3 class="text-xl mb-4 flex items-center gap-2">
                         <span
-                            class="bg-blue/15 text-blue px-3 py-1 rounded-full text-sm font-medium"
+                            class="bg-blue/15 text-blue-ink px-3 py-1 rounded-full text-sm font-medium"
                         >
                             {buttonType.label}
                         </span>
@@ -129,10 +129,10 @@
                             >
                                 {#each group as test (test.description)}
                                     <div
-                                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                                     >
                                         <div
-                                            class="bg-neutral-300 px-4 py-3 rounded-2xl"
+                                            class="playground-island bg-neutral-300 dark:bg-black px-4 py-3 rounded-2xl"
                                         >
                                             <Button
                                                 size={test.size}
@@ -164,7 +164,7 @@
     <!-- Disabled state examples by size and type -->
     <div class="mb-12">
         <h2
-            class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+            class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
         >
             Disabled States
         </h2>
@@ -185,10 +185,10 @@
                         >
                             {#each colors as color (color)}
                                 <div
-                                    class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                                    class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                                 >
                                     <div
-                                        class="bg-neutral-300 px-4 py-3 rounded-2xl"
+                                        class="playground-island bg-neutral-300 dark:bg-black px-4 py-3 rounded-2xl"
                                     >
                                         <Button
                                             {size}
@@ -225,7 +225,7 @@
 
     <!-- Summary -->
     <div class="bg-blue/10 p-6 rounded-2xl">
-        <h3 class="text-lg font-medium text-blue mb-4">Test Summary</h3>
+        <h3 class="text-lg font-medium text-blue-ink mb-4">Test Summary</h3>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <h4 class="font-medium text-black mb-2">Basic Properties:</h4>

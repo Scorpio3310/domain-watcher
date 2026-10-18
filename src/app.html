@@ -18,6 +18,29 @@
         <link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#f0f0f0" />
+        <!-- Applies the saved (or system) theme before the first paint, so a
+             dark-mode visit never flashes the light theme. Kept in sync
+             afterwards by src/lib/stores/theme.svelte.js -->
+        <script>
+            (() => {
+                let saved = null;
+                try {
+                    saved = localStorage.getItem("theme");
+                } catch {}
+                const theme =
+                    saved === "light" || saved === "dark"
+                        ? saved
+                        : matchMedia("(prefers-color-scheme: dark)").matches
+                          ? "dark"
+                          : "light";
+                document.documentElement.dataset.theme = theme;
+                if (theme === "dark") {
+                    document
+                        .querySelector('meta[name="theme-color"]')
+                        ?.setAttribute("content", "#0e0e0e");
+                }
+            })();
+        </script>
 
         %sveltekit.head%
     </head>

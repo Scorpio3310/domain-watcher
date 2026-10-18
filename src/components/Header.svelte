@@ -5,6 +5,7 @@
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
     import Tooltip from "./Tooltip.svelte";
+    import { theme } from "#lib/stores/theme.svelte.js";
     import { toast } from "#lib/stores/toast.svelte.js";
     import { isDemo } from "#lib/utils/helpers.js";
     import { batchCheck } from "#lib/remote/check-domains.remote.js";
@@ -102,9 +103,32 @@
     </div>
 {/snippet}
 
+{#snippet themeToggle(extraClass = "")}
+    <!-- CSS picks the icon and the accessible name (dark: variant), so the
+         server-rendered HTML is already right before hydration - no
+         moon-to-sun flicker and no wrong label on load -->
+    <Button
+        onclick={theme.toggle}
+        title="Toggle dark mode"
+        size="lg"
+        color="white-outline"
+        class="button--icon-only {extraClass}"
+    >
+        <span class="icon text-2xl" aria-hidden="true">
+            <Icon icon="iconoir:half-moon" class="dark:hidden" />
+            <Icon icon="iconoir:sun-light" class="hidden dark:block" />
+        </span>
+        <span class="sr-only dark:hidden">Switch to dark mode</span>
+        <span class="sr-only hidden dark:inline">Switch to light mode</span>
+    </Button>
+{/snippet}
+
 {#snippet headerActions(actionType = "default")}
     {#if actionType === "main"}
         <div class="flex gap-2 items-center">
+            <!-- From sm up only: on phones the header has no room next to the
+                 title (the Settings header has the toggle on every size) -->
+            {@render themeToggle("hidden! sm:flex!")}
             <div class="relative">
                 {#if !isLookupReady}
                     <div
@@ -195,9 +219,10 @@
         </div>
     {:else if actionType === "settings"}
         <div class="flex gap-2 items-center">
-            <div class="text-xs text-white opacity-50">
+            <div class="text-xs text-white opacity-50 hidden sm:block">
                 Version: {__VERSION__}
             </div>
+            {@render themeToggle()}
             <Button
                 href="https://github.com/Scorpio3310/domain-watcher"
                 title="GitHub"

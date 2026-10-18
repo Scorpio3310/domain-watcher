@@ -4,6 +4,15 @@
     // All possible prop combinations
     const types = ["text", "email", "password", "number", "tel", "url"];
     const variants = ["default", "error", "success"];
+
+    // Complete class strings (not interpolated) so Tailwind's scanner sees them
+    /** @type {Record<string, string>} */
+    const variantBadgeClasses = {
+        default: "bg-blue-100 text-blue-600 dark:bg-blue/15 dark:text-blue-ink",
+        error: "bg-red-100 text-red-600 dark:bg-red/15 dark:text-red-ink",
+        success: "bg-green-100 text-green-600 dark:bg-green/15 dark:text-green",
+    };
+
     const tooltipIcons = [
         "iconoir:info-circle",
         "iconoir:question-mark-circle",
@@ -238,13 +247,13 @@
             </div>
             <div class="flex gap-2">
                 <button
-                    class="px-4 py-2 bg-blue text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    class="px-4 py-2 bg-blue text-snow rounded-lg hover:bg-blue-700 transition-colors"
                     onclick={logAllValues}
                 >
                     Log All Values
                 </button>
                 <button
-                    class="px-4 py-2 bg-red text-white rounded-lg hover:bg-red-700 transition-colors"
+                    class="px-4 py-2 bg-red dark:bg-red-600 text-snow rounded-lg hover:bg-red-700 transition-colors"
                     onclick={resetAllValues}
                 >
                     Reset All
@@ -255,7 +264,7 @@
         {#each inputTypes as inputType (inputType.type)}
             <div class="mb-16">
                 <h2
-                    class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                    class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
                 >
                     {inputType.label}
                 </h2>
@@ -266,15 +275,9 @@
                             class="text-xl font-semibold mb-6 flex items-center gap-3"
                         >
                             <span
-                                class="bg-{variant === 'default'
-                                    ? 'blue'
-                                    : variant === 'error'
-                                      ? 'red'
-                                      : 'green'}-100 text-{variant === 'default'
-                                    ? 'blue'
-                                    : variant === 'error'
-                                      ? 'red'
-                                      : 'green'}-600 px-3 py-1 rounded-full text-sm font-medium capitalize"
+                                class="{variantBadgeClasses[
+                                    variant
+                                ]} px-3 py-1 rounded-full text-sm font-medium capitalize"
                             >
                                 {variant} Variant
                             </span>
@@ -292,7 +295,7 @@
                                 >
                                     {#each group as test (test.uniqueId)}
                                         <div
-                                            class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                                            class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                                         >
                                             <div class="w-full">
                                                 <Input
@@ -355,7 +358,7 @@
         <!-- Disabled state examples -->
         <div class="mb-16">
             <h2
-                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
+                class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 dark:border-black/10 pb-4"
             >
                 Disabled States
             </h2>
@@ -363,7 +366,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {#each types.slice(0, 6) as type, index (type)}
                     <div
-                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
+                        class="flex flex-col items-center gap-3 p-4 bg-white shadow-[var(--shadow-button-white)] rounded-2xl"
                     >
                         <div class="min-h-[120px] flex flex-col justify-center">
                             <Input
@@ -383,7 +386,7 @@
                                 value="Disabled input"
                             />
                         </div>
-                        <div class="border-t border-gray-100 pt-4">
+                        <div class="border-t border-gray-100 dark:border-black/10 pt-4">
                             <code
                                 class="text-xs text-black/60 bg-black/10 px-2 py-1 rounded-lg text-center leading-relaxed max-w-full break-all block"
                             >
@@ -397,7 +400,7 @@
 
         <!-- Summary -->
         <div class="bg-blue/10 p-6 rounded-2xl">
-            <h3 class="text-lg font-medium text-blue mb-4">Test Summary</h3>
+            <h3 class="text-lg font-medium text-blue-ink mb-4">Test Summary</h3>
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div>
                     <h4 class="font-medium text-black mb-2">Input Types:</h4>
@@ -418,7 +421,7 @@
                         {#each variants as variant (variant)}
                             <li>
                                 <code
-                                    class="bg-blue-100 px-2 py-1 rounded text-xs"
+                                    class="bg-blue-100 dark:bg-blue/15 px-2 py-1 rounded text-xs"
                                     >{variant}</code
                                 >
                             </li>

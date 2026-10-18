@@ -473,7 +473,7 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * //   daysRemaining: 9,
  * //   isExpired: true,
  * //   isExpiringSoon: false,
- * //   className: 'text-red'
+ * //   className: 'text-red-ink'
  * // }
  *
  * @example
@@ -563,7 +563,7 @@ export const getExpirationStatus = (expirationDate, assumeUTC = true) => {
         isExpired,
         isExpiringSoon,
         className: isExpired
-            ? "text-red"
+            ? "text-red-ink"
             : isExpiringSoon
             ? "text-orange"
             : "text-black",
