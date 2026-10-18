@@ -109,8 +109,10 @@ async function authenticateRequest(request, secret) {
  *   and at least one provider failed (`success: false`, details in
  *   `notifications.errors`), so the scheduled run is marked as failed; failed
  *   sends are retried on the next ticks within 60 minutes of the scheduled time
- * @throws {503} Service Unavailable - A due report slot couldn't be claimed
- *   because of a database error (details in `claimErrors`)
+ * @throws {503} Service Unavailable - Nothing ran (`action: "skipped"`,
+ *   `success: false`) because a due report slot couldn't be claimed due to a
+ *   database error (details in `claimErrors`) or provider settings couldn't
+ *   be loaded (details in `settingsErrors`)
  */
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
@@ -181,24 +183,35 @@ export async function POST({ request }) {
             );
         }
 
-        // A due report couldn't be claimed (DB error) → don't report success
+        // Nothing ran because a due report couldn't be claimed (DB error) or
+        // provider settings couldn't be loaded (so whether a report is due
+        // is unknown) → don't report success
         const claimFailed =
             result.action === "skipped" &&
             (result.claimErrors?.length ?? 0) > 0;
+        const settingsFailed =
+            result.action === "skipped" &&
+            (result.settingsErrors?.length ?? 0) > 0;
         if (claimFailed) {
             console.error(
                 "❌ Cron run could not claim a due report - database error"
             );
         }
+        if (settingsFailed) {
+            console.error(
+                "❌ Cron run skipped - provider settings could not be loaded"
+            );
+        }
+        const unavailable = claimFailed || settingsFailed;
 
         return Response.json(
             {
-                success: !allSendsFailed && !claimFailed,
+                success: !allSendsFailed && !unavailable,
                 executionTime: `${executionTime}ms`,
                 manual: isManual,
                 ...result,
             },
-            { status: allSendsFailed ? 502 : claimFailed ? 503 : 200 }
+            { status: allSendsFailed ? 502 : unavailable ? 503 : 200 }
         );
     } catch (error) {
         const executionTime = Date.now() - startTime;

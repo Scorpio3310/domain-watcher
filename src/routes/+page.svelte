@@ -16,8 +16,10 @@
     let { data } = $props();
 
     // Issues returned by the server (subdomain, duplicate) are kept by Kit
-    // while the client preflight passes - re-validate once on the server after
-    // a rejected submit so they disappear as soon as the user edits the field
+    // while the client preflight passes - after a rejected submit every edit
+    // re-validates on the server (until a submit goes through), so they
+    // disappear as soon as the user edits the field. Kit only applies the
+    // newest validation, so a preflight-only one must not race the server one.
     let revalidateOnServer = false;
 </script>
 
@@ -58,6 +60,8 @@
             async ({ submit, element }) => {
                 try {
                     if (await submit()) {
+                        // Accepted by the server - no server issues left
+                        revalidateOnServer = false;
                         const result = addDomain.result;
                         if (result) toast.show(result);
                         // Only clear the input once the domain was added - a
@@ -84,8 +88,10 @@
             },
         )}
         oninput={() => {
-            addDomain.validate({ preflightOnly: !revalidateOnServer });
-            revalidateOnServer = false;
+            // A failed server validation (offline) just leaves the issues
+            addDomain
+                .validate({ preflightOnly: !revalidateOnServer })
+                .catch(() => {});
         }}
     >
         <div class="relative">

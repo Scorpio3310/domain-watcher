@@ -3,9 +3,10 @@ import { EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 // =============================================================================
 // SHARED VERIFICATION PREDICATES
 // =============================================================================
-// Interpolated into BOTH selection queries (SELECT_DOMAINS_NEEDING_CHECK and
-// SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION) so the manual and cron paths can't
-// drift apart. `expires` is always wrapped in datetime(): it is stored as ISO
+// Interpolated into SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION, the single
+// selection query of both the cron and the manual "Check Domains" button
+// (both plan with planVerification), so the two paths can't drift apart.
+// `expires` is always wrapped in datetime(): it is stored as ISO
 // "YYYY-MM-DDTHH:MM:SSZ" while datetime('now') yields "YYYY-MM-DD HH:MM:SS",
 // and a raw TEXT comparison is off by up to a day ('T' sorts after ' ').
 // datetime() returns NULL for an unparseable value, which is treated like
@@ -17,7 +18,7 @@ import { EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 const DAILY_REFRESH_AFTER = "-20 hours";
 /** Safety-net refresh cadence for every registered domain */
 const SAFETY_NET_REFRESH_AFTER = "-7 days";
-/** Scheduled cron runs skip domains checked within this window (see cronNotifications.checkDomains) */
+/** Scheduled cron runs skip domains checked within this window and report its failures (see cronNotifications.checkDomains) */
 const RECENTLY_CHECKED_WITHIN = "-12 hours";
 
 /** End of the "expiring soon" window (EXPIRY_WARNING_DAYS from now) */
@@ -26,8 +27,18 @@ const EXPIRY_WINDOW_END = `datetime('now', '+${EXPIRY_WARNING_DAYS} days')`;
 /** Registered, but the stored expiry has already passed */
 const IS_EXPIRED_REGISTERED = `(status = 'registered' AND datetime(expires) < datetime('now'))`;
 
-/** available/error/not_checked, or registered without (usable) expiry data (e.g. .de/.ch via RDAP) */
-const NEEDS_VERIFICATION = `(status IN ('available', 'error', 'not_checked') OR (status = 'registered' AND datetime(expires) IS NULL))`;
+/**
+ * Registered without (usable) expiry data (e.g. .de/.ch/.eu, whose registries
+ * publish none) and not checked within the daily cadence: re-checking them on
+ * every run would only re-confirm "registered" and, on the WhoisJSON path,
+ * spend 2 calls of the monthly quota per domain each time
+ */
+const NEEDS_NO_EXPIRY_REFRESH = `(status = 'registered'
+            AND datetime(expires) IS NULL
+            AND (last_domain_checked IS NULL OR last_domain_checked < datetime('now', '${DAILY_REFRESH_AFTER}')))`;
+
+/** available/error/not_checked (every run), or registered without (usable) expiry data (daily) */
+const NEEDS_VERIFICATION = `(status IN ('available', 'error', 'not_checked') OR ${NEEDS_NO_EXPIRY_REFRESH})`;
 
 /** Registered and expiring within the warning window (the report's "expiring" section) */
 const IS_EXPIRING_SOON = `(status = 'registered' AND datetime(expires) BETWEEN datetime('now') AND ${EXPIRY_WINDOW_END})`;
@@ -303,54 +314,26 @@ export const DOMAIN_QUERIES = {
     // =============================================================================
 
     /**
-     * Finds domains requiring a check (manual "Check Domains" button)
-     * @type {string}
-     * @description Returns domains that need status verification: no (usable)
-     * expiry, expired, a non-registered status, or a registered domain due for
-     * a refresh — daily when expiring soon or in a grace/deletion state, weekly
-     * otherwise. Built from the same shared predicates as
-     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below, so both paths agree.
-     * Sort order (the caller slices to CONFIG.LIMIT_DOMAIN_CHECKS): expired /
-     * non-registered first, then registered without expiry data (.de/.ch via
-     * RDAP), then daily refreshes, then weekly safety-net refreshes — each
-     * oldest-checked first, so the remainder rotates fairly across runs.
-     * @returns {Array<Object>} Domains needing a check, in processing order
-     */
-    SELECT_DOMAINS_NEEDING_CHECK: `
-        SELECT *
-        FROM domains
-        WHERE datetime(expires) IS NULL
-           OR datetime(expires) <= datetime('now')
-           OR status IN ('not_checked', 'available', 'error')
-           OR ${NEEDS_REFRESH}
-        ORDER BY CASE
-                     WHEN status = 'registered' AND datetime(expires) IS NULL THEN 1
-                     WHEN ${NEEDS_DAILY_REFRESH} THEN 2
-                     WHEN ${NEEDS_SAFETY_NET_REFRESH} THEN 3
-                     ELSE 0
-                 END ASC,
-                 last_domain_checked ASC
-    `,
-
-    /**
      * UNIFIED query for comprehensive domain monitoring (SINGLE DB CALL)
      * @type {string}
-     * @description Single source of truth for the cron path: returns every
+     * @description Single source of truth for domain selection: returns every
      * domain the cron must verify or report, with SQL-computed category flags
      * (domainVerification.getAllDomainsForVerification partitions by them —
-     * no JS date re-derivation). Uses the same shared predicates as
-     * SELECT_DOMAINS_NEEDING_CHECK above; the warning window comes from
-     * EXPIRY_WARNING_DAYS in #lib/constants/constants.js.
+     * no JS date re-derivation). The cron and the manual "Check Domains"
+     * button both pick their verification list from it via planVerification.
+     * The warning window comes from EXPIRY_WARNING_DAYS in
+     * #lib/constants/constants.js.
      * @returns {Array<Object>} Prioritized domains with verification flags and categories
      * @example
      * // Returns domains with these additional fields:
      * // - verification_priority: 1-8 processing order
      * //     1 expired registered, 2 error, 3 not_checked, 4 available,
-     * //     5 registered without expiry data, 6 daily refresh (expiring soon /
-     * //     grace-deletion state), 7 weekly safety-net refresh,
-     * //     8 report-only (expiring soon, refreshed recently)
+     * //     5 registered without expiry data (daily), 6 daily refresh
+     * //     (expiring soon / grace-deletion state), 7 weekly safety-net
+     * //     refresh, 8 report-only (expiring soon, refreshed recently)
      * // - is_expired_registered: 1/0 (registered but expired) → verify + report
-     * // - needs_verification: 1/0 (available/error/unchecked/registered-no-expiry) → verify
+     * // - needs_verification: 1/0 (available/error/unchecked, or registered-no-expiry
+     * //     not checked within 20h) → verify
      * // - is_expiring_soon: 1/0 (expires within EXPIRY_WARNING_DAYS) → report
      * // - needs_refresh: 1/0 (registered, future expiry, refresh due) → verify only
      * // - is_recently_checked: 1/0 (checked within 12h) → scheduled runs skip it
@@ -385,5 +368,24 @@ export const DOMAIN_QUERIES = {
            OR ${IS_EXPIRING_SOON}
            OR ${NEEDS_REFRESH}
         ORDER BY verification_priority ASC, last_domain_checked ASC
+    `,
+
+    /**
+     * Domains whose latest check failed within the recently-checked window
+     * @type {string}
+     * @description A successful check clears error_message (UPDATE_DOMAIN)
+     * and every failure overwrites it with a fresh last_domain_checked, so a
+     * non-empty error_message checked within RECENTLY_CHECKED_WITHIN (12h) is
+     * the latest check's failure. Same window as the scheduled runs' skip, so
+     * a retry tick or a second provider later the same day still reports the
+     * failures of the domains it reuses instead of an "all quiet" day.
+     * @returns {Array<{domain_name: string, error: string}>} Recent failures, newest first
+     */
+    SELECT_RECENT_CHECK_FAILURES: `
+        SELECT domain_name, error_message AS error
+        FROM domains
+        WHERE COALESCE(error_message, '') <> ''
+          AND ${IS_RECENTLY_CHECKED}
+        ORDER BY last_domain_checked DESC, domain_name ASC
     `,
 };

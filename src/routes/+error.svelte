@@ -87,9 +87,16 @@
             <pre><div
                     class="cursor-pointer"
                     onclick={toggleExpansion}
-                    onkeydown={(e) => e.key === "Enter" && toggleExpansion()}
+                    onkeydown={(e) => {
+                        // Same keys as a native button (Space would scroll)
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleExpansion();
+                        }
+                    }}
                     role="button"
-                    tabindex="0"><div class="error"><div
+                    tabindex="0"
+                    aria-expanded={isExpanded}><div class="error"><div
                             class="toggle">{isExpanded
                                 ? "Hide Details"
                                 : "Show Error Details"}<Icon

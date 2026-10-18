@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { PRODUCTION_DOMAIN } from "$app/env/private";
 import { getErrorMessage } from "#lib/utils/helpers.js";
+import { NOTIFICATION_SEND_TIMEOUT_MS } from "#lib/server/utils/notification-utils.js";
 import {
     escapeHtml,
     formatExpiryDetail,
@@ -13,16 +14,69 @@ import {
 /** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "#lib/types.js" */
 
 /**
+ * Short, stable fingerprint of a string (32-bit FNV-1a, hex) - keeps the
+ * sender/recipient out of the idempotency key while still changing it when
+ * they change
+ * @param {string} value - Text to fingerprint
+ * @returns {string} 8-character hex hash
+ */
+const fingerprint = (value) => {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+/**
+ * Idempotency key for a scheduled daily report, so a send that Resend
+ * accepted but whose response was lost (network reset, our timeout) can't be
+ * delivered twice by the next tick's retry. Includes the notification time
+ * (an intended re-send after a time change still goes out) and a fingerprint
+ * of the deployment (PRODUCTION_DOMAIN) + sender + recipient (a retry after
+ * fixing them gets a fresh key, and two instances sharing a Resend account,
+ * e.g. local and production, can't block each other's report).
+ * @param {{from_email: string, to_email: string, notification_time?: string}} settings - Resend settings
+ * @param {string} slotDate - Local date "YYYY-MM-DD" of the scheduled report slot
+ * @returns {string} e.g. "daily-report/2026-10-18/09:00/1a2b3c4d"
+ */
+const getDailyReportIdempotencyKey = (settings, slotDate) =>
+    `daily-report/${slotDate}/${settings.notification_time ?? "-"}/${fingerprint(
+        `${PRODUCTION_DOMAIN}\n${settings.from_email}\n${settings.to_email}`
+    )}`;
+
+/**
+ * Report timestamp of a scheduled slot ("18 October 2026 at 09:00"), the same
+ * format as getReportTimestamp() but stable across retries of that slot
+ * @param {string} slotDate - Local date "YYYY-MM-DD" of the scheduled report slot
+ * @param {string|undefined} notificationTime - Scheduled local time "HH:MM"
+ * @returns {string} Human-readable slot timestamp
+ */
+const formatSlotTimestamp = (slotDate, notificationTime) => {
+    const day = new Date(`${slotDate}T12:00:00Z`).toLocaleDateString("en-GB", {
+        timeZone: "UTC",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    });
+    return notificationTime ? `${day} at ${notificationTime}` : day;
+};
+
+/**
  * Resend Email notification service for formatting and sending messages
  */
 export const resendNotifier = {
     /**
      * Send domain monitoring report via Resend Email
-     * @param {{api_key: string, from_email: string, to_email: string}} settings - Resend settings object
+     * @param {{api_key: string, from_email: string, to_email: string, notification_time?: string}} settings - Resend settings object
      * @param {DomainUpdates} domainUpdates - Domain update data
+     * @param {{slotDate?: string}} [options={}] - slotDate: scheduled report
+     *   slot (scheduled cron runs only) - sends with an idempotency key so a
+     *   retried send can't deliver the same daily report twice
      * @returns {Promise<NotifierResult & {data?: {emailId: string, from: string, to: string, sentAt: string}}>} Send result
      */
-    async sendDomainReport(settings, domainUpdates) {
+    async sendDomainReport(settings, domainUpdates, { slotDate } = {}) {
         try {
             if (
                 !settings?.api_key ||
@@ -39,7 +93,15 @@ export const resendNotifier = {
             // Initialize Resend client
             const resend = new Resend(settings.api_key);
 
-            const emailContent = this.formatEmailContent(domainUpdates);
+            // Scheduled reports show the slot time instead of "now", so a
+            // retry renders the same email and Resend replays the first
+            // attempt's response for the idempotency key below
+            const emailContent = this.formatEmailContent(
+                domainUpdates,
+                slotDate
+                    ? formatSlotTimestamp(slotDate, settings.notification_time)
+                    : getReportTimestamp()
+            );
 
             const failureCount = domainUpdates.failures?.length ?? 0;
             const updateCount = domainUpdates.totalCount + failureCount;
@@ -56,8 +118,18 @@ export const resendNotifier = {
                 text: emailContent.text,
             };
 
-            // Send email using Resend SDK
-            const { data, error } = await resend.emails.send(emailData);
+            // Send email using Resend SDK. A stalled request is aborted (the
+            // SDK returns it as an error), so the cron can retry on its next
+            // tick; scheduled reports carry an idempotency key for that retry
+            const { data, error } = await resend.emails.send(emailData, {
+                signal: AbortSignal.timeout(NOTIFICATION_SEND_TIMEOUT_MS),
+                ...(slotDate && {
+                    idempotencyKey: getDailyReportIdempotencyKey(
+                        settings,
+                        slotDate
+                    ),
+                }),
+            });
 
             if (error) {
                 console.error("❌ Resend email failed:", error);
@@ -72,6 +144,13 @@ export const resendNotifier = {
                     daily_quota_exceeded: "Daily email quota exceeded",
                     monthly_quota_exceeded: "Monthly email quota exceeded",
                     invalid_from_address: "Invalid 'from' email address",
+                    concurrent_idempotent_requests:
+                        "An earlier send of this report is still in progress",
+                    // Same key, different content (the domain data changed
+                    // between attempts) - reported as a failure rather than
+                    // assumed delivered, so a lost report is never silent
+                    invalid_idempotent_request:
+                        "An earlier attempt for this report used different content (idempotency conflict)",
                 };
                 const errorMessage =
                     knownErrors[error.name] ||
@@ -132,9 +211,10 @@ export const resendNotifier = {
     /**
      * Format domain updates into email content (HTML + Text)
      * @param {DomainUpdates} domainUpdates - Domain update data
+     * @param {string} [timestamp=getReportTimestamp()] - Report timestamp shown in the email
      * @returns {{html: string, text: string}} Email content in both formats
      */
-    formatEmailContent(domainUpdates) {
+    formatEmailContent(domainUpdates, timestamp = getReportTimestamp()) {
         const {
             available = [],
             expiring = [],
@@ -142,7 +222,6 @@ export const resendNotifier = {
             failures = [],
             totalCount,
         } = domainUpdates;
-        const timestamp = getReportTimestamp();
 
         // Generate HTML version
         const html = this.generateHtmlContent(timestamp, totalCount, {

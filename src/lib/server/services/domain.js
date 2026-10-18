@@ -15,8 +15,9 @@ import {
     CONFIG,
 } from "#lib/server/utils/domain-utils.js";
 import { DOMAIN_STATUS } from "#lib/constants/constants.js";
+import { planVerification } from "#lib/server/services/verification-plan.js";
 
-/** @import { DomainRecord, VerificationCandidate, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
+/** @import { CheckFailure, DomainRecord, VerificationCandidate, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT
@@ -212,6 +213,9 @@ export const domainVerification = {
      * expired = registered with expires in the past, expiring = registered
      * within the warning window. Domains selected only for a refresh
      * (needingRefresh, future expiry outside the window) are never reported.
+     * recentFailures lists the domains whose latest check failed within the
+     * last 12 hours (SELECT_RECENT_CHECK_FAILURES), so a report that reuses
+     * stored state still shows them.
      * Meant to run AFTER a verification batch so
      * the report reflects stored state (which failed checks preserve) instead
      * of only the checks that happened to succeed in this run.
@@ -225,13 +229,19 @@ export const domainVerification = {
      * console.log(`${state.available.length} domains currently available`);
      */
     async getDomainReportState() {
-        const categorized = await this.getAllDomainsForVerification();
+        const [categorized, failuresResult] = await Promise.all([
+            this.getAllDomainsForVerification(),
+            executeSql(DOMAIN_QUERIES.SELECT_RECENT_CHECK_FAILURES),
+        ]);
         return {
             available: categorized.needingVerification.filter(
                 (d) => d.status === DOMAIN_STATUS.AVAILABLE
             ),
             expired: categorized.expiredRegistered,
             expiring: categorized.expiring,
+            recentFailures: /** @type {CheckFailure[]} */ (
+                failuresResult?.results || []
+            ),
         };
     },
 
@@ -256,9 +266,14 @@ export const domainVerification = {
     },
 
     /**
-     * Selects all domains needing a check (SELECT_DOMAINS_NEEDING_CHECK, incl.
-     * due refreshes of registered domains) and verifies them in one batch,
-     * capped at `limit` to respect WHOIS API rate limits
+     * Manual bulk check ("Check Domains" button): selects every due domain
+     * (same unified query and categories as the cron, incl. due refreshes of
+     * registered domains) and verifies one batch planned by planVerification -
+     * alert-critical domains first, the rest round-robin by staleness -
+     * capped at `limit` to respect lookup rate limits. Unlike scheduled runs
+     * it doesn't skip domains checked within the last 12 hours. Every checked
+     * domain moves to the back of its tier, so repeated clicks reach every
+     * due domain.
      * @async
      * @memberof domainVerification
      * @param {number} [limit=CONFIG.LIMIT_DOMAIN_CHECKS] - Maximum number of domains to verify in this run
@@ -274,20 +289,18 @@ export const domainVerification = {
      * }
      */
     async checkDomainsNeedingCheck(limit = CONFIG.LIMIT_DOMAIN_CHECKS) {
-        const queryResult = await executeSql(
-            DOMAIN_QUERIES.SELECT_DOMAINS_NEEDING_CHECK
-        );
-        const domainsToCheck = /** @type {DomainRecord[]} */ (
-            queryResult?.results || []
-        );
+        const categories = await this.getAllDomainsForVerification();
+        const { domainsToVerify, deferred } = planVerification(categories, {
+            manual: true,
+            limit,
+        });
 
-        const domainsToProcess = domainsToCheck.slice(0, limit);
-        const results = await verificationEngine.verifyBatch(domainsToProcess);
+        const results = await verificationEngine.verifyBatch(domainsToVerify);
 
         return {
             results,
-            total: domainsToCheck.length,
-            processed: domainsToProcess.length,
+            total: domainsToVerify.length + deferred,
+            processed: domainsToVerify.length,
         };
     },
 };
@@ -322,7 +335,7 @@ export const domainVerification = {
 
 /**
  * @typedef {Object} CategorizedDomains
- * @property {VerificationCandidate[]} needingVerification - available/error/not_checked, or registered without expiry data (verify every run)
+ * @property {VerificationCandidate[]} needingVerification - available/error/not_checked (verify every run), or registered without expiry data not checked within 20 hours (daily)
  * @property {VerificationCandidate[]} expiredRegistered - Expired domains still showing as registered (verify every run)
  * @property {VerificationCandidate[]} expiring - Registered domains expiring within EXPIRY_WARNING_DAYS (report section)
  * @property {VerificationCandidate[]} needingRefresh - Registered domains with a future expiry whose refresh is due (verify only, never reported)
@@ -334,5 +347,6 @@ export const domainVerification = {
  * @property {DomainRecord[]} available - Domains currently available
  * @property {DomainRecord[]} expired - Expired domains still showing as registered
  * @property {DomainRecord[]} expiring - Domains expiring within the warning window
+ * @property {CheckFailure[]} recentFailures - Domains whose latest check failed within the last 12 hours
  * @memberof module:DomainsServer
  */

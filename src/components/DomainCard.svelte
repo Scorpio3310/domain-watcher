@@ -1,6 +1,7 @@
 <script>
     import Button from "#components/Button.svelte";
     import Icon from "@iconify/svelte";
+    import { flushSync } from "svelte";
     import { slide, fly } from "svelte/transition";
     import { UI_DOMAIN_VIEW } from "#lib/constants/constants.js";
     import {
@@ -44,20 +45,50 @@
      */
     const toggleExpansion = () => {
         isExpanded = !isExpanded;
+        // Expanding: `details` below takes its own query for the same (still
+        // cached) entry. Collapsing: nothing may keep a query alive - a held
+        // query is re-fetched by every later form submission.
+        details = isExpanded ? getDomainDetails(data.id) : null;
+        prefetchedDetails = null;
+    };
+
+    //// DELETE CONFIRMATION FOCUS ////
+    // The button group that flies out turns inert, which drops keyboard focus
+    // to <body> - move it to the button group that replaces it instead
+    /** @type {HTMLElement | null} */
+    let trashButton = null;
+    /** @type {HTMLElement | null} */
+    let cancelButton = null;
+
+    /** @param {HTMLElement} node */
+    const setTrashButton = (node) => {
+        trashButton = node;
+    };
+
+    /** @param {HTMLElement} node */
+    const setCancelButton = (node) => {
+        cancelButton = node;
     };
 
     /**
      * Show delete confirmation UI
      */
     const showDeleteDialog = () => {
-        showDeleteConfirmation = true;
+        // Render the confirmation first so its Cancel button exists
+        flushSync(() => {
+            showDeleteConfirmation = true;
+        });
+        cancelButton?.focus();
     };
 
     /**
      * Cancel delete operation and return to normal view
      */
     const cancelDelete = () => {
-        showDeleteConfirmation = false;
+        flushSync(() => {
+            showDeleteConfirmation = false;
+        });
+        trashButton?.focus();
     };
 
     /**
@@ -82,12 +113,18 @@
     // The page data carries no raw RDAP/WhoisJSON/NS/SSL JSON - it is fetched
     // only while the card is expanded. The NS/SSL/scan forms below refresh
     // every active query after a successful submission, so an open card shows
-    // the new data without extra wiring.
-    const details = $derived(isExpanded ? getDomainDetails(data.id) : null);
+    // the new data without extra wiring. Plain state set in toggleExpansion
+    // rather than a $derived: a derived keeps its last query referenced after
+    // the card collapses, and that query would be re-fetched on every submit.
+    /** @type {ReturnType<typeof getDomainDetails> | null} */
+    let details = $state.raw(null);
 
     /**
      * Query started before the card expands - kept referenced so its cached
-     * result is still there when `details` above asks for the same domain
+     * result is still there when `details` asks for the same domain.
+     * Released again on expand/collapse and when the pointer/focus leaves
+     * "Show More" (Kit keeps a cache entry while a query references it and
+     * refreshes every cached entry after each form submission).
      * @type {ReturnType<typeof getDomainDetails> | null}
      */
     let prefetchedDetails = null;
@@ -102,6 +139,16 @@
         prefetchedDetails = getDomainDetails(data.id);
         // Errors surface on the expanded card's own query
         prefetchedDetails.catch(() => {});
+    };
+
+    /**
+     * Drops the prefetch of a card that was hovered/focused but not opened,
+     * so its cache entry can be evicted instead of being re-fetched after
+     * every form submission. A quick return still hits the cached entry
+     * until it is garbage-collected.
+     */
+    const releasePrefetch = () => {
+        if (!isExpanded) prefetchedDetails = null;
     };
 
     /**
@@ -190,6 +237,8 @@
                         onclick={toggleExpansion}
                         onpointerenter={prefetchDetails}
                         onfocus={prefetchDetails}
+                        onpointerleave={releasePrefetch}
+                        onblur={releasePrefetch}
                         ariaLabel="{buttonText} details for {domainName}"
                         aria-expanded={isExpanded}
                     />
@@ -202,6 +251,7 @@
                         color="white"
                         onclick={showDeleteDialog}
                         ariaLabel="Delete {domainName}"
+                        {@attach setTrashButton}
                     />
                 </div>
             {/if}
@@ -220,6 +270,7 @@
                         color="black-outline"
                         onclick={cancelDelete}
                         ariaLabel="Cancel deleting {domainName}"
+                        {@attach setCancelButton}
                     />
 
                     <form
@@ -314,10 +365,11 @@
 -->
 
 {#snippet basicInfo()}
-    <p class="inline">
+    <!-- div, not p: the status renders block content (incl. a tooltip) -->
+    <div class="inline">
         <span class="opacity-50">Status:</span>
         {@render statusTextFormat(data?.status ?? DOMAIN_STATUS.ERROR)}
-    </p>
+    </div>
     <hr />
     <p class="inline">
         <span class="opacity-50">Registrar:</span>

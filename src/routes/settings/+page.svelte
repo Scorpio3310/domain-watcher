@@ -3,6 +3,7 @@
     import Input from "#components/Input.svelte";
     import Tooltip from "#components/Tooltip.svelte";
     import { toast } from "#lib/stores/toast.svelte.js";
+    import { onMount } from "svelte";
     import { slide } from "svelte/transition";
     import Icon from "@iconify/svelte";
     import { isDemo } from "#lib/utils/helpers.js";
@@ -109,6 +110,47 @@
         if (resolvedResend !== lastResolvedResend) {
             lastResolvedResend = resolvedResend;
             updateResendEnabled.fields.enabled.set(resolvedResend);
+        }
+    });
+
+    // Text forms are seeded from the fresh server data too (a root-level set
+    // marks nothing dirty): an unsaved webhook/key/email/time edit from
+    // earlier in the session would otherwise come back after navigation and
+    // could be saved along with an unrelated change. Values mirror the
+    // fallbacks passed to as() below.
+    // svelte-ignore state_referenced_locally
+    saveApiKey.fields.set({ apiKey: data?.apiKeyConfig?.api_key ?? "" });
+    // svelte-ignore state_referenced_locally
+    updateSlackWebhook.fields.set({
+        webhook: data?.slackWebhookConfig?.webhook_url ?? "",
+        notificationTime: data?.slackWebhookConfig?.notification_time ?? "",
+        sendTestMessage: false,
+    });
+    // svelte-ignore state_referenced_locally
+    updateDiscordWebhook.fields.set({
+        webhook: data?.discordWebhookConfig?.webhook_url ?? "",
+        notificationTime: data?.discordWebhookConfig?.notification_time ?? "",
+        sendTestMessage: false,
+    });
+    // svelte-ignore state_referenced_locally
+    updateResendConfig.fields.set({
+        apiKey: data?.resendConfig?.api_key ?? "",
+        fromEmail: data?.resendConfig?.from_email ?? "",
+        toEmail: data?.resendConfig?.to_email ?? "",
+        notificationTime: data?.resendConfig?.notification_time ?? "",
+        sendTestMessage: false,
+    });
+
+    // Validation messages from that earlier visit no longer match the seeded
+    // values - one client-side pass per form clears them (server issues stay)
+    onMount(() => {
+        for (const form of [
+            saveApiKey,
+            updateSlackWebhook,
+            updateDiscordWebhook,
+            updateResendConfig,
+        ]) {
+            form.validate({ preflightOnly: true }).catch(() => {});
         }
     });
 
