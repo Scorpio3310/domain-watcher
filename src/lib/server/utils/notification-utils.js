@@ -13,6 +13,19 @@ import { NOTIFICATION_CATCH_UP_MINUTES } from "#lib/constants/constants.js";
 /** @import { ScheduleDecision } from "#lib/types.js" */
 
 // ========================================
+// SENDING
+// ========================================
+
+/**
+ * Upper bound for one report send (Slack/Discord webhook POST, Resend API
+ * call): a stalled request fails like any other send error, so the cron
+ * releases the report slot and the next tick retries instead of hanging
+ * until the invocation is cancelled with the claim still held
+ * @constant {number}
+ */
+export const NOTIFICATION_SEND_TIMEOUT_MS = 10_000;
+
+// ========================================
 // MESSAGE TEXT
 // ========================================
 

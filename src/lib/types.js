@@ -48,6 +48,16 @@
  */
 
 /**
+ * One run's verification list (see planVerification in
+ * #lib/server/services/verification-plan.js)
+ * @typedef {Object} VerificationPlan
+ * @property {VerificationCandidate[]} domainsToVerify - Domains to verify now, in order
+ * @property {number} critical - How many of them are alert-critical (expired registered / never checked)
+ * @property {number} skippedRecent - Due domains skipped because they were checked within 12h (scheduled runs)
+ * @property {number} deferred - Eligible domains left for later runs by the per-run cap
+ */
+
+/**
  * Normalized domain lookup result (provider-agnostic envelope stored in raw_domain_data)
  * @typedef {Object} DomainLookupData
  * @property {string} domain - The domain name that was checked
@@ -125,7 +135,7 @@
  * @property {DomainRecord[]} available - Domains currently available (post-check DB state)
  * @property {DomainRecord[]} expiring - Domains expiring soon
  * @property {DomainRecord[]} expired - Expired domains still registered
- * @property {CheckFailure[]} failures - Checks that failed this run
+ * @property {CheckFailure[]} failures - Checks that failed this run or within the last 12 hours (latest check of the domain failed)
  * @property {number} totalCount - Total number of domains in the report sections
  */
 
@@ -199,7 +209,7 @@
  * @property {string} [notification_time] - Daily notification time (HH:mm)
  * @property {string} [connection_status] - Last connection test status
  * @property {string} [last_sent_on] - Local date (YYYY-MM-DD) of the last claimed scheduled report slot
- * @property {string} [last_attempt_on] - Local date (YYYY-MM-DD) of the last slot a run claimed, kept when a failed send releases the claim (marks the next tick as a retry)
+ * @property {string} [last_attempt_on] - Local date (YYYY-MM-DD) of the last slot whose send failed after domain verification had completed, written when that claim is released (marks the next tick as a retry that reuses the stored domain state)
  * @property {string} [error] - Set when loading/parsing the settings failed (provider is NOT just disabled)
  */
 

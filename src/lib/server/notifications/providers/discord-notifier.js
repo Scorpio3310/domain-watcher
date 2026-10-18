@@ -2,6 +2,7 @@ import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     formatApiError,
     joinLinesWithinLimit,
+    NOTIFICATION_SEND_TIMEOUT_MS,
 } from "#lib/server/utils/notification-utils.js";
 import { isDiscordWebhookUrl } from "#src/routes/settings/validation.js";
 import {
@@ -107,6 +108,7 @@ export const discordNotifier = {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(message),
+                signal: AbortSignal.timeout(NOTIFICATION_SEND_TIMEOUT_MS),
             });
 
             if (response.ok) {

@@ -234,17 +234,17 @@ The cron job runs **every minute** to check scheduled notifications. Since you c
 
 How the schedule behaves:
 
--   **Once per day per provider**: the report is sent at the notification time or up to **60 minutes later**. A failed send (e.g. Slack temporarily down) or a missed cron tick is retried every minute within that hour; retries reuse the stored domain state instead of checking every domain again. If the hour passes without a successful send, that day's report is skipped (the log says "today's report was missed") - send it with a manual run (it sends to every enabled provider, not only the one that missed).
+-   **Once per day per provider**: the report is sent at the notification time or up to **60 minutes later**. A failed send (e.g. Slack temporarily down) or a missed cron tick is retried every minute within that hour; retries reuse the stored domain state instead of checking every domain again (unless the failed attempt didn't finish its domain check). If the hour passes without a successful send, that day's report is skipped (the log says "today's report was missed") - send it with a manual run (it sends to every enabled provider, not only the one that missed).
 -   **DST safe**: a time skipped by the spring-forward jump fires right after it, the repeated hour in autumn sends only once.
--   **No duplicates**: overlapping cron runs can't send the same report twice (the daily slot is claimed in D1). Manual runs (`{"manual": true}`) always send and don't affect the schedule.
+-   **No duplicates**: overlapping cron runs can't send the same report twice (the daily slot is claimed in D1), and a Resend email whose response got lost isn't delivered again by the retry (idempotency key per daily report). Manual runs (`{"manual": true}`) always send and don't affect the schedule.
 -   **Changing the time**: a new time that is still ahead today sends today's report at the new time, even if one already went out earlier today. A new time that passed up to 60 minutes ago sends today's report within a minute (unless it was already sent today). A provider without schedule state yet - saved for the first time, or not sent by the scheduler since the upgrade - that is saved with a time that already passed today starts tomorrow.
 -   **`PUBLIC_TIMEZONE`** must be a valid IANA zone (e.g. `Europe/Ljubljana`) - an invalid value falls back to UTC with a warning in the logs.
 
 Which domains are checked when a report is due:
 
--   At most **20 domains per run** (stays within the Workers Free subrequest limit), most urgent first: expired-but-registered and never-checked domains, then everything else in round-robin by last check time, so every domain is eventually covered. With more than 20 due domains a full pass takes several reports. The cap is `LIMIT_DOMAIN_CHECKS` in `src/lib/server/utils/domain-utils.js` (it also limits the manual bulk check) and can be raised on Workers Paid.
--   Registered domains are re-checked **daily** inside the 30-day expiry window or while the registry reports a grace/deletion state (redemption, pending delete, auto-renew), and **weekly** otherwise - so renewals and domains dropped after a registry auto-renew are noticed.
--   Domains checked in the last 12 hours are skipped on scheduled runs (a second provider later the same day reuses the fresh results).
+-   At most **20 domains per run** (stays within the Workers Free subrequest limit), most urgent first: expired-but-registered and never-checked domains, then everything else in round-robin by last check time, so every domain is eventually covered. With more than 20 due domains a full pass takes several reports. The **Check Domains** button picks domains the same way (without the 12-hour skip below), so clicking it again reaches the rest. The cap is `LIMIT_DOMAIN_CHECKS` in `src/lib/server/utils/domain-utils.js` (it also limits the manual bulk check) and can be raised on Workers Paid.
+-   Registered domains are re-checked **daily** inside the 30-day expiry window or while the registry reports a grace/deletion state (redemption, pending delete, auto-renew), and **weekly** otherwise - so renewals and domains dropped after a registry auto-renew are noticed. Registered domains without expiry data (e.g. .de, .ch, .eu - their registries don't publish one) are re-checked **daily** too (when looked up via WhoisJSON, that is about 2 API calls per such domain per day).
+-   Domains checked in the last 12 hours are skipped on scheduled runs (a second provider later the same day reuses the fresh results). Checks that failed in that window are still listed in the report, also on retries.
 -   Domains are only checked automatically when a provider's report is due - without an enabled notification provider, use the check buttons in the app.
 
 ---
@@ -437,7 +437,7 @@ For detailed table structure and relationships, see [schema.sql](schema.sql). Th
 
 ### Debugging
 
--   Check logs in the Cloudflare dashboard under **Workers & Pages > domain-watcher > Observability** (Workers Logs are enabled in `wrangler.jsonc`), or stream them live with `npx wrangler tail --env production`. A cron run is marked as failed when `/api/cron` answers non-2xx: 503 (`CRON_SECRET` missing, or a report slot couldn't be claimed), 502 (every provider failed - retried within the hour) or 500 (unexpected error)
+-   Check logs in the Cloudflare dashboard under **Workers & Pages > domain-watcher > Observability** (Workers Logs are enabled in `wrangler.jsonc`), or stream them live with `npx wrangler tail --env production`. A cron run is marked as failed when `/api/cron` answers non-2xx: 503 (`CRON_SECRET` missing, a report slot couldn't be claimed, or provider settings couldn't be loaded), 502 (every provider failed - retried within the hour) or 500 (unexpected error)
 -   Use `console.log` statements in your code for debugging
 -   Test API endpoints manually using curl or browser developer tools
 

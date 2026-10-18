@@ -1,12 +1,13 @@
 import { executeSql } from "#lib/database/db.js";
 import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { domainVerification } from "../services/domain.js";
+import { planVerification } from "#lib/server/services/verification-plan.js";
 import { CONFIG } from "#lib/server/utils/domain-utils.js";
-import { getScheduleDecision } from "#lib/server/utils/notification-utils.js";
 import {
-    DOMAIN_STATUS,
-    NOTIFICATION_CATCH_UP_MINUTES,
-} from "#lib/constants/constants.js";
+    addDaysToDate,
+    getScheduleDecision,
+} from "#lib/server/utils/notification-utils.js";
+import { NOTIFICATION_CATCH_UP_MINUTES } from "#lib/constants/constants.js";
 import {
     isDiscordWebhookUrl,
     isSlackWebhookUrl,
@@ -18,7 +19,7 @@ import {
     getErrorMessage,
 } from "#lib/utils/helpers.js";
 
-/** @import { CheckFailure, DomainRecord, ProviderSettings, ScheduleDecision, SlackConfig, DiscordConfig, ResendConfig, VerificationCandidate } from "#lib/types.js" */
+/** @import { CheckFailure, DomainRecord, ProviderSettings, ScheduleDecision, SlackConfig, DiscordConfig, ResendConfig } from "#lib/types.js" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY
@@ -45,15 +46,6 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  */
 
 /**
- * This run's verification list (see cronNotifications.planVerification)
- * @typedef {Object} VerificationPlan
- * @property {VerificationCandidate[]} domainsToVerify - Domains to verify now, in order
- * @property {number} critical - How many of them are alert-critical (expired registered / never checked)
- * @property {number} skippedRecent - Due domains skipped because they were checked within 12h (scheduled runs)
- * @property {number} deferred - Eligible domains left for later runs by the per-run cap
- */
-
-/**
  * Aggregated result of sending notifications to all selected providers
  * @typedef {Object} NotificationSendResult
  * @property {number} sent - Number of successful notifications sent
@@ -64,14 +56,15 @@ import { resendNotifier } from "./providers/resend-notifier.js";
 /**
  * Domain verification results gathered for notifications.
  * Section lists reflect post-check DB state (failed checks preserve the last
- * known status), while failures come from this run's live batch results.
+ * known status). Failures are this run's live batch results plus the domains
+ * whose latest check failed within the last 12 hours (see mergeFailures).
  * @typedef {Object} DomainCheckResult
  * @property {number} checked - Total number of domains verified via API
  * @property {number} deferred - Domains due for a check but left for later runs by the per-run cap
  * @property {DomainRecord[]} available - Domains currently available
  * @property {DomainRecord[]} expiring - Domains approaching expiration
  * @property {DomainRecord[]} expired - Domains that are expired but still registered
- * @property {CheckFailure[]} failures - Checks that failed in this run
+ * @property {CheckFailure[]} failures - Checks that failed in this run or within the last 12 hours
  */
 
 /**
@@ -83,7 +76,7 @@ import { resendNotifier } from "./providers/resend-notifier.js";
  * @property {string} [reason] - Reason for skipping (if action is "skipped")
  * @property {Array<{provider: string, error: string}>} [settingsErrors] - Provider settings that failed to load/parse (so a DB error is distinguishable from "provider disabled")
  * @property {Array<{provider: string, error: string}>} [claimErrors] - Due providers whose report slot couldn't be claimed because of a DB error
- * @property {{checked: number, deferred: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain verification counts (if executed)
+ * @property {{checked: number, deferred: number, available: number, expiring: number, expired: number, failed: number}} [domains] - Domain counts (if executed); failed = checks that failed in this run or within the last 12 hours (the report's failures section)
  * @property {NotificationSendResult} [notifications] - Notification sending results (if executed)
  */
 
@@ -113,33 +106,22 @@ const PROVIDERS = {
 };
 
 /**
- * Share of the per-run verification cap kept for the round-robin tier while
- * it has due domains, so alert-critical rows (e.g. many domains sitting in a
- * registry grace period) can't take every slot and starve the rest forever
+ * Report failures: this run's batch failures plus the domains whose latest
+ * check failed within the last 12 hours (stored in the DB), one entry per
+ * domain. Batch entries win - recordCheckFailure is best-effort, so the DB
+ * can miss (or hold an older message for) a failure of this run.
+ * @param {CheckFailure[]} batchFailures - Failures from this run's verification batch
+ * @param {CheckFailure[]} recentFailures - Failures read from the DB (SELECT_RECENT_CHECK_FAILURES)
+ * @returns {CheckFailure[]} Batch failures first, then the remaining stored ones
  */
-const ROUND_ROBIN_MIN_SHARE = 0.25;
-
-/**
- * Alert-critical verification rows: expired but still registered (did it
- * drop?) and never checked
- * @param {VerificationCandidate} domain - Unified-query row
- * @returns {boolean} True for alert-critical rows
- */
-const isAlertCritical = (domain) =>
-    domain.is_expired_registered === 1 ||
-    domain.status === DOMAIN_STATUS.NOT_CHECKED;
-
-/**
- * Staleness order: never checked first, then oldest last_domain_checked
- * (stored via CURRENT_TIMESTAMP, so the strings compare chronologically)
- * @param {VerificationCandidate} a - Row
- * @param {VerificationCandidate} b - Row
- * @returns {number} Sort comparator result
- */
-const byStaleness = (a, b) => {
-    const aChecked = a.last_domain_checked ?? "";
-    const bChecked = b.last_domain_checked ?? "";
-    return aChecked < bChecked ? -1 : aChecked > bChecked ? 1 : 0;
+const mergeFailures = (batchFailures, recentFailures) => {
+    const seen = new Set(batchFailures.map((failure) => failure.domain_name));
+    // Sorted by name so a retried report renders the same content (Resend
+    // then replays the first attempt's response for its idempotency key)
+    return [
+        ...batchFailures,
+        ...recentFailures.filter((failure) => !seen.has(failure.domain_name)),
+    ].sort((a, b) => a.domain_name.localeCompare(b.domain_name));
 };
 
 // ============================================================================
@@ -159,7 +141,9 @@ export const cronNotifications = {
      * Scheduled runs claim each due provider's daily report slot before any
      * work (so overlapping cron runs can't send the same report twice) and
      * give the slot back when the send fails, so the next tick retries
-     * within the catch-up window.
+     * within the catch-up window. Only a release after domain verification
+     * completed marks the slot as attempted, so a run that failed earlier
+     * (e.g. a D1 read timeout) is retried with verification.
      *
      * @param {boolean} [force=false] - Manual run: bypass the schedule (and
      *   its state), force execution and also re-verify domains checked within
@@ -234,10 +218,14 @@ export const cronNotifications = {
 
             /** @type {NotificationSendResult|undefined} */
             let notifications;
+            // Set once checkDomains resolved: only then does a release mark
+            // the slot as attempted (see releaseSlot)
+            let verified = false;
             try {
                 // A retry tick (every provider's earlier attempt today
-                // failed) reuses the stored domain state: a broken webhook
-                // must not spend another batch of lookups every minute
+                // failed after verification) reuses the stored domain state:
+                // a broken webhook must not spend another batch of lookups
+                // every minute
                 const isRetry =
                     !force &&
                     providersToSend.every(
@@ -255,6 +243,7 @@ export const cronNotifications = {
                 const domains = await this.checkDomains(force, {
                     verify: !isRetry,
                 });
+                verified = true;
 
                 console.log("📨 Sending notifications...");
                 notifications = await this.sendNotifications(
@@ -283,7 +272,9 @@ export const cronNotifications = {
                     await Promise.all(
                         providersToSend
                             .filter((provider) => !sent.has(provider.key))
-                            .map((provider) => this.releaseSlot(provider))
+                            .map((provider) =>
+                                this.releaseSlot(provider, verified)
+                            )
                     );
                 }
             }
@@ -450,15 +441,27 @@ export const cronNotifications = {
      * Gives a claimed slot back after a failed send so the next tick retries.
      * Never throws (a failed release is logged; that day's retry is lost).
      *
+     * Restores the pre-claim last_sent_on. A row that had none (saved before
+     * the schedule state existed, or with a time still ahead) gets the day
+     * before the slot instead: still below the slot, so it stays due, but no
+     * longer stateless, so a settings save can't seed today and cancel the
+     * retry. Only a release after verification completed records the slot
+     * as attempted (last_attempt_on), which makes the next tick a retry that
+     * reuses the stored domain state.
+     *
      * @param {ActiveProvider} provider - Provider whose claim should be released
+     * @param {boolean} [verified=false] - Whether this run's domain check
+     *   (checkDomains) completed before the send failed
      * @returns {Promise<void>}
      */
-    async releaseSlot(provider) {
+    async releaseSlot(provider, verified = false) {
         try {
+            const slotDate = /** @type {string} */ (provider.slotDate);
             await executeSql(SETTINGS_QUERIES.RELEASE_NOTIFICATION_SLOT, [
                 provider.key,
-                provider.slotDate,
-                provider.settings.last_sent_on ?? null,
+                slotDate,
+                provider.settings.last_sent_on ?? addDaysToDate(slotDate, -1),
+                verified ? 1 : 0,
             ]);
             console.log(
                 `🔓 ${provider.name} report for ${provider.slotDate} not sent - released for a retry on the next tick`
@@ -472,73 +475,13 @@ export const cronNotifications = {
     },
 
     /**
-     * Picks this run's verification list from the SQL-computed categories
-     *
-     * 1. Alert-critical rows strictly first: expired registered domains (did
-     *    they become available?) and never-checked ("not_checked") ones.
-     * 2. Everything else that is due - error, available, registered without
-     *    expiry data, daily/grace refresh, weekly safety net - round-robin by
-     *    staleness (never checked first, then oldest last_domain_checked), so
-     *    no category can starve another.
-     * Scheduled runs then skip domains checked within the last 12 hours, and
-     * the list is capped at `limit`. While round-robin rows are waiting,
-     * critical rows get at most (1 - ROUND_ROBIN_MIN_SHARE) of the cap.
-     *
-     * Every verified domain gets a fresh last_domain_checked (failures too),
-     * so it moves to the back of its tier: each due domain is verified within
-     * a bounded number of runs.
-     *
-     * @param {{expiredRegistered: VerificationCandidate[], needingVerification: VerificationCandidate[], needingRefresh: VerificationCandidate[]}} categories - Disjoint categories from getAllDomainsForVerification
-     * @param {{manual?: boolean, limit?: number}} [options={}] - manual: also re-verify recently checked domains; limit: per-run cap
-     * @returns {VerificationPlan} Domains to verify now plus skip/defer counts
-     */
-    planVerification(
-        { expiredRegistered, needingVerification, needingRefresh },
-        { manual = false, limit = CONFIG.LIMIT_DOMAIN_CHECKS } = {}
-    ) {
-        const dueDomains = [
-            ...expiredRegistered,
-            ...needingVerification,
-            ...needingRefresh,
-        ];
-        const eligibleDomains = manual
-            ? dueDomains
-            : dueDomains.filter((d) => d.is_recently_checked !== 1);
-
-        const critical = eligibleDomains
-            .filter(isAlertCritical)
-            .sort(byStaleness);
-        const roundRobin = eligibleDomains
-            .filter((d) => !isAlertCritical(d))
-            .sort(byStaleness);
-
-        // Never reserve the whole cap: critical rows always keep a slot
-        const reserved = Math.min(
-            roundRobin.length,
-            Math.ceil(limit * ROUND_ROBIN_MIN_SHARE),
-            Math.max(0, limit - 1)
-        );
-        const criticalToVerify = critical.slice(0, limit - reserved);
-        const domainsToVerify = [
-            ...criticalToVerify,
-            ...roundRobin.slice(0, limit - criticalToVerify.length),
-        ];
-
-        return {
-            domainsToVerify,
-            critical: criticalToVerify.length,
-            skippedRecent: dueDomains.length - eligibleDomains.length,
-            deferred: eligibleDomains.length - domainsToVerify.length,
-        };
-    },
-
-    /**
      * Verifies the domains that are due, then reads the report from DB state
      *
-     * The verification list comes from planVerification: alert-critical
-     * domains (expired registered, never checked) first, then every other due
-     * domain (error, available, registered without expiry data, daily/grace
-     * refresh, weekly safety net) round-robin by staleness.
+     * The verification list comes from planVerification (shared with the
+     * manual "Check Domains" button): alert-critical domains (expired
+     * registered, never checked) first, then every other due domain (error,
+     * available, registered without expiry data, daily/grace refresh, weekly
+     * safety net) round-robin by staleness.
      *
      * Scheduled runs skip domains checked within the last 12 hours, so a
      * second provider later the same day (or a retry tick) reuses fresh DB
@@ -551,7 +494,10 @@ export const cronNotifications = {
      * checks preserve the last known status, so a transient lookup/DB failure
      * (or a domain deferred by the cap) can't silently drop a domain from the
      * daily report. Refresh-only domains never appear in it. The failures
-     * list comes from this run's live batch results.
+     * list merges this run's live batch results with the domains whose
+     * latest check failed within the last 12 hours, so a retry tick or a
+     * second provider later the same day (which reuse those results) still
+     * reports them instead of an "all quiet" day.
      *
      * @param {boolean} [manual=false] - Manual run: also re-verify recently checked domains
      * @param {{verify?: boolean}} [options] - verify: false skips verification
@@ -572,7 +518,7 @@ export const cronNotifications = {
                 available: reportState.available,
                 expiring: reportState.expiring,
                 expired: reportState.expired,
-                failures: [],
+                failures: mergeFailures([], reportState.recentFailures),
             };
         }
 
@@ -580,7 +526,7 @@ export const cronNotifications = {
         const categories =
             await domainVerification.getAllDomainsForVerification();
         const { domainsToVerify, critical, skippedRecent, deferred } =
-            this.planVerification(categories, { manual });
+            planVerification(categories, { manual });
 
         if (skippedRecent > 0) {
             console.log(
@@ -618,11 +564,20 @@ export const cronNotifications = {
             available: reportState.available,
             expiring: reportState.expiring,
             expired: reportState.expired,
-            failures: verificationResults?.failures ?? [],
+            failures: mergeFailures(
+                verificationResults?.failures ?? [],
+                reportState.recentFailures
+            ),
         };
 
+        const batchFailureCount = verificationResults?.failures?.length ?? 0;
+        const earlierFailureCount = results.failures.length - batchFailureCount;
         console.log(
-            `✅ Domains: ${results.checked} checked, ${results.deferred} deferred, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring, ${results.failures.length} failed`
+            `✅ Domains: ${results.checked} checked, ${results.deferred} deferred, ${results.available.length} available, ${results.expired.length} expired, ${results.expiring.length} expiring, ${batchFailureCount} failed${
+                earlierFailureCount > 0
+                    ? ` (+${earlierFailureCount} from earlier checks)`
+                    : ""
+            }`
         );
         return results;
     },
@@ -676,7 +631,11 @@ export const cronNotifications = {
                         expired: domains.expired,
                         failures: domains.failures,
                         totalCount,
-                    }
+                    },
+                    // Scheduled runs only: lets Resend dedupe a retried send
+                    // (the report shows the scheduled time, so a retry renders
+                    // the same content)
+                    { slotDate: provider.slotDate }
                 );
 
                 if (result.success) {

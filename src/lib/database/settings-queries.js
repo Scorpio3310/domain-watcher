@@ -310,7 +310,7 @@ export const SETTINGS_QUERIES = {
     /**
      * Atomically claims a provider's daily report slot before the cron sends it
      * @type {string}
-     * @description Sets last_sent_on to the slot date only while the provider is enabled, still scheduled at the time the decision was made for, and no run has claimed this (or a later) slot yet. A single UPDATE is atomic in D1/SQLite, so of two overlapping cron runs exactly one gets meta.changes = 1.
+     * @description Sets last_sent_on to the slot date only while the provider is enabled, still scheduled at the time the decision was made for, and no run has claimed this (or a later) slot yet. A single UPDATE is atomic in D1/SQLite, so of two overlapping cron runs exactly one gets meta.changes = 1. last_attempt_on is left alone: RELEASE_NOTIFICATION_SLOT records it once verification has completed.
      * @param {string} provider_key - ?1: settings.key ('slack', 'discord', 'resend')
      * @param {string} slot_date - ?2: local date "YYYY-MM-DD" of the slot (getScheduleDecision().slotDate)
      * @param {string} notification_time - ?3: notification time the decision was based on ("HH:MM")
@@ -318,7 +318,7 @@ export const SETTINGS_QUERIES = {
      */
     CLAIM_NOTIFICATION_SLOT: `
         UPDATE settings
-        SET json_config_data = json_set(json_config_data, '$.last_sent_on', ?2, '$.last_attempt_on', ?2)
+        SET json_config_data = json_set(json_config_data, '$.last_sent_on', ?2)
         WHERE category = 'notifications' AND key = ?1
           AND enabled = 1
           AND json_valid(json_config_data)
@@ -330,16 +330,17 @@ export const SETTINGS_QUERIES = {
     /**
      * Gives a claimed slot back after the send failed, so the next cron tick retries
      * @type {string}
-     * @description Restores the previous last_sent_on (or removes it) only while the row still holds this run's claim
+     * @description Only while the row still holds this run's claim: sets last_sent_on to ?3 (always a date below the slot, never removed, so the row never looks stateless to a settings save's seed branch) and, when this run's domain verification completed (?4 = 1), records the slot as attempted in last_attempt_on so the next tick reuses the stored domain state. Otherwise last_attempt_on keeps its previous value and the next tick verifies again.
      * @param {string} provider_key - ?1: settings.key ('slack', 'discord', 'resend')
      * @param {string} slot_date - ?2: the claimed slot date
-     * @param {string|null} previous_sent_on - ?3: last_sent_on before the claim (NULL removes the key)
+     * @param {string} previous_sent_on - ?3: last_sent_on before the claim, or the day before the slot when the row had none
+     * @param {number} verified - ?4: 1 when verification completed before the send failed, 0 otherwise
      * @returns {Object} Update result with meta.changes (0 when the claim was already replaced)
      */
     RELEASE_NOTIFICATION_SLOT: `
         UPDATE settings
         SET json_config_data = CASE
-                WHEN ?3 IS NULL THEN json_remove(json_config_data, '$.last_sent_on')
+                WHEN ?4 = 1 THEN json_set(json_config_data, '$.last_sent_on', ?3, '$.last_attempt_on', ?2)
                 ELSE json_set(json_config_data, '$.last_sent_on', ?3)
             END
         WHERE category = 'notifications' AND key = ?1
