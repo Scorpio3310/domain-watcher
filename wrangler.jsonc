@@ -31,12 +31,8 @@
             "database_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
         }
     ],
-    "services": [
-        {
-            "binding": "SELF_LOCAL", // Binding name / in lib/cloudflare/cron.js used as env.SELF (...if (env.SELF) {...)
-            "service": "domain-watcher" // Service name (must match "name")
-        }
-    ],
+    // No "services" here: without the SELF binding, src/lib/cloudflare/cron.js calls the
+    // local dev server (http://localhost:8787) directly instead of a service binding.
     "triggers": {
         "crons": ["* * * * *"] // Every minute
     },

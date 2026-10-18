@@ -8,8 +8,8 @@
 /**
  * Worker environment bindings available to the scheduled cron handler
  * @typedef {Object} CronEnv
- * @property {{fetch(request: Request): Promise<Response>}} [SELF] - Service binding for production self-calls (Cloudflare Workers)
- * @property {{fetch(request: Request): Promise<Response>}} [SELF_LOCAL] - Local development binding for self-calls
+ * @property {{fetch(request: Request): Promise<Response>}} [SELF] - Service binding for production self-calls (Cloudflare Workers);
+ *   absent in local `wrangler dev`, where the handler calls http://localhost:8787 directly
  * @property {string} [CRON_SECRET] - Runtime secret for authenticating internal cron requests
  *   (`npx wrangler secret put CRON_SECRET --env production`, locally from `.env`). It is the
  *   same Worker env value /api/cron reads via `$app/env/private`
@@ -57,7 +57,9 @@ function cronHeaders(env) {
  * Main cron logic that performs scheduled tasks
  * Makes internal API calls to trigger domain checking or other scheduled operations
  *
- * Supports both production (env.SELF) and local development (env.SELF_LOCAL) environments
+ * Production calls itself through the SELF service binding (env.production in
+ * wrangler.jsonc); without that binding (local `wrangler dev` / `pnpm preview`)
+ * it calls the local dev server on http://localhost:8787 directly
  *
  * @param {CronEnv} env - Environment object containing bindings and secrets
  * @returns {Promise<void>}
@@ -90,13 +92,10 @@ async function cron(env) {
             }
 
             console.log("✅ Production - Self-call completed successfully!");
-        }
-
-        // Local development environment - use direct fetch
-        if (env.SELF_LOCAL) {
+        } else {
             /**
-             * Create internal request for local development
-             * Uses direct fetch to localhost:8787 (default Wrangler dev server port)
+             * Local development - there is no SELF binding outside env.production,
+             * so fetch the local dev server directly (default Wrangler port 8787)
              */
             const selfRequest = new Request("http://localhost:8787/api/cron", {
                 method: "POST",
