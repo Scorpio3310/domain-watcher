@@ -7,7 +7,7 @@
 /** @import { ServiceResult } from '#lib/types.js' */
 
 import { apiKey } from "./api-key";
-import { WhoisJson } from "@whoisjson/whoisjson";
+import { createWhoisJsonApi } from "./whoisjson-api.js";
 import { DOMAIN_STATUS } from "#lib/constants/constants.js";
 import { getErrorMessage } from "#lib/utils/helpers.js";
 
@@ -15,7 +15,7 @@ import { getErrorMessage } from "#lib/utils/helpers.js";
 // CONSTANTS & CONFIG
 // ========================================
 const TEST_DOMAIN = "example.com";
-/** Per-call cap — the SDK's axios instance has no timeout of its own */
+/** Per-call cap (the API client also aborts the request itself after 10s) */
 const WHOIS_TIMEOUT_MS = 10_000;
 
 // ========================================
@@ -48,6 +48,21 @@ const WHOIS_TIMEOUT_MS = 10_000;
 const classifyWhoisError = (error) => {
     const errorMessage = getErrorMessage(error, "Unknown error occurred");
     const lowerMessage = errorMessage.toLowerCase();
+
+    // HTTP status from the WhoisJSON API client wins over message heuristics
+    const httpStatus =
+        error && typeof error === "object" && "status" in error
+            ? Number(/** @type {{status: unknown}} */ (error).status)
+            : NaN;
+    if (httpStatus === 401 || httpStatus === 403) {
+        return { message: errorMessage, status: 401 };
+    }
+    if (httpStatus === 429) {
+        return { message: errorMessage, status: 429 };
+    }
+    if (httpStatus >= 500) {
+        return { message: errorMessage, status: 502 };
+    }
 
     // Network/Connection errors
     if (
@@ -131,9 +146,9 @@ const handleWhoisError = (error, operation, domainName) => {
 // ========================================
 
 /**
- * Create WhoisJson client with proper configuration
+ * Create WhoisJSON API client with proper configuration
  * @param {string|null} [customApiKey] - Optional custom API key, otherwise uses stored key
- * @returns {Promise<WhoisJson>} Configured whois client
+ * @returns {Promise<ReturnType<typeof createWhoisJsonApi>>} Configured whois client
  * @throws {Error} If API key is not available
  */
 const createWhoisClient = async (customApiKey = null) => {
@@ -145,17 +160,17 @@ const createWhoisClient = async (customApiKey = null) => {
         );
     }
 
-    return new WhoisJson({ apiKey: keyToUse });
+    return createWhoisJsonApi(keyToUse);
 };
 
 /**
- * Races a WhoisJSON SDK call against WHOIS_TIMEOUT_MS so one stalled
+ * Races a WhoisJSON API call against WHOIS_TIMEOUT_MS so one stalled
  * connection can't hold a whole verification batch. The rejection message
  * contains "timeout", which classifyWhoisError maps to 502.
  * @template T
- * @param {Promise<T>} call - Pending SDK call
+ * @param {Promise<T>} call - Pending API call
  * @param {string} operation - Operation label used in the timeout message
- * @returns {Promise<T>} The SDK result, or a rejection after the timeout
+ * @returns {Promise<T>} The API result, or a rejection after the timeout
  */
 const withTimeout = (call, operation) => {
     /** @type {ReturnType<typeof setTimeout>|undefined} */
@@ -189,7 +204,7 @@ const withTimeout = (call, operation) => {
 const isUsableWhoisData = (data) => {
     if (!data || typeof data !== "object") return false;
 
-    const whois = /** @type {Partial<import("@whoisjson/whoisjson").WhoisResponse>} */ (
+    const whois = /** @type {Partial<import("./whoisjson-api.js").WhoisResponse>} */ (
         data
     );
     if (whois.registered === false) return false;
