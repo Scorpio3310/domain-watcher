@@ -1,17 +1,47 @@
-import { PUBLIC_ENVIRONMENT, PUBLIC_TIMEZONE } from "$env/static/public";
-import {
-    formatDistanceToNow,
-    parseISO,
-    differenceInDays,
-    isPast,
-    isValid,
-} from "date-fns";
+import { PUBLIC_ENVIRONMENT, PUBLIC_TIMEZONE } from "$app/env/public";
+import { formatDistanceToNow, parseISO, isValid } from "date-fns";
+import { EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 
 // ============================================================================
 // UTILITY FUNCTIONS (internal helpers)
 // ============================================================================
 
-const getTimezone = () => PUBLIC_TIMEZONE || "UTC";
+/**
+ * Validated timezone, resolved once (PUBLIC_TIMEZONE is inlined at build time)
+ * @type {string|undefined}
+ */
+let resolvedTimezone;
+
+/**
+ * Timezone for displayed dates and notification schedules: PUBLIC_TIMEZONE,
+ * or "UTC" when it is unset or not a zone Intl accepts (warns once instead
+ * of letting every date format throw a RangeError)
+ * @returns {string} IANA timezone name
+ * @example
+ * // PUBLIC_TIMEZONE="Europe/Ljubljana"
+ * getTimezone() // "Europe/Ljubljana"
+ *
+ * // PUBLIC_TIMEZONE unset, or a typo like "Europe/Ljubjana"
+ * getTimezone() // "UTC" (the typo also logs one warning)
+ */
+export const getTimezone = () => {
+    if (resolvedTimezone) return resolvedTimezone;
+
+    const configured = PUBLIC_TIMEZONE?.trim() || "UTC";
+    try {
+        // resolvedOptions() returns the canonical spelling ("europe/ljubljana"
+        // -> "Europe/Ljubljana") for display in toasts and helper texts
+        resolvedTimezone = new Intl.DateTimeFormat("en-GB", {
+            timeZone: configured,
+        }).resolvedOptions().timeZone;
+    } catch {
+        console.warn(
+            `⚠️ Invalid PUBLIC_TIMEZONE "${configured}" - falling back to UTC`
+        );
+        resolvedTimezone = "UTC";
+    }
+    return resolvedTimezone;
+};
 
 /**
  * Parse various date formats to Date object
@@ -75,31 +105,39 @@ export const getHttpStatus = (error, fallback = 500) =>
         : fallback;
 
 /**
- * Get current time in configured timezone as HH:mm string
- * @returns {string} Current time in HH:mm format (24-hour) in configured timezone
+ * Calendar date and wall-clock time of an instant in a timezone
+ * @param {Date} [date=new Date()] - Instant to convert
+ * @param {string} [timeZone=getTimezone()] - IANA timezone (defaults to the validated PUBLIC_TIMEZONE)
+ * @returns {import('#lib/types.js').LocalDateTime} Local date, time and minutes since local midnight
  * @example
- * // With PUBLIC_TIMEZONE="Europe/Ljubljana"
- * getCurrentTimeInTimezone() // "16:30"
- *
- * // With PUBLIC_TIMEZONE="UTC" or undefined
- * getCurrentTimeInTimezone() // "14:30"
+ * // 01:30 UTC on 29 March 2026 is 03:30 CEST (clocks sprang forward at 02:00)
+ * getLocalDateTime(new Date("2026-03-29T01:30:00Z"), "Europe/Ljubljana")
+ * // { date: "2026-03-29", time: "03:30", minutes: 210 }
  */
-export const getCurrentTimeInTimezone = () => {
-    /** @type {Intl.DateTimeFormatOptions} */
-    const options = {
+export const getLocalDateTime = (
+    date = new Date(),
+    timeZone = getTimezone()
+) => {
+    /** @type {Record<string, string>} */
+    const parts = {};
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-        timeZone: getTimezone(),
-    };
-    try {
-        return new Date().toLocaleTimeString("en-GB", options);
-    } catch (error) {
-        console.warn("Failed to get time in timezone:", getTimezone(), error);
-        return new Date().toLocaleTimeString("en-GB", {
-            ...options,
-            timeZone: "UTC",
-        });
+        hourCycle: "h23",
+    });
+    for (const { type, value } of formatter.formatToParts(date)) {
+        parts[type] = value;
     }
+
+    return {
+        date: `${parts.year}-${parts.month}-${parts.day}`,
+        time: `${parts.hour}:${parts.minute}`,
+        minutes: Number(parts.hour) * 60 + Number(parts.minute),
+    };
 };
 
 /**
@@ -118,60 +156,6 @@ export const maskApiKey = (apiKey, visibleChars = 6) =>
         : `${apiKey.substring(0, visibleChars)}${"*".repeat(
               Math.min(apiKey.length - visibleChars, 20)
           )}`;
-
-/**
- * Parse whois raw data and extract registrar information
- * @param {string|null} rawDomainData - Raw JSON string containing whois data
- * @returns {string|null} Registrar name, error message, or null if not found
- * @example
- * // Valid registrar data
- * const rawData = '{"registrar": {"name": "GoDaddy"}}';
- * getRegistrar(rawData); // "GoDaddy"
- *
- * // No registrar in data
- * const rawData2 = '{"domain": "example.com"}';
- * getRegistrar(rawData2); // null
- *
- * // Invalid JSON
- * getRegistrar('invalid json'); // "Unexpected token 'i'..."
- *
- * // Null input
- * getRegistrar(null); // null
- */
-export const getRegistrar = (rawDomainData) => {
-    if (!rawDomainData) return null;
-    try {
-        return JSON.parse(rawDomainData).registrar?.name || null;
-    } catch (error) {
-        console.error("❌ Error parsing registrar data:", error);
-        return getErrorMessage(error, "Invalid JSON");
-    }
-};
-
-/**
- * Extracts the lookup provider display label from raw domain data JSON
- * @param {string|null} rawDomainData - Raw JSON string (stored lookup envelope)
- * @returns {string|null} "RDAP", "WhoisJSON", or null (legacy rows / invalid JSON)
- *
- * @example
- * getLookupSource('{"source": "rdap"}'); // "RDAP"
- * getLookupSource('{"source": "whoisjson"}'); // "WhoisJSON"
- * getLookupSource('{"domain": "example.com"}'); // null (legacy row)
- * getLookupSource(null); // null
- */
-export const getLookupSource = (rawDomainData) => {
-    if (!rawDomainData) return null;
-    try {
-        const { source } = JSON.parse(rawDomainData);
-        return source === "rdap"
-            ? "RDAP"
-            : source === "whoisjson"
-              ? "WhoisJSON"
-              : null;
-    } catch {
-        return null;
-    }
-};
 
 // ============================================================================
 // DATE FORMATTING FUNCTIONS (specialized date utilities)
@@ -255,8 +239,45 @@ export const formatHumanDate = (dateInput, options = {}) => {
 // DOMAIN EXPIRATION FORMATTING
 // =============================================================================
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 /**
- * Formats expiration date with intelligent remaining time information
+ * Whole days until a domain expires — the ONE day-count rule shared by the UI
+ * (formatExpirationDate, getExpirationStatus) and the notification reports.
+ * Future: any started day counts as a full day (Math.ceil) — expiring in 16h
+ * → 1, in 9.5 days → 10 — so 1..EXPIRY_WARNING_DAYS lines up exactly with the
+ * report's "expires within EXPIRY_WARNING_DAYS × 24h" window.
+ * Past: whole days elapsed (Math.floor), but at least 1 — expired 12h ago →
+ * -1, 36h ago → -1, 9.5 days ago → -9 — so an expired domain never reads
+ * "0 days ago" and the elapsed time is never overstated.
+ * Pure arithmetic on instants — browser-safe and timezone-independent.
+ * @function getDaysUntilExpiration
+ * @param {string|Date|null} expirationDate - Domain expiration date
+ * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC if no timezone specified
+ * @returns {number|null} Signed whole days (negative = expired, ≤ -1; 0 only
+ *   at the exact expiry instant) or null if the date is missing/invalid
+ * @example
+ * // Assuming now is 2025-07-29T12:00:00Z
+ * getDaysUntilExpiration('2025-07-30T04:00:00Z') // 1 (16 hours left)
+ * getDaysUntilExpiration('2025-08-15T12:00:00Z') // 17
+ * getDaysUntilExpiration('2025-07-29T00:00:00Z') // -1 (expired 12 hours ago)
+ * getDaysUntilExpiration('2025-07-28T00:00:00Z') // -1 (expired 36 hours ago)
+ * getDaysUntilExpiration('2025-07-20T00:00:00Z') // -9 (expired 9.5 days ago)
+ * getDaysUntilExpiration(null) // null
+ */
+export const getDaysUntilExpiration = (expirationDate, assumeUTC = true) => {
+    const date = parseDate(expirationDate, assumeUTC);
+    if (!date || !isValid(date)) return null;
+
+    const diffMs = date.getTime() - Date.now();
+    if (diffMs >= 0) return Math.ceil(diffMs / MS_PER_DAY);
+    return -Math.max(1, Math.floor(-diffMs / MS_PER_DAY));
+};
+
+/**
+ * Formats expiration date with intelligent remaining time information.
+ * Day counts follow getDaysUntilExpiration (remaining days round up, elapsed
+ * days round down but never below 1).
  * @function formatExpirationDate
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {Object} [options={}] - Advanced formatting configuration
@@ -268,7 +289,7 @@ export const formatHumanDate = (dateInput, options = {}) => {
  * @param {boolean} [options.assumeUTC=true] - Whether to assume input is UTC
  * @returns {string|null} Formatted expiration string with optional remaining time or null if invalid
  * @example
- * // Expired domain (assuming today is 2025-07-29)
+ * // Expired domain (all examples assume now is 2025-07-29T00:00:00Z)
  * formatExpirationDate('2025-07-20')
  * // Returns: "20 July 2025 (expired 9 days ago)"
  *
@@ -278,9 +299,11 @@ export const formatHumanDate = (dateInput, options = {}) => {
  * // Returns: "15 August 2025 (17 days remaining)"
  *
  * @example
- * // Expiring today
- * formatExpirationDate('2025-07-29')
- * // Returns: "29 July 2025 (0 days remaining)"
+ * // Expiring later today / expired a few hours ago (never "0 days")
+ * formatExpirationDate('2025-07-29T16:00:00Z', { onlyRemaining: true })
+ * // Returns: "1 day remaining"
+ * formatExpirationDate('2025-07-28T20:00:00Z', { onlyRemaining: true })
+ * // Returns: "expired 1 day ago"
  *
  * @example
  * // Only remaining text (compact format)
@@ -322,8 +345,8 @@ export const formatExpirationDate = (expirationDate, options = {}) => {
     if (!date || !isValid(date)) return null;
 
     try {
-        const daysUntilExpiration = differenceInDays(date, new Date());
-        const isExpired = isPast(date);
+        const daysUntilExpiration = getDaysUntilExpiration(date, false) ?? 0;
+        const isExpired = daysUntilExpiration < 0;
         const daysExpired = Math.abs(daysUntilExpiration);
 
         const getRemainingText = () =>
@@ -435,13 +458,15 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
 // =============================================================================
 
 /**
- * Analyzes expiration status and provides styling information
+ * Analyzes expiration status and provides styling information.
+ * Day counts follow getDaysUntilExpiration; "expiring soon" means within
+ * EXPIRY_WARNING_DAYS, the same window the notification reports use.
  * @function getExpirationStatus
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC
- * @returns {import('$lib/types').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
+ * @returns {import('#lib/types.js').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
  * @example
- * // Expired domain (assuming today is 2025-07-29)
+ * // Expired domain (all examples assume now is 2025-07-29T00:00:00Z)
  * getExpirationStatus('2025-07-20')
  * // Returns: {
  * //   status: 'expired',
@@ -452,7 +477,7 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * // }
  *
  * @example
- * // Expiring soon (within 30 days)
+ * // Expiring soon (within EXPIRY_WARNING_DAYS)
  * getExpirationStatus('2025-08-10') // 12 days from now
  * // Returns: {
  * //   status: 'expiring_soon',
@@ -474,11 +499,11 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * // }
  *
  * @example
- * // Edge cases - expiring today
- * getExpirationStatus('2025-07-29') // Today
+ * // Edge cases - expiring later today (16 hours left)
+ * getExpirationStatus('2025-07-29T16:00:00Z')
  * // Returns: {
  * //   status: 'expiring_soon',
- * //   daysRemaining: 0,
+ * //   daysRemaining: 1,
  * //   isExpired: false,
  * //   isExpiringSoon: true,
  * //   className: 'text-orange'
@@ -523,10 +548,10 @@ export const getExpirationStatus = (expirationDate, assumeUTC = true) => {
         };
     }
 
-    const daysUntilExpiration = differenceInDays(date, new Date());
-    const isExpired = isPast(date);
+    const daysUntilExpiration = getDaysUntilExpiration(date, false) ?? 0;
+    const isExpired = daysUntilExpiration < 0;
     const isExpiringSoon =
-        daysUntilExpiration <= 30 && daysUntilExpiration >= 0;
+        !isExpired && daysUntilExpiration <= EXPIRY_WARNING_DAYS;
 
     return {
         status: isExpired

@@ -3,11 +3,11 @@
  * @module SettingsService
  */
 
-import { executeSql } from "$src/lib/database/db";
-import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "$lib/constants/constants";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 // ========================================
 // CORE UTILITIES
@@ -126,13 +126,15 @@ export const domainProvider = {
      * Gets the stored domain lookup provider configuration
      * @async
      * @memberof domainProvider
-     * @returns {Promise<{provider: ('rdap'|'whoisjson')|null, whoisjsonFallback: boolean}>}
-     *   Stored provider (null when unset/invalid) and whether RDAP-unsupported
-     *   TLDs may fall back to WhoisJSON (absent on legacy rows = true)
+     * @returns {Promise<{provider: ('rdap'|'whoisjson')|null, whoisjsonFallback: boolean, error: boolean}>}
+     *   Stored provider (null when unset/invalid), whether RDAP-unsupported
+     *   TLDs may fall back to WhoisJSON (absent on legacy rows = true), and
+     *   `error: true` when the DB read failed — the defaults are then returned
+     *   for display/resolution paths, but must never drive a settings write
      *
      * @example
      * const { provider, whoisjsonFallback } = await domainProvider.getConfig();
-     * // Returns: { provider: "rdap", whoisjsonFallback: true }
+     * // Returns: { provider: "rdap", whoisjsonFallback: true, error: false }
      */
     async getConfig() {
         try {
@@ -152,10 +154,11 @@ export const domainProvider = {
             return {
                 provider,
                 whoisjsonFallback: parsedConfig.whoisjson_fallback !== false,
+                error: false,
             };
         } catch (error) {
             console.error("❌ Failed to get domain provider config:", error);
-            return { provider: null, whoisjsonFallback: true };
+            return { provider: null, whoisjsonFallback: true, error: true };
         }
     },
 

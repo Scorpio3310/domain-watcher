@@ -47,7 +47,7 @@
     } = $props();
 
     // Build input classes - combine component classes with custom classes
-    const inputClasses = $derived(() => {
+    const inputClasses = $derived.by(() => {
         const classes = ["input", `input--${variant}`];
 
         if (disabled) {
@@ -63,7 +63,7 @@
     });
 
     // Label classes
-    const labelClasses = $derived(() => {
+    const labelClasses = $derived.by(() => {
         const classes = ["input__label"];
 
         if (disabled) {
@@ -74,7 +74,7 @@
     });
 
     // Helper text classes
-    const helperClasses = $derived(() => {
+    const helperClasses = $derived.by(() => {
         const classes = ["input__helper"];
 
         if (variant === "error") {
@@ -86,24 +86,22 @@
         return classes.join(" ");
     });
 
-    // Remove 'class' from restProps to avoid conflicts
-    const filteredRestProps = $derived(() => {
-        const { class: _, ...filtered } = restProps;
-        return filtered;
-    });
+    // SSR-stable ID linking the helper/validation text to the input
+    const uid = $props.id();
+    const helperId = `${uid}-helper`;
 </script>
 
 <div class="input-field">
     <!-- Label -->
     {#if label}
-        <label for={id || name} class={labelClasses()}>
+        <label for={id || name} class={labelClasses}>
             {label}
             {#if required}
                 <span class="input__required-mark">*</span>
             {/if}
 
             {#if tooltip}
-                <Tooltip text={tooltip} position="bottom">
+                <Tooltip text={tooltip} position="bottom" tabindex={0}>
                     <Icon icon={tooltipIcon} class="input__tooltip-icon" />
                 </Tooltip>
             {/if}
@@ -119,17 +117,18 @@
         {disabled}
         {required}
         bind:value
-        class={inputClasses()}
+        class={inputClasses}
+        aria-describedby={helperText ? helperId : undefined}
         {oninput}
         {onchange}
         {onfocus}
         {onblur}
-        {...filteredRestProps}
+        {...restProps}
     />
 
     <!-- Helper Text -->
     {#if helperText}
-        <div class={helperClasses()}>
+        <div id={helperId} class={helperClasses}>
             {helperText}
         </div>
     {/if}

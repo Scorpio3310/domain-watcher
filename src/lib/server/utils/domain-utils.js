@@ -5,17 +5,18 @@
  * @module DomainUtils
  */
 
-import { executeSql, executeQueryFirst } from "$src/lib/database/db";
-import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import * as domainLookup from "$src/lib/server/services/domain-lookup";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
-import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "$lib/constants/constants";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { executeSql, executeQueryFirst } from "#lib/database/db.js";
+import { DOMAIN_QUERIES } from "#lib/database/domain-queries.js";
+import * as domainLookup from "#lib/server/services/domain-lookup.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { apiKey } from "#lib/server/infrastructure/api-key.js";
+import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
+import { validateDemoMode } from "#lib/server/utils/access.js";
+import { getRegistrableDomainIssue } from "#lib/server/utils/domain-name.js";
 
 export { validateDemoMode };
 
-/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult, LookupContext } from "$lib/types" */
+/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult, LookupContext } from "#lib/types.js" */
 
 // ========================================
 // CONFIGURATION CONSTANTS
@@ -26,12 +27,17 @@ export { validateDemoMode };
  * @namespace CONFIG
  * @readonly
  * @memberof module:DomainUtils
- * @property {number} LIMIT_DOMAIN_CHECKS - Maximum number of domains to check in a single batch operation
+ * @property {number} LIMIT_DOMAIN_CHECKS - Maximum number of domains to check in a single run (manual bulk check and each cron run)
  * @property {number} DELAY_BETWEEN_DOMAINS - Delay in milliseconds between domain checks to avoid rate limiting
  * @property {number} BATCH_SIZE - Number of domains to process simultaneously in each batch
  */
 export const CONFIG = {
-    /** Maximum number of domains to check in a single batch */
+    /**
+     * Maximum number of domains to check in a single run (manual bulk check
+     * and each cron run). Worst case 20 × 2 fetches (RDAP retry / WhoisJSON
+     * availability + lookup) + IANA bootstrap + 3 notification sends stays
+     * under the Workers Free 50-subrequest budget; the rest rolls over.
+     */
     LIMIT_DOMAIN_CHECKS: 20,
     /** Delay between domain checks in milliseconds to avoid rate limiting */
     DELAY_BETWEEN_DOMAINS: 100,
@@ -271,6 +277,29 @@ export const verificationEngine = {
      */
     async verifyDomain(domain, lookupContext = null) {
         try {
+            // Subdomains added before the registrable-domain check existed:
+            // RDAP answers 404 for them, which would read as "available"
+            // every day - mark them as errors with a hint instead of looking up
+            const registrableIssue = getRegistrableDomainIssue(
+                domain.domain_name
+            );
+            if (registrableIssue) {
+                await withDbRetry(() =>
+                    executeSql(DOMAIN_QUERIES.UPDATE_DOMAIN_ERROR, [
+                        registrableIssue,
+                        domain.id,
+                    ])
+                );
+                console.log(
+                    `⚠️ SKIPPED: ${domain.domain_name} - ${registrableIssue}`
+                );
+                return {
+                    success: false,
+                    domain: domain.domain_name,
+                    error: registrableIssue,
+                };
+            }
+
             console.log(`🔍 Checking ${domain.domain_name}...`);
 
             const result = await domainLookup.checkDomainAvailability(

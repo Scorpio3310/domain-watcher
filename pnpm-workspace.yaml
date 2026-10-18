@@ -1,0 +1,11 @@
+# pnpm 11+ (no longer reads engine-strict from .npmrc)
+engineStrict: true
+
+allowBuilds:
+  esbuild: true
+  sharp: false
+  workerd: false
+
+# pnpm 10 (e.g. Cloudflare Workers Builds default) - removed in pnpm 11
+onlyBuiltDependencies:
+  - esbuild

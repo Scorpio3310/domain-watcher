@@ -1,13 +1,13 @@
 <script>
-    import { PUBLIC_ENVIRONMENT } from "$env/static/public";
+    import { PUBLIC_ENVIRONMENT } from "$app/env/public";
     import { resolve } from "$app/paths";
     import Button from "./Button.svelte";
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
     import Tooltip from "./Tooltip.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
-    import { isDemo } from "$src/lib/utils/helpers";
-    import { batchCheck } from "$src/lib/remote/check-domains.remote";
+    import { toast } from "#lib/stores/toast.svelte.js";
+    import { isDemo } from "#lib/utils/helpers.js";
+    import { batchCheck } from "#lib/remote/check-domains.remote.js";
 
     /**
      * App header with per-page layout configuration and batch check action
@@ -112,8 +112,9 @@
                     ></div>
                 {/if}
                 <Button
-                    href={resolve("/settings")}
+                    href={resolve("settings")}
                     title="Settings"
+                    ariaLabel="Settings"
                     size="lg"
                     icon="iconoir:settings"
                     color="white-outline"
@@ -139,6 +140,7 @@
                         text="Domain checking disabled in Demo mode"
                         position="bottom"
                         hoverOpacity={false}
+                        tabindex={0}
                     >
                         <Button
                             type="submit"
@@ -155,6 +157,7 @@
                             icon="iconoir:search"
                             color="white"
                             class="flex! sm:hidden!"
+                            ariaLabel="Check Domains"
                             disabled={isDemo()}
                         />
                     </Tooltip>
@@ -182,6 +185,9 @@
                         iconClass={batchCheck.pending ? "animate-spin" : ""}
                         color="white"
                         class="flex! sm:hidden!"
+                        ariaLabel={batchCheck.pending
+                            ? "Checking Domains..."
+                            : "Check Domains"}
                         disabled={!!batchCheck.pending}
                     />
                 {/if}
@@ -195,6 +201,7 @@
             <Button
                 href="https://github.com/Scorpio3310/domain-watcher"
                 title="GitHub"
+                ariaLabel="GitHub"
                 target="_blank"
                 size="lg"
                 icon="iconoir:github"

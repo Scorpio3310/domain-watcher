@@ -1,18 +1,13 @@
-/** @import { DomainRecord, ServiceResult } from '$lib/types' */
+/** @import { DomainRecord, ServiceResult } from '#lib/types.js' */
 
 import { error } from "@sveltejs/kit";
-import {
-    getErrorMessage,
-    getHttpStatus,
-    getRegistrar,
-    getLookupSource,
-} from "$lib/utils/helpers";
-import { domains } from "$src/lib/server/services/domain";
-import { ui } from "$src/lib/server/services/settings";
+import { getErrorMessage, getHttpStatus } from "#lib/utils/helpers.js";
+import { domains } from "#lib/server/services/domain.js";
+import { ui } from "#lib/server/services/settings.js";
 import {
     resolveLookupContext,
     predictProvider,
-} from "$src/lib/server/services/domain-lookup";
+} from "#lib/server/services/domain-lookup.js";
 
 // ========================================
 // PAGE LOAD
@@ -42,6 +37,8 @@ export async function load() {
         const PREDICTION_DEADLINE_MS = 2500;
         /** @type {Array<('rdap'|'whoisjson'|'none')|null>} */
         const unknownPredictions = domainRecords.map(() => null);
+        /** @type {ReturnType<typeof setTimeout>|undefined} */
+        let deadlineTimer;
         const predictions = lookupContext
             ? await Promise.race([
                   Promise.all(
@@ -56,16 +53,21 @@ export async function load() {
                           }
                       })
                   ),
-                  new Promise((resolve) =>
-                      setTimeout(resolve, PREDICTION_DEADLINE_MS)
-                  ).then(() => unknownPredictions),
-              ])
+                  new Promise((resolve) => {
+                      deadlineTimer = setTimeout(
+                          resolve,
+                          PREDICTION_DEADLINE_MS
+                      );
+                  }).then(() => unknownPredictions),
+              ]).finally(() => clearTimeout(deadlineTimer))
             : unknownPredictions;
 
+        // Rows carry only the list columns (registrar + lookup source are
+        // derived in SQL): the raw lookup/NS/SSL JSON stays out of the page
+        // data and is loaded on demand when a card is expanded
+        // (#lib/remote/domain-details.remote.js)
         const processedDomains = domainRecords.map((domainRecord, index) => ({
             ...domainRecord,
-            registrar: getRegistrar(domainRecord.raw_domain_data ?? null),
-            source: getLookupSource(domainRecord.raw_domain_data ?? null),
             willCheckVia: predictions[index],
         }));
 
@@ -77,8 +79,6 @@ export async function load() {
         };
     } catch (err) {
         console.error("❌ Page load failed:", err);
-        throw error(getHttpStatus(err), {
-            message: getErrorMessage(err),
-        });
+        throw error(getHttpStatus(err), getErrorMessage(err));
     }
 }

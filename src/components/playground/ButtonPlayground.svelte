@@ -1,5 +1,5 @@
 <script>
-    import Button from "$components/Button.svelte";
+    import Button from "#components/Button.svelte";
 
     // All possible prop combinations
     /** @type {('lg'|'md'|'sm')[]} */
@@ -100,7 +100,7 @@
         organized by size (LG → MD → SM).
     </p>
 
-    {#each sizes as size}
+    {#each sizes as size (size)}
         <div class="mb-20">
             <h2
                 class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
@@ -108,7 +108,7 @@
                 {size} Size Buttons
             </h2>
 
-            {#each buttonTypes as buttonType}
+            {#each buttonTypes as buttonType (buttonType.type)}
                 <div class="mb-8">
                     <h3 class="text-xl mb-4 flex items-center gap-2">
                         <span
@@ -122,12 +122,12 @@
                         </span>
                     </h3>
 
-                    {#each chunkArray(combinationsBySizeAndType[size][buttonType.type], 4) as group, groupIndex}
+                    {#each chunkArray(combinationsBySizeAndType[size][buttonType.type], 4) as group, groupIndex (group[0].description)}
                         <div class="mb-2">
                             <div
                                 class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2"
                             >
-                                {#each group as test}
+                                {#each group as test (test.description)}
                                     <div
                                         class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
                                     >
@@ -169,13 +169,13 @@
             Disabled States
         </h2>
 
-        {#each sizes as size}
+        {#each sizes as size (size)}
             <div class="mb-4">
                 <h3 class="text-xl font-medium mb-6">
                     {size.toUpperCase()} - Disabled Examples
                 </h3>
 
-                {#each buttonTypes as buttonType}
+                {#each buttonTypes as buttonType (buttonType.type)}
                     <div class="mb-6">
                         <h4 class="text-lg font-medium opacity-70 mb-2">
                             {buttonType.label} - Disabled
@@ -183,7 +183,7 @@
                         <div
                             class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2"
                         >
-                            {#each colors as color}
+                            {#each colors as color (color)}
                                 <div
                                     class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
                                 >
@@ -251,10 +251,10 @@
             <div>
                 <h4 class="font-medium text-black mb-2">Button Types:</h4>
                 <ul class="space-y-1 text-sm opacity-70">
-                    {#each buttonTypes as buttonType}
+                    {#each buttonTypes as buttonType (buttonType.type)}
                         <li>
                             <strong>{buttonType.label}:</strong>
-                            {#each sizes as size}
+                            {#each sizes as size (size)}
                                 {size.toUpperCase()}: {combinationsBySizeAndType[
                                     size
                                 ][buttonType.type].length}{size !==

@@ -1,5 +1,12 @@
 @import "tailwindcss";
+/* Figtree weights actually used: 400 (body), 500 (font-medium),
+   600 (font-semibold), 700 (font-bold / <strong>), plus 400 italic
+   (`italic` - e.g. "Last verified" timestamps in Settings) */
 @import "@fontsource/figtree";
+@import "@fontsource/figtree/400-italic.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";
 
 @theme {
     /* ===== COLORS ===== */
@@ -14,7 +21,7 @@
     --color-orange: #ff8800;
 
     /* ===== FONTS ===== */
-    --font-display: "Figtree", "sans-serif";
+    --font-display: "Figtree", sans-serif;
 
     /* ===== SHADOW ===== */
     --shadow-button-white: 0 0 24px rgba(0, 0, 0, 0.1);

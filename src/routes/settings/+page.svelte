@@ -1,11 +1,11 @@
 <script>
-    import Button from "$components/Button.svelte";
-    import Input from "$components/Input.svelte";
-    import Tooltip from "$components/Tooltip.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
+    import Button from "#components/Button.svelte";
+    import Input from "#components/Input.svelte";
+    import Tooltip from "#components/Tooltip.svelte";
+    import { toast } from "#lib/stores/toast.svelte.js";
     import { slide } from "svelte/transition";
     import Icon from "@iconify/svelte";
-    import { isDemo } from "$src/lib/utils/helpers.js";
+    import { isDemo } from "#lib/utils/helpers.js";
     import {
         UI_DOMAIN_VIEW,
         DOMAIN_PROVIDER,
@@ -13,11 +13,10 @@
         SLACK_CONNECTION_STATUS,
         DISCORD_CONNECTION_STATUS,
         RESEND_CONNECTION_STATUS,
-    } from "$src/lib/constants/constants";
-    import RadioButton from "$components/RadioButton.svelte";
-    import ToggleSwitch from "$components/ToggleSwitch.svelte";
-    import { page } from "$app/state";
-    import { formatLastChecked } from "$src/lib/utils/helpers.js";
+    } from "#lib/constants/constants.js";
+    import RadioButton from "#components/RadioButton.svelte";
+    import ToggleSwitch from "#components/ToggleSwitch.svelte";
+    import { formatLastChecked, getTimezone } from "#lib/utils/helpers.js";
     import {
         saveApiKey,
         updateDomainProvider,
@@ -28,7 +27,7 @@
         updateDiscordWebhook,
         updateResendEnabled,
         updateResendConfig,
-    } from "$src/lib/remote/settings.remote";
+    } from "#lib/remote/settings.remote.js";
     import {
         whoIsApiKeySchema,
         slackWebhookSchema,
@@ -39,6 +38,10 @@
     //// PROPS ////
     /** @type {import('./$types').PageProps} */
     let { data } = $props();
+
+    // Timezone the daily notification times are interpreted in
+    // (PUBLIC_TIMEZONE, falling back to UTC - same rule as the cron)
+    const notificationTimeHint = `Daily at this time (${getTimezone()})`;
 
     //// REMOTE FORMS ////
     // Seed the radio selections (as("radio") has no initial-value argument)
@@ -72,6 +75,40 @@
         if (resolvedFallback !== lastResolvedFallback) {
             lastResolvedFallback = resolvedFallback;
             updateDomainProvider.fields.whoisjsonFallback.set(resolvedFallback);
+        }
+    });
+
+    // Notification toggles get the same seed + re-sync: without it a toggle
+    // edit from earlier in the session (module-singleton field state) would
+    // win over fresh server data, e.g. after another tab disabled Slack
+    // svelte-ignore state_referenced_locally
+    updateSlackEnabled.fields.enabled.set(data?.slackEnabled ?? false);
+    // svelte-ignore state_referenced_locally
+    updateDiscordEnabled.fields.enabled.set(data?.discordEnabled ?? false);
+    // svelte-ignore state_referenced_locally
+    updateResendEnabled.fields.enabled.set(data?.resendEnabled ?? false);
+
+    // svelte-ignore state_referenced_locally
+    let lastResolvedSlack = data?.slackEnabled ?? false;
+    // svelte-ignore state_referenced_locally
+    let lastResolvedDiscord = data?.discordEnabled ?? false;
+    // svelte-ignore state_referenced_locally
+    let lastResolvedResend = data?.resendEnabled ?? false;
+    $effect(() => {
+        const resolvedSlack = data?.slackEnabled ?? false;
+        if (resolvedSlack !== lastResolvedSlack) {
+            lastResolvedSlack = resolvedSlack;
+            updateSlackEnabled.fields.enabled.set(resolvedSlack);
+        }
+        const resolvedDiscord = data?.discordEnabled ?? false;
+        if (resolvedDiscord !== lastResolvedDiscord) {
+            lastResolvedDiscord = resolvedDiscord;
+            updateDiscordEnabled.fields.enabled.set(resolvedDiscord);
+        }
+        const resolvedResend = data?.resendEnabled ?? false;
+        if (resolvedResend !== lastResolvedResend) {
+            lastResolvedResend = resolvedResend;
+            updateResendEnabled.fields.enabled.set(resolvedResend);
         }
     });
 
@@ -189,34 +226,23 @@
     }
 </script>
 
+<!-- Page-specific tags only - shared og/twitter tags live in +layout.svelte -->
 <svelte:head>
     <title>Settings // Domain Watcher</title>
     <meta
         name="description"
         content="Manage Domain Watcher notification settings, configure Slack and email alerts for domain monitoring and status updates."
     />
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content={page?.url?.href} />
     <meta property="og:title" content="Settings // Domain Watcher" />
     <meta
         property="og:description"
         content="Manage Domain Watcher notification settings, configure Slack and email alerts for domain monitoring and status updates."
     />
-    <meta property="og:image" content="{page?.url?.origin}/og_image.jpg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="Domain Watcher" />
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content={page?.url?.href} />
     <meta property="twitter:title" content="Settings // Domain Watcher" />
     <meta
         property="twitter:description"
         content="Manage Domain Watcher notification settings, configure Slack and email alerts for domain monitoring and status updates."
     />
-    <meta property="twitter:image" content="{page?.url?.origin}/og_image.jpg" />
 </svelte:head>
 
 <div class="hero-section mt-16">
@@ -313,6 +339,7 @@
                                             <Tooltip
                                                 text="Use WhoisJSON for TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs)."
                                                 position="bottom"
+                                                tabindex={0}
                                             >
                                                 <Icon
                                                     icon="iconoir:info-circle"
@@ -749,16 +776,19 @@
 
         <div class="black-bg-card">
             <form {...updateSlackEnabled}>
-                <label for="slack" class="space-y-1">
+                <!-- div (not label) wrapper: only the heading is associated
+                     with the switch, so clicking or selecting the description
+                     can't flip (and auto-save) the setting -->
+                <div class="space-y-1">
                     <div class="flex justify-between items-center">
-                        <h3>Slack</h3>
+                        <h3><label for="slack">Slack</label></h3>
                         <ToggleSwitch
                             id="slack"
                             {...updateSlackEnabled.fields.enabled.as(
                                 "checkbox",
                                 data?.slackEnabled ?? false,
                             )}
-                            ariaLabel="Enable notifications"
+                            ariaLabel="Enable Slack notifications"
                             disabled={isDemo() || !!updateSlackEnabled.pending}
                             onchange={() =>
                                 submitWithIssueToast(updateSlackEnabled, () =>
@@ -780,7 +810,7 @@
                             >Slack Webhooks Guide</a
                         >.
                     </p>
-                </label>
+                </div>
             </form>
             {#if slackEnabled}
                 <form
@@ -826,7 +856,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateSlackWebhook.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateSlackWebhook.fields.notificationTime.as(
                                 "time",
                                 data?.slackWebhookConfig?.notification_time ??
@@ -933,16 +963,16 @@
 
         <div class="black-bg-card">
             <form {...updateDiscordEnabled}>
-                <label for="discord" class="space-y-1">
+                <div class="space-y-1">
                     <div class="flex justify-between items-center">
-                        <h3>Discord</h3>
+                        <h3><label for="discord">Discord</label></h3>
                         <ToggleSwitch
                             id="discord"
                             {...updateDiscordEnabled.fields.enabled.as(
                                 "checkbox",
                                 data?.discordEnabled ?? false,
                             )}
-                            ariaLabel="Enable notifications"
+                            ariaLabel="Enable Discord notifications"
                             disabled={isDemo() ||
                                 !!updateDiscordEnabled.pending}
                             onchange={() =>
@@ -965,7 +995,7 @@
                             >Discord Webhooks Guide</a
                         >.
                     </p>
-                </label>
+                </div>
             </form>
             {#if discordEnabled}
                 <form
@@ -1011,7 +1041,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateDiscordWebhook.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateDiscordWebhook.fields.notificationTime.as(
                                 "time",
                                 data?.discordWebhookConfig
@@ -1118,16 +1148,16 @@
 
         <div class="black-bg-card">
             <form {...updateResendEnabled}>
-                <label for="resend" class="space-y-1">
+                <div class="space-y-1">
                     <div class="flex justify-between items-center">
-                        <h3>Resend</h3>
+                        <h3><label for="resend">Resend</label></h3>
                         <ToggleSwitch
                             id="resend"
                             {...updateResendEnabled.fields.enabled.as(
                                 "checkbox",
                                 data?.resendEnabled ?? false,
                             )}
-                            ariaLabel="Enable notifications"
+                            ariaLabel="Enable Resend email notifications"
                             disabled={isDemo() || !!updateResendEnabled.pending}
                             onchange={() =>
                                 submitWithIssueToast(updateResendEnabled, () =>
@@ -1149,7 +1179,7 @@
                             >Resend API Documentation</a
                         >.
                     </p>
-                </label>
+                </div>
             </form>
 
             {#if resendEnabled}
@@ -1235,7 +1265,7 @@
                                 : "default"}
                             class="max-w-40"
                             helperText={updateResendConfig.fields.notificationTime.issues()?.[0]
-                                ?.message ?? ""}
+                                ?.message ?? notificationTimeHint}
                             {...updateResendConfig.fields.notificationTime.as(
                                 "time",
                                 data?.resendConfig?.notification_time ?? "",

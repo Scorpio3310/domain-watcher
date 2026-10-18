@@ -50,11 +50,20 @@ export const DOMAIN_PROVIDER = Object.freeze({
 
 /**
  * Number of days before expiry within which a domain counts as "expiring soon".
- * Must stay in sync with the hardcoded '+30 days' window in
- * domain-queries.js (SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION).
+ * Single source for the window: interpolated into the SQL in
+ * domain-queries.js and used by getExpirationStatus (UI) in helpers.js.
  * @constant {number}
  */
 export const EXPIRY_WARNING_DAYS = 30;
+
+/**
+ * Minutes after a provider's notification time during which scheduled cron
+ * ticks may still send that day's report (retries after a failed send,
+ * missed/late ticks, a DST-skipped time). Later ticks skip the day, so e.g.
+ * deploying a schedule change late in the day can't send a duplicate report.
+ * @constant {number}
+ */
+export const NOTIFICATION_CATCH_UP_MINUTES = 60;
 
 /**
  * UI domain view mode constants

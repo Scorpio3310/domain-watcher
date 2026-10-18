@@ -2,8 +2,6 @@
 -- TABLE: domains
 -- ========================================
 
-DROP TABLE IF EXISTS domains;
-
 CREATE TABLE IF NOT EXISTS domains (
     id INTEGER PRIMARY KEY,
     domain_name TEXT NOT NULL UNIQUE COLLATE NOCASE, -- Case insensitive
@@ -28,7 +26,7 @@ CREATE TABLE IF NOT EXISTS domains (
 );
 
 -- Sample data
-INSERT INTO domains (domain_name, status, check_count) VALUES
+INSERT OR IGNORE INTO domains (domain_name, status, check_count) VALUES
 ('example.com', 'not_checked', 0),
 ('example.org', 'not_checked', 0);
 
@@ -49,8 +47,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_domains_name ON domains(domain_name);
 -- ========================================
 -- TABLE: settings
 -- ========================================
-DROP TABLE IF EXISTS settings;
-
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY,
     category TEXT NOT NULL, -- Category of settings (e.g., 'api', 'ui', 'notifications')

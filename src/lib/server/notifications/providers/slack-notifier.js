@@ -1,13 +1,25 @@
-import { getErrorMessage } from "$lib/utils/helpers.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
-    formatDate,
-    getDaysUntilExpiry,
+    formatApiError,
+    joinLinesWithinLimit,
+} from "#lib/server/utils/notification-utils.js";
+import { isSlackWebhookUrl } from "#src/routes/settings/validation.js";
+import {
+    formatExpiryDetail,
+    formatMoreText,
     getQuietMessage,
     getReportTimestamp,
     truncateError,
 } from "./shared.js";
 
-/** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
+/** @import { DomainUpdates, NotifierResult, SlackBlock } from "#lib/types.js" */
+
+// Slack rejects the whole message (400 invalid_blocks) when a single section
+// text exceeds 3000 characters or the message has more than 50 blocks, so
+// lists are cut to a character budget (with headroom) instead of a line count
+const SLACK_TEXT_BUDGET = 2800;
+const SLACK_MAX_BLOCKS = 50;
+const MAX_LIST_LINES = 20;
 
 /**
  * Slack notification service for formatting and sending messages
@@ -25,6 +37,17 @@ export const slackNotifier = {
                 return {
                     success: false,
                     message: "Webhook URL not configured",
+                };
+            }
+
+            // Re-validate the stored URL: never POST the report anywhere but
+            // a Slack webhook (e.g. a row edited outside the settings form)
+            if (!isSlackWebhookUrl(settings.webhook_url)) {
+                console.error("❌ Stored Slack webhook URL is invalid");
+                return {
+                    success: false,
+                    message:
+                        "Stored webhook URL is not a valid Slack webhook URL - save it again in Settings",
                 };
             }
 
@@ -47,7 +70,7 @@ export const slackNotifier = {
             console.error("❌ Slack API error:", response.status, errorText);
             return {
                 success: false,
-                message: `Slack API error: ${response.status} - ${errorText}`,
+                message: formatApiError("Slack", response.status, errorText),
             };
         } catch (error) {
             console.error("❌ Failed to send Slack notification:", error);
@@ -106,21 +129,13 @@ export const slackNotifier = {
 
         // Add each section if it has domains
         const sections = [
-            {
-                domains: expired,
-                title: "🚨 Expired but Still Registered",
-                urgent: true,
-            },
-            {
-                domains: available,
-                title: "🟢 Available Domains",
-                urgent: false,
-            },
-            { domains: expiring, title: "⚠️ Expiring Soon", urgent: false },
+            { domains: expired, title: "🚨 Expired but Still Registered" },
+            { domains: available, title: "🟢 Available Domains" },
+            { domains: expiring, title: "⚠️ Expiring Soon" },
         ];
 
         let addedSection = false;
-        sections.forEach(({ domains, title, urgent }) => {
+        sections.forEach(({ domains, title }) => {
             if (domains.length === 0) return;
 
             // Add divider between sections
@@ -134,49 +149,37 @@ export const slackNotifier = {
                 },
             });
 
-            const domainList = domains
-                .slice(0, 20)
-                .map((domain) => {
-                    if (urgent && domain.expires) {
-                        const daysExpired = Math.abs(
-                            getDaysUntilExpiry(domain.expires)
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expired ${formatDate(
-                            domain.expires
-                        )} (${daysExpired} days ago)`;
-                    }
-
-                    if (domain.expires) {
-                        const daysUntilExpiry = getDaysUntilExpiry(
-                            domain.expires
-                        );
-                        return `• \`${
-                            domain.domain_name
-                        }\` - expires ${formatDate(
-                            domain.expires
-                        )} (${daysUntilExpiry} days)`;
-                    }
-
-                    return `• \`${domain.domain_name}\``;
-                })
-                .join("\n");
+            const { text: domainList, shown } = joinLinesWithinLimit(
+                domains
+                    .slice(0, MAX_LIST_LINES)
+                    .map((domain) =>
+                        domain.expires
+                            ? `• \`${domain.domain_name}\` - ${formatExpiryDetail(
+                                  domain.expires
+                              )}`
+                            : `• \`${domain.domain_name}\``
+                    ),
+                SLACK_TEXT_BUDGET,
+                // A section needs non-empty text: cut an oversized first line
+                { truncateOversizedFirstLine: true }
+            );
 
             blocks.push({
                 type: "section",
                 text: { type: "mrkdwn", text: domainList },
             });
 
-            if (domains.length > 20) {
+            if (domains.length > shown) {
                 blocks.push({
                     type: "context",
                     elements: [
                         {
                             type: "mrkdwn",
-                            text: `... and ${
-                                domains.length - 20
-                            } more ${title.toLowerCase()} domains`,
+                            text: formatMoreText(
+                                domains.length - shown,
+                                "domain",
+                                "domains"
+                            ),
                         },
                     ],
                 });
@@ -198,30 +201,35 @@ export const slackNotifier = {
                 },
             });
 
-            const failureList = failures
-                .slice(0, 20)
-                .map(
-                    (failure) =>
-                        `• \`${failure.domain_name}\` - ${truncateError(
-                            failure.error
-                        )}`
-                )
-                .join("\n");
+            const { text: failureList, shown } = joinLinesWithinLimit(
+                failures
+                    .slice(0, MAX_LIST_LINES)
+                    .map(
+                        (failure) =>
+                            `• \`${failure.domain_name}\` - ${truncateError(
+                                failure.error
+                            )}`
+                    ),
+                SLACK_TEXT_BUDGET,
+                { truncateOversizedFirstLine: true }
+            );
 
             blocks.push({
                 type: "section",
                 text: { type: "mrkdwn", text: failureList },
             });
 
-            if (failures.length > 20) {
+            if (failures.length > shown) {
                 blocks.push({
                     type: "context",
                     elements: [
                         {
                             type: "mrkdwn",
-                            text: `... and ${
-                                failures.length - 20
-                            } more check failures`,
+                            text: formatMoreText(
+                                failures.length - shown,
+                                "check failure",
+                                "check failures"
+                            ),
                         },
                     ],
                 });
@@ -250,13 +258,21 @@ export const slackNotifier = {
             });
         }
 
+        // The layout above stays far below the cap (about 20 blocks); this only
+        // guards against a future section getting the whole report rejected
+        if (blocks.length > SLACK_MAX_BLOCKS) blocks.length = SLACK_MAX_BLOCKS;
+
         return {
             text:
                 totalCount === 0 && failures.length === 0
                     ? `🌐 Domain Watcher: All quiet on the western front! 🤠`
-                    : `🌐 Domain Watcher: ${totalCount} updates${
+                    : `🌐 Domain Watcher: ${totalCount} update${
+                          totalCount !== 1 ? "s" : ""
+                      }${
                           failures.length > 0
-                              ? `, ${failures.length} check failures`
+                              ? `, ${failures.length} check failure${
+                                    failures.length !== 1 ? "s" : ""
+                                }`
                               : ""
                       }`,
             blocks,

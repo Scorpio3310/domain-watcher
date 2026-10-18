@@ -2,16 +2,16 @@
  * @fileoverview Settings page server load and actions
  */
 
-/** @import { ServiceResult, SlackConfig, DiscordConfig, ResendConfig } from '$lib/types' */
+/** @import { ServiceResult, SlackConfig, DiscordConfig, ResendConfig } from '#lib/types.js' */
 
 import { error } from "@sveltejs/kit";
-import { getErrorMessage, getHttpStatus } from "$src/lib/utils/helpers";
-import { apiKey } from "$src/lib/server/infrastructure/api-key";
-import { ui } from "$src/lib/server/services/settings";
-import { resolveLookupContext } from "$src/lib/server/services/domain-lookup";
-import { slack } from "$src/lib/server/infrastructure/slack-client";
-import { discord } from "$src/lib/server/infrastructure/discord-client";
-import { resend } from "$src/lib/server/infrastructure/resend-client";
+import { getErrorMessage, getHttpStatus } from "#lib/utils/helpers.js";
+import { apiKey } from "#lib/server/infrastructure/api-key.js";
+import { ui } from "#lib/server/services/settings.js";
+import { resolveLookupContext } from "#lib/server/services/domain-lookup.js";
+import { slack } from "#lib/server/infrastructure/slack-client.js";
+import { discord } from "#lib/server/infrastructure/discord-client.js";
+import { resend } from "#lib/server/infrastructure/resend-client.js";
 
 // ========================================
 // PAGE LOAD
@@ -71,8 +71,6 @@ export async function load() {
         };
     } catch (err) {
         console.error("❌ Settings page load failed:", err);
-        throw error(getHttpStatus(err), {
-            message: getErrorMessage(err),
-        });
+        throw error(getHttpStatus(err), getErrorMessage(err));
     }
 }

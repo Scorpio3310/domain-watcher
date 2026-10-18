@@ -1,5 +1,5 @@
 <script>
-    import Input from "$components/Input.svelte";
+    import Input from "#components/Input.svelte";
 
     // All possible prop combinations
     const types = ["text", "email", "password", "number", "tel", "url"];
@@ -252,7 +252,7 @@
             </div>
         </div>
 
-        {#each inputTypes as inputType}
+        {#each inputTypes as inputType (inputType.type)}
             <div class="mb-16">
                 <h2
                     class="text-3xl font-medium mb-8 uppercase border-b-2 border-gray-300 pb-4"
@@ -260,7 +260,7 @@
                     {inputType.label}
                 </h2>
 
-                {#each variants as variant}
+                {#each variants as variant (variant)}
                     <div class="mb-10">
                         <h3
                             class="text-xl font-semibold mb-6 flex items-center gap-3"
@@ -285,12 +285,12 @@
                             </span>
                         </h3>
 
-                        {#each chunkArray(combinationsByTypeAndVariant[inputType.type][variant], 3) as group}
+                        {#each chunkArray(combinationsByTypeAndVariant[inputType.type][variant], 3) as group (group[0].uniqueId)}
                             <div class="mb-6">
                                 <div
                                     class="grid grid-cols-1 lg:grid-cols-3 gap-6"
                                 >
-                                    {#each group as test}
+                                    {#each group as test (test.uniqueId)}
                                         <div
                                             class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
                                         >
@@ -361,7 +361,7 @@
             </h2>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {#each types.slice(0, 6) as type, index}
+                {#each types.slice(0, 6) as type, index (type)}
                     <div
                         class="flex flex-col items-center gap-3 p-4 bg-white shadow-button-white rounded-2xl"
                     >
@@ -402,7 +402,7 @@
                 <div>
                     <h4 class="font-medium text-black mb-2">Input Types:</h4>
                     <ul class="space-y-1 text-sm opacity-70">
-                        {#each types as type}
+                        {#each types as type (type)}
                             <li>
                                 <code
                                     class="bg-blue/10 px-2 py-1 rounded text-xs"
@@ -415,7 +415,7 @@
                 <div>
                     <h4 class="font-medium text-black mb-2">Variants:</h4>
                     <ul class="space-y-1 text-sm opacity-70">
-                        {#each variants as variant}
+                        {#each variants as variant (variant)}
                             <li>
                                 <code
                                     class="bg-blue-100 px-2 py-1 rounded text-xs"

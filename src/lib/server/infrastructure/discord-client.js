@@ -1,11 +1,21 @@
-/** @import { ServiceResult, DiscordConfig } from '$lib/types' */
+/** @import { ServiceResult, DiscordConfig } from '#lib/types.js' */
 
-import { executeSql } from "$src/lib/database/db";
-import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { isDemo } from "$src/lib/utils/helpers";
-import { DISCORD_CONNECTION_STATUS } from "$lib/constants/constants";
-import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
+import { isDemo } from "#lib/utils/helpers.js";
+import { DISCORD_CONNECTION_STATUS } from "#lib/constants/constants.js";
+import {
+    formatHumanDate,
+    getErrorMessage,
+    getTimezone,
+    maskApiKey,
+} from "#lib/utils/helpers.js";
+import { validateDemoMode } from "#lib/server/utils/access.js";
+import {
+    formatApiError,
+    getScheduleResetDate,
+    getScheduleSeedDate,
+} from "#lib/server/utils/notification-utils.js";
 
 // ========================================
 // CORE UTILITIES
@@ -53,13 +63,16 @@ const createDiscordConfiguration = ({
  */
 export async function testDiscordWebhook(webhook, notificationTime) {
     try {
+        const sentAt = formatHumanDate(new Date()) ?? new Date().toISOString();
+        const timezone = getTimezone();
+
         // Create test message
         const testMessage = {
             content: "🚀 Domain Watcher - Configuration Verified",
             embeds: [
                 {
                     title: "Domain Watcher Test ✨",
-                    description: `Your notifications just passed the vibe check!\n\n**Scheduled notification time:** ${notificationTime}\n\nIf you received this message, your webhook is working correctly! 🎉`,
+                    description: `Your notifications just passed the vibe check!\nThis notification was sent on ${sentAt} (${timezone})\n\n**Scheduled notification time:** ${notificationTime} (${timezone})\n\nIf you received this message, your webhook is working correctly! 🎉`,
                     color: 0x2ba805,
                 },
             ],
@@ -89,7 +102,7 @@ export async function testDiscordWebhook(webhook, notificationTime) {
             );
             return {
                 status: response.status,
-                message: `Discord API error: ${errorText}`,
+                message: formatApiError("Discord", response.status, errorText),
             };
         }
     } catch (error) {
@@ -260,16 +273,23 @@ export const discord = {
                 notificationTime,
                 connectionStatus: DISCORD_CONNECTION_STATUS.READY,
             });
+            // The cron's schedule state survives the save; a changed time
+            // that is still ahead today re-allows today's report, a first
+            // save with a time that already passed starts tomorrow
+            const scheduleResetDate = getScheduleResetDate(notificationTime);
+            const scheduleSeedDate = getScheduleSeedDate(notificationTime);
+            const timezone = getTimezone();
 
             await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
                 JSON.stringify(initialDiscordConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             if (!shouldTestConnection) {
                 return {
                     status: 201,
-                    message:
-                        "Discord Webhook saved! ⭐ Pro tip: Test it out to make sure everything's smooth",
+                    message: `Discord Webhook saved! ⭐ Daily report at ${notificationTime} (${timezone}). Pro tip: Test it out to make sure everything's smooth`,
                 };
             }
 
@@ -290,10 +310,12 @@ export const discord = {
 
             await executeSql(SETTINGS_QUERIES.UPDATE_DISCORD_VALUE_ONLY, [
                 JSON.stringify(finalDiscordConfiguration),
+                scheduleResetDate,
+                scheduleSeedDate,
             ]);
 
             const responseMessage = isConnectionSuccessful
-                ? `Test message sent! Discord is ready to ping you at ${notificationTime} ⏰`
+                ? `Test message sent! Discord is ready to ping you at ${notificationTime} (${timezone}) ⏰`
                 : `Connection test stumbled: ${webhookTestResult.message} 🔧`;
 
             return {

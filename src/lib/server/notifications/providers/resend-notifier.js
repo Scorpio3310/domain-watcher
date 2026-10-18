@@ -1,16 +1,16 @@
 import { Resend } from "resend";
-import { PRODUCTION_DOMAIN } from "$env/static/private";
-import { getErrorMessage } from "$lib/utils/helpers.js";
+import { PRODUCTION_DOMAIN } from "$app/env/private";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     escapeHtml,
-    formatDate,
-    getDaysUntilExpiry,
+    formatExpiryDetail,
+    formatMoreText,
     getQuietMessage,
     getReportTimestamp,
     truncateError,
 } from "./shared.js";
 
-/** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
+/** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "#lib/types.js" */
 
 /**
  * Resend Email notification service for formatting and sending messages
@@ -202,36 +202,25 @@ export const resendNotifier = {
                 const domainList = domains
                     .slice(0, 20)
                     .map((domain) => {
-                        const isUrgent = title.includes("Expired");
                         const domainName = escapeHtml(domain.domain_name);
 
-                        if (isUrgent && domain.expires) {
-                            const daysExpired = Math.abs(
-                                getDaysUntilExpiry(domain.expires)
-                            );
-                            return `<li><strong>${domainName}</strong> - expired ${formatDate(
-                                domain.expires
-                            )} (${daysExpired} days ago)</li>`;
-                        }
-
-                        if (domain.expires) {
-                            const daysUntilExpiry = getDaysUntilExpiry(
-                                domain.expires
-                            );
-                            return `<li><strong>${domainName}</strong> - expires ${formatDate(
-                                domain.expires
-                            )} (${daysUntilExpiry} days)</li>`;
-                        }
-
-                        return `<li><strong>${domainName}</strong></li>`;
+                        // formatDate falls back to the raw stored value, so
+                        // the detail is escaped too
+                        return domain.expires
+                            ? `<li><strong>${domainName}</strong> - ${escapeHtml(
+                                  formatExpiryDetail(domain.expires)
+                              )}</li>`
+                            : `<li><strong>${domainName}</strong></li>`;
                     })
                     .join("");
 
                 const moreText =
                     domains.length > 20
-                        ? `<p style="color: #1a1a1a; font-style: italic; margin: 0; font-size: 13px; opacity: 0.5;">... and ${
-                              domains.length - 20
-                          } more domains</p>`
+                        ? `<p style="color: #1a1a1a; font-style: italic; margin: 0; font-size: 13px; opacity: 0.5;">${formatMoreText(
+                              domains.length - 20,
+                              "domain",
+                              "domains"
+                          )}</p>`
                         : "";
 
                 return `
@@ -264,9 +253,11 @@ export const resendNotifier = {
 
         const failuresMoreText =
             failures.length > 20
-                ? `<p style="color: #1a1a1a; font-style: italic; margin: 0; font-size: 13px; opacity: 0.5;">... and ${
-                      failures.length - 20
-                  } more check failures</p>`
+                ? `<p style="color: #1a1a1a; font-style: italic; margin: 0; font-size: 13px; opacity: 0.5;">${formatMoreText(
+                      failures.length - 20,
+                      "check failure",
+                      "check failures"
+                  )}</p>`
                 : "";
 
         const failuresHtml =
@@ -368,38 +359,18 @@ export const resendNotifier = {
             .map(({ domains, title }) => {
                 const domainList = domains
                     .slice(0, 20)
-                    .map((domain) => {
-                        const isUrgent = title.includes("EXPIRED");
-
-                        if (isUrgent && domain.expires) {
-                            const daysExpired = Math.abs(
-                                getDaysUntilExpiry(domain.expires)
-                            );
-                            return `• ${
-                                domain.domain_name
-                            } - expired ${formatDate(
-                                domain.expires
-                            )} (${daysExpired} days ago)`;
-                        }
-
-                        if (domain.expires) {
-                            const daysUntilExpiry = getDaysUntilExpiry(
-                                domain.expires
-                            );
-                            return `• ${
-                                domain.domain_name
-                            } - expires ${formatDate(
-                                domain.expires
-                            )} (${daysUntilExpiry} days)`;
-                        }
-
-                        return `• ${domain.domain_name}`;
-                    })
+                    .map((domain) =>
+                        domain.expires
+                            ? `• ${domain.domain_name} - ${formatExpiryDetail(
+                                  domain.expires
+                              )}`
+                            : `• ${domain.domain_name}`
+                    )
                     .join("\n");
 
                 const moreText =
                     domains.length > 20
-                        ? `\n... and ${domains.length - 20} more domains`
+                        ? `\n${formatMoreText(domains.length - 20, "domain", "domains")}`
                         : "";
 
                 return `\n${title} (${domains.length}):\n${domainList}${moreText}\n`;
@@ -416,7 +387,7 @@ export const resendNotifier = {
 
         const failuresMoreText =
             failures.length > 20
-                ? `\n... and ${failures.length - 20} more check failures`
+                ? `\n${formatMoreText(failures.length - 20, "check failure", "check failures")}`
                 : "";
 
         const failuresText =

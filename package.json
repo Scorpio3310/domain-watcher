@@ -3,6 +3,9 @@
     "private": true,
     "version": "1.1.1",
     "type": "module",
+    "engines": {
+        "node": ">=22.17"
+    },
     "description": "Domain availability watcher built with SvelteKit",
     "author": {
         "name": "Nik Klemenc",
@@ -24,38 +27,45 @@
         "cloudflare"
     ],
     "scripts": {
+        "predev": "node src/lib/icons/generate.js",
         "dev": "vite dev",
-        "postbuild": "cat src/lib/cloudflare/cron.js >> .svelte-kit/cloudflare/worker.mjs",
+        "prebuild": "node src/lib/icons/generate.js",
         "build": "vite build",
-        "preview": "vite preview",
+        "postbuild": "node src/lib/cloudflare/postbuild.js",
+        "preview": "wrangler dev --test-scheduled",
         "prepare": "svelte-kit sync || echo ''",
         "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
-        "check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch"
+        "check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch",
+        "icons": "node src/lib/icons/generate.js",
+        "icons:check": "node src/lib/icons/generate.js --check"
     },
     "devDependencies": {
-        "@iconify/svelte": "^5.2.1",
-        "@sveltejs/adapter-cloudflare": "^7.2.8",
-        "@sveltejs/kit": "^2.64.0",
-        "@sveltejs/vite-plugin-svelte": "^7.1.2",
-        "@tailwindcss/vite": "^4.3.0",
-        "@types/node": "^25.9.2",
-        "svelte": "^5.56.3",
-        "svelte-check": "^4.6.0",
-        "tailwindcss": "^4.3.0",
+        "@iconify-json/iconoir": "^1.2.12",
+        "@iconify/svelte": "^5.2.2",
+        "@iconify/utils": "^3.1.7",
+        "@sveltejs/adapter-cloudflare": "^8.0.1",
+        "@sveltejs/kit": "^3.1.0",
+        "@sveltejs/vite-plugin-svelte": "^7.3.1",
+        "@tailwindcss/vite": "^4.3.3",
+        "@types/node": "^26.6.5",
+        "svelte": "^5.57.2",
+        "svelte-check": "^4.7.7",
+        "tailwindcss": "^4.3.3",
         "typescript": "^6.0.3",
-        "vite": "^8.0.16",
-        "wrangler": "^4.99.0",
-        "zod": "^4.4.3"
-    },
-    "pnpm": {
-        "onlyBuiltDependencies": [
-            "esbuild"
-        ]
+        "vite": "^8.3.4",
+        "wrangler": "^4.151.1",
+        "zod": "^4.6.7"
     },
     "dependencies": {
-        "@fontsource/figtree": "^5.2.10",
+        "@fontsource/figtree": "^5.3.0",
         "@whoisjson/whoisjson": "^1.0.4",
         "date-fns": "^4.4.0",
-        "resend": "^6.12.4"
+        "resend": "^6.34.1",
+        "tldts-icann": "^7.4.18"
+    },
+    "imports": {
+        "#lib/*": "./src/lib/*",
+        "#components/*": "./src/components/*",
+        "#src/*": "./src/*"
     }
 }

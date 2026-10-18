@@ -1,6 +1,6 @@
 /**
  * Simple toast store for global notifications using Svelte 5 runes
- * @typedef {import('$lib/types').ToastPayload} ToastPayload
+ * @typedef {import('#lib/types.js').ToastPayload} ToastPayload
  * @typedef {Object} ToastMessage
  * @property {ToastPayload} text - Toast payload ({status, message})
  * @property {string} id - Unique identifier

@@ -6,9 +6,9 @@
  * @module DnsClient
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
-import { getErrorMessage } from "$lib/utils/helpers";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 // ========================================
 // CONSTANTS & CONFIG

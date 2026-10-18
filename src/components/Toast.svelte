@@ -18,38 +18,33 @@
     /** @type {Props} */
     let { message, onClose = null, autoHideDelay = 4000 } = $props();
 
-    // Component state
-    let visible = $state(false);
-    /** @type {ReturnType<typeof setTimeout>|null} */
-    let timeoutId = null;
+    // Component state - starts visible; the intro is played by `in:fly|global`
+    // below (a local intro would be skipped because the layout's {#key}
+    // creates this component together with its {#if} block)
+    let visible = $state(true);
+    /** @type {ReturnType<typeof setTimeout>|undefined} */
+    let closeTimeoutId;
 
     // Computed properties for better readability
     const isSuccess = $derived(message?.status >= 200 && message?.status < 300);
     const shouldAutoHide = $derived(isSuccess && autoHideDelay > 0);
 
     /**
-     * Main reactive logic - shows toast when message changes
+     * Auto-hide only success messages (if enabled) while the toast is visible
      */
     $effect(() => {
-        if (!message?.message) return;
+        if (!visible || !shouldAutoHide) return;
 
-        // Show toast immediately
-        visible = true;
-
-        // Clear any existing timeout
-        clearExistingTimeout();
-
-        // Auto-hide only for success messages (if enabled)
-        if (shouldAutoHide) {
-            timeoutId = setTimeout(hideToast, autoHideDelay);
-        }
+        const autoHideTimeoutId = setTimeout(hideToast, autoHideDelay);
+        return () => clearTimeout(autoHideTimeoutId);
     });
 
     /**
-     * Cleanup on component destruction
+     * Cleanup on component destruction - cancel a pending onClose, otherwise
+     * it fires after the next toast replaced this one and clears that toast
      */
     $effect(() => {
-        return () => clearExistingTimeout();
+        return () => clearTimeout(closeTimeoutId);
     });
 
     /**
@@ -57,21 +52,11 @@
      */
     function hideToast() {
         visible = false;
-        clearExistingTimeout();
 
         // Delay onClose callback to allow transition to complete
         if (onClose) {
-            setTimeout(onClose, 500); // Match transition duration
-        }
-    }
-
-    /**
-     * Clear existing timeout if it exists
-     */
-    function clearExistingTimeout() {
-        if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
+            clearTimeout(closeTimeoutId);
+            closeTimeoutId = setTimeout(onClose, 500); // Match transition duration
         }
     }
 
@@ -84,11 +69,14 @@
 </script>
 
 {#if visible && message?.message}
+    <!-- Success text is announced by the persistent live region in
+         +layout.svelte (a role="status" inserted together with its content is
+         often missed); errors announce themselves via role="alert" -->
     <div
         class="toast-notification"
-        transition:fly={{ x: 500, duration: 500 }}
-        role="alert"
-        aria-live="polite"
+        in:fly|global={{ x: 500, duration: 500 }}
+        out:fly={{ x: 500, duration: 500 }}
+        role={isSuccess ? undefined : "alert"}
     >
         <div class="panel {isSuccess ? 'panel--success' : 'panel--error'}">
             <div class="bg-blur"></div>

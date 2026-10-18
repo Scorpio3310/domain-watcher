@@ -5,9 +5,9 @@
  * @module AccessUtils
  */
 
-import { isDemo } from "$src/lib/utils/helpers";
+import { isDemo } from "#lib/utils/helpers.js";
 
-/** @import { ValidationError } from "$lib/types" */
+/** @import { ValidationError } from "#lib/types.js" */
 
 /**
  * Validates if the application is not in demo mode.

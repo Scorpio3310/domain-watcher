@@ -5,18 +5,18 @@
  * @module DomainsServer
  */
 
-import { executeSql } from "$src/lib/database/db";
-import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { executeSql, executeQueryFirst } from "#lib/database/db.js";
+import { DOMAIN_QUERIES } from "#lib/database/domain-queries.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     validateDemoMode,
     executeDomainQuery,
     verificationEngine,
     CONFIG,
-} from "$src/lib/server/utils/domain-utils.js";
-import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
+} from "#lib/server/utils/domain-utils.js";
+import { DOMAIN_STATUS } from "#lib/constants/constants.js";
 
-/** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "$lib/types" */
+/** @import { DomainRecord, VerificationCandidate, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT
@@ -28,7 +28,10 @@ import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
  */
 export const domains = {
     /**
-     * Retrieves all domains from the watchlist
+     * Retrieves all domains from the watchlist for the home page list:
+     * only the columns a domain card shows up front, with registrar and
+     * lookup source derived in SQL. The raw lookup/NS/SSL JSON is left out -
+     * an expanded card loads it on demand via {@link domains.getDetails}.
      * @async
      * @memberof domains
      * @returns {Promise<DomainListResponse>} Response object with domain list
@@ -50,6 +53,50 @@ export const domains = {
                 domains.length !== 1 ? "s" : ""
             }`,
             data: domains,
+        };
+    },
+
+    /**
+     * Retrieves the raw lookup data of one domain - the JSON an expanded
+     * domain card shows. NS/SSL data that was never fetched (NULL, "null" or
+     * "{}") comes back as null, so the card can simply hide that section.
+     * @async
+     * @memberof domains
+     * @param {number} domainId - Domain ID
+     * @returns {Promise<DomainDetails|null>} Raw JSON strings, or null when
+     *   the domain doesn't exist
+     * @throws {Error} Database errors propagate to the caller
+     *
+     * @example
+     * const details = await domains.getDetails(42);
+     * if (details?.rawNsData) console.log(JSON.parse(details.rawNsData));
+     */
+    async getDetails(domainId) {
+        const row = await executeQueryFirst(
+            DOMAIN_QUERIES.SELECT_DOMAIN_DETAILS_BY_ID,
+            [domainId]
+        );
+        if (!row) return null;
+
+        /**
+         * @param {unknown} value - Stored JSON column value
+         * @returns {string|null} The JSON string, or null when nothing was stored
+         */
+        const storedJsonOrNull = (value) =>
+            typeof value === "string" &&
+            value !== "" &&
+            value !== "null" &&
+            value !== "{}"
+                ? value
+                : null;
+
+        return {
+            rawDomainData:
+                typeof row.raw_domain_data === "string"
+                    ? row.raw_domain_data
+                    : null,
+            rawNsData: storedJsonOrNull(row.raw_ns_data),
+            rawSslData: storedJsonOrNull(row.raw_ssl_data),
         };
     },
 
@@ -108,7 +155,13 @@ export const domains = {
  */
 export const domainVerification = {
     /**
-     * Retrieves all domains categorized by their verification and expiration status
+     * Retrieves all domains categorized by their verification and expiration status.
+     * Categories come straight from the flags computed by
+     * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION (the single source of truth), and
+     * every list keeps the query's order (verification_priority, then
+     * last_domain_checked ASC). needingVerification, expiredRegistered and
+     * needingRefresh are disjoint; expiring overlaps needingRefresh for
+     * domains whose daily refresh is due.
      * @async
      * @memberof domainVerification
      * @returns {Promise<CategorizedDomains>} Categorized domain lists
@@ -120,48 +173,31 @@ export const domainVerification = {
      * console.log(`${categories.needingVerification.length} domains need verification`);
      * console.log(`${categories.expiredRegistered.length} expired domains still registered`);
      * console.log(`${categories.expiring.length} domains expiring soon`);
+     * console.log(`${categories.needingRefresh.length} registered domains due for a refresh`);
      */
     async getAllDomainsForVerification() {
         try {
             const result = await executeSql(
                 DOMAIN_QUERIES.SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION
             );
-            const domains = /** @type {DomainRecord[]} */ (
+            const domains = /** @type {VerificationCandidate[]} */ (
                 result?.results || []
             );
 
             /** @type {CategorizedDomains} */
             const categorized = {
                 needingVerification: domains.filter(
-                    (d) =>
-                        ["available", "error", "not_checked"].includes(
-                            d.status ?? ""
-                        ) ||
-                        // Registered without expiry data (.de/.ch style TLDs) —
-                        // only a re-check can ever notice these becoming available
-                        (d.status === "registered" && !d.expires)
+                    (d) => d.needs_verification === 1
                 ),
                 expiredRegistered: domains.filter(
-                    (d) =>
-                        d.expires &&
-                        new Date(d.expires) < new Date() &&
-                        d.status === "registered"
+                    (d) => d.is_expired_registered === 1
                 ),
-                expiring: domains.filter(
-                    (d) =>
-                        d.expires &&
-                        new Date(d.expires) > new Date() &&
-                        new Date(d.expires) <=
-                            new Date(
-                                Date.now() +
-                                    EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000
-                            ) &&
-                        d.status === "registered"
-                ),
+                expiring: domains.filter((d) => d.is_expiring_soon === 1),
+                needingRefresh: domains.filter((d) => d.needs_refresh === 1),
             };
 
             console.log(
-                `📊 Found ${categorized.needingVerification.length} needing verification, ${categorized.expiredRegistered.length} expired registered, ${categorized.expiring.length} expiring`
+                `📊 Found ${categorized.needingVerification.length} needing verification, ${categorized.expiredRegistered.length} expired registered, ${categorized.expiring.length} expiring, ${categorized.needingRefresh.length} due for refresh`
             );
             return categorized;
         } catch (error) {
@@ -174,7 +210,9 @@ export const domainVerification = {
      * Snapshot of current DB state shaped for the daily report sections.
      * Derived from ONE unified SELECT: available = status 'available',
      * expired = registered with expires in the past, expiring = registered
-     * within the warning window. Meant to run AFTER a verification batch so
+     * within the warning window. Domains selected only for a refresh
+     * (needingRefresh, future expiry outside the window) are never reported.
+     * Meant to run AFTER a verification batch so
      * the report reflects stored state (which failed checks preserve) instead
      * of only the checks that happened to succeed in this run.
      * @async
@@ -218,7 +256,8 @@ export const domainVerification = {
     },
 
     /**
-     * Selects all domains needing a check and verifies them in one batch,
+     * Selects all domains needing a check (SELECT_DOMAINS_NEEDING_CHECK, incl.
+     * due refreshes of registered domains) and verifies them in one batch,
      * capped at `limit` to respect WHOIS API rate limits
      * @async
      * @memberof domainVerification
@@ -251,27 +290,6 @@ export const domainVerification = {
             processed: domainsToProcess.length,
         };
     },
-
-    /**
-     * Performs batch verification specifically for expired domains that might now be available
-     * This is a specialized version of verifyDomainsBatch for high-priority expired domains
-     * @async
-     * @memberof domainVerification
-     * @param {DomainRecord[]} expiredDomains - Array of expired domain objects to verify
-     * @param {BatchOptions} [options={}] - Configuration options for batch processing
-     * @returns {Promise<BatchVerificationResult>} Batch verification results from verificationEngine.verifyBatch
-     *
-     * @example
-     * const { expiredRegistered } = await domainVerification.getAllDomainsForVerification();
-     * const results = await domainVerification.verifyExpiredDomainsBatch(expiredRegistered);
-     * if (results.available.length > 0) {
-     *   console.log(`${results.available.length} expired domains are now available!`);
-     *   // Send notifications or trigger alerts
-     * }
-     */
-    async verifyExpiredDomainsBatch(expiredDomains, options = {}) {
-        return verificationEngine.verifyBatch(expiredDomains, options);
-    },
 };
 
 // ========================================
@@ -282,7 +300,16 @@ export const domainVerification = {
  * @typedef {Object} DomainListResponse
  * @property {number} status - HTTP status code (200 for success, 500 for error)
  * @property {string} message - Human-readable status message
- * @property {DomainRecord[]} data - Array of domain objects
+ * @property {DomainRecord[]} data - Domain list rows (SELECT_ALL_DOMAINS columns - no raw_* JSON)
+ * @memberof module:DomainsServer
+ */
+
+/**
+ * Raw lookup data of one domain, loaded on demand by an expanded domain card
+ * @typedef {Object} DomainDetails
+ * @property {string|null} rawDomainData - Stored lookup envelope JSON (RDAP/WhoisJSON), null if never checked
+ * @property {string|null} rawNsData - NS lookup JSON, null if never fetched
+ * @property {string|null} rawSslData - SSL certificate JSON, null if never fetched
  * @memberof module:DomainsServer
  */
 
@@ -295,9 +322,10 @@ export const domainVerification = {
 
 /**
  * @typedef {Object} CategorizedDomains
- * @property {DomainRecord[]} needingVerification - Domains that need status verification
- * @property {DomainRecord[]} expiredRegistered - Expired domains still showing as registered
- * @property {DomainRecord[]} expiring - Domains expiring within 30 days
+ * @property {VerificationCandidate[]} needingVerification - available/error/not_checked, or registered without expiry data (verify every run)
+ * @property {VerificationCandidate[]} expiredRegistered - Expired domains still showing as registered (verify every run)
+ * @property {VerificationCandidate[]} expiring - Registered domains expiring within EXPIRY_WARNING_DAYS (report section)
+ * @property {VerificationCandidate[]} needingRefresh - Registered domains with a future expiry whose refresh is due (verify only, never reported)
  * @memberof module:DomainsServer
  */
 
