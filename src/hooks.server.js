@@ -47,6 +47,25 @@ function getBasicAuthPassword(header) {
 }
 
 /**
+ * Forbids framing the app, so a hostile page can't load it in a hidden iframe
+ * and trick the logged-in admin into one-click settings changes or deletes
+ * (clickjacking - the browser sends the cached Basic credentials along).
+ *
+ * Runs first, so every response SvelteKit resolves (pages, `__data.json`,
+ * remote functions, endpoints, public paths and demo mode) carries the
+ * headers. Early 308/401/503 responses of the auth handle skip them, as they
+ * have nothing worth framing.
+ * @type {import('@sveltejs/kit/hooks').Handle}
+ */
+export async function handle_frame_protection({ event, resolve }) {
+    event.setHeaders({
+        "x-frame-options": "DENY",
+        "content-security-policy": "frame-ancestors 'none'",
+    });
+    return await resolve(event);
+}
+
+/**
  * Protects the whole app (pages, `__data.json`, remote functions, endpoints)
  * with HTTP Basic Auth using the `ADMIN_PASSWORD` runtime secret
  *
@@ -181,5 +200,10 @@ export async function handleError({ kind, error, event }) {
     };
 }
 
-// Authentication runs first, so unauthenticated requests never touch the database
-export const handle = sequence(handle_basic_auth, handle_db_connect);
+// Frame protection only queues response headers; authentication then runs
+// before anything else, so unauthenticated requests never touch the database
+export const handle = sequence(
+    handle_frame_protection,
+    handle_basic_auth,
+    handle_db_connect
+);
