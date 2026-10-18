@@ -6,7 +6,7 @@ import { getErrorMessage } from "#lib/utils/helpers.js";
 /** @type {import('@sveltejs/kit/hooks').Handle} */
 export async function handle_db_connect({ event, resolve }) {
     // Cloudflare bindings are read from `cloudflare:workers` (emulated by the
-    // adapter during `vite dev` / `vite preview`), no longer from `event.platform`.
+    // adapter during `vite dev`), no longer from `event.platform`.
     // Only initialize if D1 database binding exists (Cloudflare Workers environment)
     if (env.DB) {
         initDatabase(env.DB);
