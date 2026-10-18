@@ -1,4 +1,4 @@
-/** @import { DomainRecord, ServiceResult } from '$lib/types' */
+/** @import { DomainRecord, ServiceResult } from '#lib/types.js' */
 
 import { error } from "@sveltejs/kit";
 import {
@@ -6,7 +6,7 @@ import {
     getHttpStatus,
     getRegistrar,
     getLookupSource,
-} from "$lib/utils/helpers";
+} from "#lib/utils/helpers.js";
 import { domains } from "$src/lib/server/services/domain";
 import { ui } from "$src/lib/server/services/settings";
 import {
@@ -77,8 +77,6 @@ export async function load() {
         };
     } catch (err) {
         console.error("❌ Page load failed:", err);
-        throw error(getHttpStatus(err), {
-            message: getErrorMessage(err),
-        });
+        throw error(getHttpStatus(err), getErrorMessage(err));
     }
 }

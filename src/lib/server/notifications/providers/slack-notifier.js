@@ -1,4 +1,4 @@
-import { getErrorMessage } from "$lib/utils/helpers.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     formatDate,
     getDaysUntilExpiry,
@@ -7,7 +7,7 @@ import {
     truncateError,
 } from "./shared.js";
 
-/** @import { DomainUpdates, NotifierResult, SlackBlock } from "$lib/types" */
+/** @import { DomainUpdates, NotifierResult, SlackBlock } from "#lib/types.js" */
 
 /**
  * Slack notification service for formatting and sending messages

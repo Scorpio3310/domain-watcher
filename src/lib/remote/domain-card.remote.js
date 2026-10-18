@@ -5,7 +5,7 @@
  * @module DomainCardRemote
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
 import * as whoisService from "$src/lib/server/infrastructure/whois-client";
 import * as dnsService from "$src/lib/server/infrastructure/dns-client";

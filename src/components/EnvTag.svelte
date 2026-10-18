@@ -1,5 +1,5 @@
 <script>
-    import { PUBLIC_ENVIRONMENT } from "$env/static/public";
+    import { PUBLIC_ENVIRONMENT } from "$app/env/public";
     import Tooltip from "./Tooltip.svelte";
     import Icon from "@iconify/svelte";
 

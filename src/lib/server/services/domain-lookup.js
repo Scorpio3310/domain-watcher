@@ -6,13 +6,13 @@
  * @module DomainLookupService
  */
 
-/** @import { ServiceResult, LookupContext } from '$lib/types' */
+/** @import { ServiceResult, LookupContext } from '#lib/types.js' */
 
 import * as rdapClient from "$src/lib/server/infrastructure/rdap-client";
 import * as whoisClient from "$src/lib/server/infrastructure/whois-client";
 import { apiKey } from "$src/lib/server/infrastructure/api-key";
 import { domainProvider } from "$src/lib/server/services/settings";
-import { DOMAIN_PROVIDER } from "$lib/constants/constants";
+import { DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 
 // ========================================
 // PROVIDER RESOLUTION

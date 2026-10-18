@@ -3,7 +3,7 @@
     "name": "check-watcher",
 
     // Main application entry point
-    "main": ".svelte-kit/cloudflare/worker.mjs", // Changed due to adding Cron Job functionality - see lib/cron.js for details
+    "main": ".svelte-kit/cloudflare/worker.mjs", // Changed due to adding Cron Job functionality - see src/lib/cloudflare/postbuild.js for details
 
     // Cloudflare Workers runtime API version
     "compatibility_date": "2025-07-12",

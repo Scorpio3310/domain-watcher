@@ -4,12 +4,12 @@
  * @module WhoIsDomainService
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
 import { apiKey } from "./api-key";
 import { WhoisJson } from "@whoisjson/whoisjson";
 import { DOMAIN_STATUS } from "$src/lib/constants/constants";
-import { getErrorMessage } from "$lib/utils/helpers";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 // ========================================
 // CONSTANTS & CONFIG
@@ -26,7 +26,7 @@ const TEST_DOMAIN = "example.com";
  * @property {string|null} expires - Domain expiration date
  * @property {{name: string, url?: string|null}|null} registrar - Registrar info
  * @property {Record<string, any>} rawDomainData - Raw data from WHOIS API
- * @property {'whoisjson'} source - Provider tag (see DomainLookupData in $lib/types)
+ * @property {'whoisjson'} source - Provider tag (see DomainLookupData in #lib/types)
  */
 
 /**

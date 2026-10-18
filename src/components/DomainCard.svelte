@@ -2,7 +2,7 @@
     import Button from "$components/Button.svelte";
     import Icon from "@iconify/svelte";
     import { slide, fly } from "svelte/transition";
-    import { UI_DOMAIN_VIEW } from "$lib/constants/constants";
+    import { UI_DOMAIN_VIEW } from "#lib/constants/constants.js";
     import {
         DOMAIN_STATUS,
         DOMAIN_PROVIDER,
@@ -19,7 +19,7 @@
     import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
 
     //// PROPS ////
-    /** @type {{data: import('$lib/types').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */
+    /** @type {{data: import('#lib/types.js').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */
     let {
         data,
         uiView,

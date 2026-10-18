@@ -5,7 +5,7 @@
  * @module CheckDomainsRemote
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
 import { form } from "$app/server";
 import { getErrorMessage } from "$src/lib/utils/helpers";

@@ -81,7 +81,7 @@ A daily summary keeps you informed and helps you act fast.
 
 ### Prerequisites
 
--   Node.js and pnpm
+-   Node.js 22.17+ (required by SvelteKit 3) and pnpm
 -   [Cloudflare Account](https://www.cloudflare.com/)
 -   [WhoIs JSON API key](https://whoisjson.com) - Optional: only needed for SSL certificate checks, the WhoisJSON provider, or TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs). Domain checks work out of the box via RDAP without any key.
 -   [Slack Webhooks](https://api.slack.com/messaging/webhooks) – Create a Slack app and generate an incoming webhook URL for Slack notifications

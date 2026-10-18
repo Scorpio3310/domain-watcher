@@ -1,13 +1,13 @@
-import { executeSql } from "$lib/database/db.js";
-import { SETTINGS_QUERIES } from "$lib/database/settings-queries.js";
+import { executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { domainVerification } from "../services/domain.js";
 import {
     getCurrentTimeInTimezone,
     formatHumanDate,
     getErrorMessage,
-} from "$lib/utils/helpers.js";
+} from "#lib/utils/helpers.js";
 
-/** @import { CheckFailure, DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig } from "$lib/types" */
+/** @import { CheckFailure, DomainRecord, ProviderSettings, SlackConfig, DiscordConfig, ResendConfig } from "#lib/types.js" */
 
 // ============================================================================
 // NOTIFICATION PROVIDERS REGISTRY

@@ -10,12 +10,12 @@ import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
 import * as domainLookup from "$src/lib/server/services/domain-lookup";
 import { getErrorMessage } from "$src/lib/utils/helpers";
 import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
-import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "$lib/constants/constants";
+import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
 export { validateDemoMode };
 
-/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult, LookupContext } from "$lib/types" */
+/** @import { DomainRecord, ValidationError, VerificationResult, BatchOptions, BatchVerificationResult, LookupContext } from "#lib/types.js" */
 
 // ========================================
 // CONFIGURATION CONSTANTS

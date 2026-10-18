@@ -6,10 +6,10 @@
  * @module RdapClient
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
-import { DOMAIN_STATUS } from "$lib/constants/constants";
-import { getErrorMessage } from "$lib/utils/helpers";
+import { DOMAIN_STATUS } from "#lib/constants/constants.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 // ========================================
 // CONSTANTS & CONFIG

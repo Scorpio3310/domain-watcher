@@ -14,9 +14,9 @@ import {
     verificationEngine,
     CONFIG,
 } from "$src/lib/server/utils/domain-utils.js";
-import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "$lib/constants/constants";
+import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 
-/** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "$lib/types" */
+/** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "#lib/types.js" */
 
 // ========================================
 // DOMAIN WATCHLIST MANAGEMENT

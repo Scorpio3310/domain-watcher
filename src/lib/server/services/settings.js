@@ -6,7 +6,7 @@
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { getErrorMessage } from "$src/lib/utils/helpers";
-import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "$lib/constants/constants";
+import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================

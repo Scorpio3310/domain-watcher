@@ -196,7 +196,7 @@ export const DOMAIN_QUERIES = {
      * @type {string}
      * @description Returns domains that need status verification: no expiry,
      * expired, or a non-registered status. Status values must match
-     * DOMAIN_STATUS in $lib/constants/constants.js and the status set used by
+     * DOMAIN_STATUS in #lib/constants/constants.js and the status set used by
      * SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION below.
      * Registered domains with NULL expires (TLDs without public expiry data,
      * e.g. .de/.ch via RDAP) sort last so they don't crowd out the per-run
@@ -229,7 +229,7 @@ export const DOMAIN_QUERIES = {
      * // - is_expiring_soon: 1/0 (expires within 30 days)
      *
      * NOTE: the '+30 days' window below must stay in sync with
-     * EXPIRY_WARNING_DAYS in $lib/constants/constants.js
+     * EXPIRY_WARNING_DAYS in #lib/constants/constants.js
      */
     SELECT_UNIFIED_DOMAINS_FOR_VERIFICATION: `
         SELECT

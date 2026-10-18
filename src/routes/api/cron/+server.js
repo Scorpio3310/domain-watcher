@@ -1,6 +1,5 @@
-import { CRON_SECRET } from "$env/static/private";
-import { json } from "@sveltejs/kit";
-import { cronNotifications } from "$lib/server/notifications/cron-notifications.js";
+import { CRON_SECRET } from "$app/env/private";
+import { cronNotifications } from "#lib/server/notifications/cron-notifications.js";
 import { getErrorMessage } from "$src/lib/utils/helpers";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
@@ -17,7 +16,7 @@ import { validateDemoMode } from "$src/lib/server/utils/access";
  * @example
  * const authResult = authenticateRequest(request);
  * if (!authResult.success) {
- *   return json({ error: authResult.reason }, { status: 401 });
+ *   return Response.json({ error: authResult.reason }, { status: 401 });
  * }
  */
 function authenticateRequest(request) {
@@ -38,7 +37,9 @@ function authenticateRequest(request) {
  *
  * @route POST /api/cron
  *
- * Requires the `x-cron-secret` request header for authentication. Accepts an
+ * Requires the `x-cron-secret` request header for authentication and a
+ * `Content-Type: application/json` header (SvelteKit rejects cross-site POST
+ * requests without a Content-Type as CSRF with 403). Accepts an
  * optional JSON body `{ manual?: boolean }` to force execution bypassing time
  * checking. Responds with JSON execution details (success, executionTime,
  * manual, and notification results from cronNotifications.checkAndSend).
@@ -60,7 +61,10 @@ function authenticateRequest(request) {
  * // Regular cron execution
  * fetch('/api/cron', {
  *   method: 'POST',
- *   headers: { 'x-cron-secret': 'your-secret' }
+ *   headers: {
+ *     'x-cron-secret': 'your-secret',
+ *     'Content-Type': 'application/json'
+ *   }
  * });
  *
  * @example
@@ -78,7 +82,7 @@ function authenticateRequest(request) {
  * **Regular Cron:**
  * - Method: POST
  * - URL: {{baseUrl}}/api/cron
- * - Headers: x-cron-secret: {{cronSecret}}
+ * - Headers: x-cron-secret: {{cronSecret}}, Content-Type: application/json
  *
  * **Manual Trigger:**
  * - Method: POST
@@ -87,6 +91,7 @@ function authenticateRequest(request) {
  * - Body (raw JSON): {"manual": true}
  *
  * @throws {401} Unauthorized - Invalid or missing x-cron-secret header
+ * @throws {403} Forbidden - Missing Content-Type header (SvelteKit CSRF protection)
  * @throws {500} Internal Server Error - Cron execution failure
  */
 /** @type {import('./$types').RequestHandler} */
@@ -98,7 +103,7 @@ export async function POST({ request }) {
         const demoError = validateDemoMode();
         if (demoError) {
             console.warn("❌ Demo mode detected - cron execution blocked");
-            return json(
+            return Response.json(
                 { error: "Unauthorized", message: demoError?.message },
                 { status: demoError?.status }
             );
@@ -108,7 +113,7 @@ export async function POST({ request }) {
         const authResult = authenticateRequest(request);
         if (!authResult.success) {
             console.warn("❌ Unauthorized cron request:", authResult.reason);
-            return json(
+            return Response.json(
                 { error: "Unauthorized", message: authResult.reason },
                 { status: 401 }
             );
@@ -130,7 +135,7 @@ export async function POST({ request }) {
         const executionTime = Date.now() - startTime;
         console.log(`⏱️ Cron job completed in ${executionTime}ms`);
 
-        return json({
+        return Response.json({
             success: true,
             executionTime: `${executionTime}ms`,
             manual: isManual,
@@ -140,7 +145,7 @@ export async function POST({ request }) {
         const executionTime = Date.now() - startTime;
         console.error("❌ Cron job failed:", error);
 
-        return json(
+        return Response.json(
             {
                 success: false,
                 error: getErrorMessage(error),
@@ -159,7 +164,7 @@ export async function POST({ request }) {
  */
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
-    return json({
+    return Response.json({
         status: "healthy",
         service: "Domain Watcher Cron",
         timestamp: new Date().toISOString(),

@@ -3,6 +3,9 @@
     "private": true,
     "version": "1.1.1",
     "type": "module",
+    "engines": {
+        "node": ">=22.17"
+    },
     "description": "Domain availability watcher built with SvelteKit",
     "author": {
         "name": "Nik Klemenc",
@@ -25,7 +28,7 @@
     ],
     "scripts": {
         "dev": "vite dev",
-        "postbuild": "cat src/lib/cloudflare/cron.js >> .svelte-kit/cloudflare/worker.mjs",
+        "postbuild": "node src/lib/cloudflare/postbuild.js",
         "build": "vite build",
         "preview": "vite preview",
         "prepare": "svelte-kit sync || echo ''",
@@ -34,8 +37,8 @@
     },
     "devDependencies": {
         "@iconify/svelte": "^5.2.2",
-        "@sveltejs/adapter-cloudflare": "^7.2.9",
-        "@sveltejs/kit": "^2.70.3",
+        "@sveltejs/adapter-cloudflare": "^8.0.1",
+        "@sveltejs/kit": "^3.1.0",
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
         "@tailwindcss/vite": "^4.3.3",
         "@types/node": "^26.6.5",
@@ -52,5 +55,8 @@
         "@whoisjson/whoisjson": "^1.0.4",
         "date-fns": "^4.4.0",
         "resend": "^6.34.1"
+    },
+    "imports": {
+        "#lib/*": "./src/lib/*"
     }
 }

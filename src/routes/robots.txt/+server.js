@@ -1,4 +1,4 @@
-import { PRODUCTION_DOMAIN, ALLOW_ROBOTS } from "$env/static/private";
+import { PRODUCTION_DOMAIN, ALLOW_ROBOTS } from "$app/env/private";
 import DEV_ROBOTS_TXT from "./dev_robots.txt?raw";
 import PRODUCTION_ROBOTS_TXT from "./production_robots.txt?raw";
 

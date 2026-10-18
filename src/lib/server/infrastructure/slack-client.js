@@ -1,10 +1,10 @@
-/** @import { ServiceResult, SlackConfig } from '$lib/types' */
+/** @import { ServiceResult, SlackConfig } from '#lib/types.js' */
 
 import { executeSql } from "$src/lib/database/db";
 import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
 import { isDemo } from "$src/lib/utils/helpers";
-import { SLACK_CONNECTION_STATUS } from "$lib/constants/constants";
-import { getErrorMessage, maskApiKey } from "$lib/utils/helpers";
+import { SLACK_CONNECTION_STATUS } from "#lib/constants/constants.js";
+import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
 import { validateDemoMode } from "$src/lib/server/utils/access";
 
 // ========================================

@@ -7,7 +7,7 @@
  * @module SettingsRemote
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
 import { form } from "$app/server";
 import {
@@ -21,7 +21,7 @@ import {
 } from "$src/routes/settings/validation";
 import { apiKey } from "$src/lib/server/infrastructure/api-key";
 import { ui, domainProvider } from "$src/lib/server/services/settings";
-import { DOMAIN_PROVIDER } from "$lib/constants/constants";
+import { DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 import { slack } from "$src/lib/server/infrastructure/slack-client";
 import { discord } from "$src/lib/server/infrastructure/discord-client";
 import { resend } from "$src/lib/server/infrastructure/resend-client";

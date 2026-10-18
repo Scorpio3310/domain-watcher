@@ -1,4 +1,4 @@
-import { PUBLIC_ENVIRONMENT, PUBLIC_TIMEZONE } from "$env/static/public";
+import { PUBLIC_ENVIRONMENT, PUBLIC_TIMEZONE } from "$app/env/public";
 import {
     formatDistanceToNow,
     parseISO,
@@ -439,7 +439,7 @@ export const formatLastChecked = (lastCheckedDate, options = {}) => {
  * @function getExpirationStatus
  * @param {string|Date|null} expirationDate - Domain expiration date
  * @param {boolean} [assumeUTC=true] - Whether to assume input is UTC
- * @returns {import('$lib/types').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
+ * @returns {import('#lib/types.js').ExpirationStatus} Comprehensive status object with expiration analysis and UI styling
  * @example
  * // Expired domain (assuming today is 2025-07-29)
  * getExpirationStatus('2025-07-20')

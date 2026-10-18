@@ -1,6 +1,6 @@
 import { Resend } from "resend";
-import { PRODUCTION_DOMAIN } from "$env/static/private";
-import { getErrorMessage } from "$lib/utils/helpers.js";
+import { PRODUCTION_DOMAIN } from "$app/env/private";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     escapeHtml,
     formatDate,
@@ -10,7 +10,7 @@ import {
     truncateError,
 } from "./shared.js";
 
-/** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "$lib/types" */
+/** @import { CheckFailure, DomainRecord, DomainUpdates, NotifierResult } from "#lib/types.js" */
 
 /**
  * Resend Email notification service for formatting and sending messages

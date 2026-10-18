@@ -7,7 +7,7 @@
 
 import { isDemo } from "$src/lib/utils/helpers";
 
-/** @import { ValidationError } from "$lib/types" */
+/** @import { ValidationError } from "#lib/types.js" */
 
 /**
  * Validates if the application is not in demo mode.

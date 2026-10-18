@@ -1,37 +1,50 @@
+import { env } from "cloudflare:workers";
 import { sequence } from "@sveltejs/kit/hooks";
 import { initDatabase } from "$src/lib/database/db.js";
+import { getErrorMessage } from "$src/lib/utils/helpers";
 
-/** @type {import('@sveltejs/kit').Handle} */
+/** @type {import('@sveltejs/kit/hooks').Handle} */
 export async function handle_db_connect({ event, resolve }) {
-    // App.Platform is not declared in app.d.ts, so narrow the Cloudflare
-    // Workers platform shape locally to access the D1 binding.
-    const platform =
-        /** @type {{ env?: { DB?: import('$src/lib/database/db').D1Database } } | undefined} */ (
-            event.platform
-        );
+    // Cloudflare bindings are read from `cloudflare:workers` (emulated by the
+    // adapter during `vite dev` / `vite preview`), no longer from `event.platform`.
     // Only initialize if D1 database binding exists (Cloudflare Workers environment)
-    if (platform?.env?.DB) {
-        initDatabase(platform.env.DB);
+    if (env.DB) {
+        initDatabase(env.DB);
     }
     return await resolve(event);
 }
 
 /**
  * Basic error handler with simple logging
- * @type {import('@sveltejs/kit').HandleServerError}
+ *
+ * Since SvelteKit 3 every error passes through this hook, so `kind` tells
+ * where it came from: `app` (thrown with `error(...)`), `framework` (404,
+ * 405, ...), `validation` (invalid remote function input) or `unknown`.
+ * @type {import('@sveltejs/kit/hooks').HandleServerError}
  */
-export async function handleError({ error, event, status, message }) {
+export async function handleError({ kind, error, event }) {
+    // Errors thrown with `error(...)` and remote function validation errors
+    // are expected and safe to expose - pass them through unchanged
+    if (kind === "app" || kind === "validation") {
+        return error;
+    }
+
     // Simple error logging
     console.error("🚨 Server Error:", {
-        message: error instanceof Error ? error.message : message,
-        status,
+        message: getErrorMessage(error),
+        status: kind === "framework" ? error.status : 500,
         url: event.url.pathname,
         timestamp: new Date().toISOString(),
     });
 
-    // Return clean error message
+    // Framework errors only carry a safe `{ status, message }` (e.g. "Not Found"),
+    // anything unknown gets a generic message so internals are never leaked
+    if (kind === "framework") {
+        return error;
+    }
+
     return {
-        message: status >= 500 ? "Something went wrong" : message,
+        message: "Something went wrong",
     };
 }
 

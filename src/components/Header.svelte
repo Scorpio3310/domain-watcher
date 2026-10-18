@@ -1,5 +1,5 @@
 <script>
-    import { PUBLIC_ENVIRONMENT } from "$env/static/public";
+    import { PUBLIC_ENVIRONMENT } from "$app/env/public";
     import { resolve } from "$app/paths";
     import Button from "./Button.svelte";
     import EnvTag from "./EnvTag.svelte";
@@ -112,7 +112,7 @@
                     ></div>
                 {/if}
                 <Button
-                    href={resolve("/settings")}
+                    href={resolve("settings")}
                     title="Settings"
                     size="lg"
                     icon="iconoir:settings"

@@ -5,7 +5,7 @@
     import { toast } from "$src/lib/stores/toast.svelte.js";
     import "../app.css";
     import NoJavascript from "$components/NoJavascript.svelte";
-    import { dev } from "$app/environment";
+    import { dev } from "$app/env";
 
     /** @type {import('./$types').LayoutProps} */
     let { children, data } = $props();

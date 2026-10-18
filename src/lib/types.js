@@ -1,7 +1,7 @@
 /**
  * @fileoverview Central JSDoc type definitions shared across the app.
  * Consume from .js files via `@import` and from .svelte files via inline
- * `import('$lib/types')` type expressions.
+ * `import('#lib/types.js')` type expressions.
  */
 
 /**

@@ -3,7 +3,7 @@
  * @module AddDomainRemote
  */
 
-/** @import { ServiceResult } from '$lib/types' */
+/** @import { ServiceResult } from '#lib/types.js' */
 
 import { form } from "$app/server";
 import { addDomainSchema } from "$src/routes/validation";

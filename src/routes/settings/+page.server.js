@@ -2,7 +2,7 @@
  * @fileoverview Settings page server load and actions
  */
 
-/** @import { ServiceResult, SlackConfig, DiscordConfig, ResendConfig } from '$lib/types' */
+/** @import { ServiceResult, SlackConfig, DiscordConfig, ResendConfig } from '#lib/types.js' */
 
 import { error } from "@sveltejs/kit";
 import { getErrorMessage, getHttpStatus } from "$src/lib/utils/helpers";
@@ -71,8 +71,6 @@ export async function load() {
         };
     } catch (err) {
         console.error("❌ Settings page load failed:", err);
-        throw error(getHttpStatus(err), {
-            message: getErrorMessage(err),
-        });
+        throw error(getHttpStatus(err), getErrorMessage(err));
     }
 }

@@ -1,7 +1,8 @@
 /**
- * ⚠️ IMPORTANT: This handler must be added manually after SvelteKit build process
- * SvelteKit's Cloudflare adapter doesn't automatically include cron handlers,
- * so this code needs to be injected into the generated worker file.
+ * ⚠️ IMPORTANT: This handler is added to the worker after the SvelteKit build process
+ * SvelteKit's Cloudflare adapter doesn't support custom worker handlers, so the
+ * `postbuild` script (see ./postbuild.js) wraps the generated worker and adds
+ * the `scheduled` handler exported from this module.
  */
 
 /**
@@ -13,13 +14,14 @@
  */
 
 /**
+ * Cloudflare Workers `scheduled` handler, invoked by the cron triggers in wrangler.jsonc
  * @param {{cron?: string, scheduledTime?: number}} event - Scheduled event details from the cron trigger
  * @param {CronEnv} env - Environment object containing bindings and secrets
  * @param {{waitUntil(promise: Promise<any>): void}} ctx - Worker execution context
  */
-worker_default.scheduled = async (event, env, ctx) => {
+export async function scheduled(event, env, ctx) {
     ctx.waitUntil(cron(env));
-};
+}
 
 /**
  * Main cron logic that performs scheduled tasks
@@ -46,6 +48,9 @@ async function cron(env) {
                 method: "POST",
                 headers: {
                     "x-cron-secret": env.CRON_SECRET,
+                    // Required since SvelteKit 3 - POST requests without a Content-Type
+                    // and without a matching Origin are rejected as CSRF (403)
+                    "content-type": "application/json",
                 },
             });
 
@@ -72,6 +77,9 @@ async function cron(env) {
                 method: "POST",
                 headers: {
                     "x-cron-secret": env.CRON_SECRET,
+                    // Required since SvelteKit 3 - POST requests without a Content-Type
+                    // and without a matching Origin are rejected as CSRF (403)
+                    "content-type": "application/json",
                 },
             });
 
