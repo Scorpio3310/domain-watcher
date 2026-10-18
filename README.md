@@ -12,7 +12,7 @@
 
 > **Monitor domain availability, track expiration dates, and get notifications when domains become available or are about to expire.**
 
-A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers that tracks domain availability, SSL certificates, and sends smart notifications via Slack, Discord or email (Resend).
+A modern **domain monitoring tool** built with SvelteKit and Cloudflare Workers that tracks domain availability and expiration dates, looks up NS records and SSL certificates on demand, and sends daily reports via Slack, Discord or email (Resend).
 
 **Perfect for:** Domain investors, web developers, businesses tracking competitor domains, and anyone managing domain portfolios.
 
@@ -73,7 +73,7 @@ A daily summary keeps you informed and helps you act fast.
 
 ## 🚀 Features
 
--   **Domain Monitoring**: Monitor domain status, including availability, nameservers (NS), and SSL certificate validity. Only registrable domains can be added (`example.com`, `example.co.uk`) - subdomains like `www.example.com` or `foo.github.io` are rejected, because registries don't track them and they would read as "available".
+-   **Domain Monitoring**: Monitor domain availability and expiration dates. Nameservers (NS) and SSL certificate details can be looked up per domain on demand from its card - they are not part of the scheduled checks or the daily report. Only registrable domains can be added (`example.com`, `example.co.uk`) - subdomains like `www.example.com` or `foo.github.io` are rejected, because registries don't track them and they would read as "available".
 -   **Automated Checks**: A cron job runs every minute to evaluate if notification conditions are met (via Slack, Discord or Resend), based on the configured time and settings.
 -   **Notifications via Slack, Discord or Email (Resend)**: Get notified when domains become available or when specific conditions are met. Choose your preferred notification method (Slack, Discord or Email) and configure when alerts should be sent.
 -   **Domain Lookup Providers**: Choose between RDAP (free, queries domain registries directly, no API key needed) and WhoisJSON. With RDAP selected, TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs) fall back to WhoisJSON when an API key is configured and the "Allow WhoisJSON fallback" toggle is on (default). Every domain card shows which provider was used and which one the next check will use. SSL certificate checks always require a WhoisJSON API key; NS lookups run via Cloudflare DNS-over-HTTPS and need no key.
@@ -85,7 +85,7 @@ A daily summary keeps you informed and helps you act fast.
 
 ### Prerequisites
 
--   Node.js 22.17+ (required by SvelteKit 3) and pnpm 10 or 11 - `pnpm install` refuses older Node.js versions (`engine-strict`)
+-   Node.js 22.17+ (required by SvelteKit 3) and pnpm 10 or 11 (pnpm 9.10+ works too, e.g. on older Cloudflare Workers Builds images) - `pnpm install` refuses older Node.js versions (`engine-strict`)
 -   [Cloudflare Account](https://www.cloudflare.com/)
 -   [WhoIs JSON API key](https://whoisjson.com) - Optional: only needed for SSL certificate checks, the WhoisJSON provider, or TLDs without a public RDAP server (.eu, .co, .at, .it, .es, .us, .hr, .rs). Domain checks work out of the box via RDAP without any key.
 -   [Slack Webhooks](https://api.slack.com/messaging/webhooks) – Create a Slack app and generate an incoming webhook URL for Slack notifications
@@ -242,7 +242,7 @@ How the schedule behaves:
 
 Which domains are checked when a report is due:
 
--   At most **20 domains per run** (stays within the Workers Free subrequest limit), most urgent first: expired-but-registered and never-checked domains, then everything else in round-robin by last check time, so every domain is eventually covered. With more than 20 due domains a full pass takes several reports. The **Check Domains** button picks domains the same way (without the 12-hour skip below), so clicking it again reaches the rest. The cap is `LIMIT_DOMAIN_CHECKS` in `src/lib/server/utils/domain-utils.js` (it also limits the manual bulk check) and can be raised on Workers Paid.
+-   At most **20 domains per run** (stays within the Workers Free subrequest limit), most urgent first: expired-but-registered and never-checked domains (while other domains are due, up to a quarter of the slots - 5 of 20 - stay reserved for them, so a pile of expired domains can't starve the rest), then everything else in round-robin by last check time, so every domain is eventually covered. With more than 20 due domains a full pass takes several reports. The **Check Domains** button picks domains the same way (without the 12-hour skip below), so clicking it again reaches the rest. The cap is `LIMIT_DOMAIN_CHECKS` in `src/lib/server/utils/domain-utils.js` (it also limits the manual bulk check) and can be raised on Workers Paid.
 -   Registered domains are re-checked **daily** inside the 30-day expiry window or while the registry reports a grace/deletion state (redemption, pending delete, auto-renew), and **weekly** otherwise - so renewals and domains dropped after a registry auto-renew are noticed. Registered domains without expiry data (e.g. .de, .ch, .eu - their registries don't publish one) are re-checked **daily** too (when looked up via WhoisJSON, that is about 2 API calls per such domain per day).
 -   Domains checked in the last 12 hours are skipped on scheduled runs (a second provider later the same day reuses the fresh results). Checks that failed in that window are still listed in the report, also on retries.
 -   Domains are only checked automatically when a provider's report is due - without an enabled notification provider, use the check buttons in the app.
@@ -278,6 +278,8 @@ With `--env production --binding DB`, Wrangler writes the new `database_id` into
 ]
 ```
 
+Commit and push this `wrangler.jsonc` change before [Step 2](#step-2-create-cloudflare-worker-project): finishing the dashboard setup starts the first build right away, and with the template `database_id` its deploy fails.
+
 #### 1.3. Apply Database Schema
 
 ```bash
@@ -309,7 +311,7 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
 
 -   **Build command**: `pnpm run build`
 -   **Deploy command**: `npx wrangler deploy --env production`
--   **Non-production branch builds**: keep them off, or set their command to `npx wrangler versions upload --env production`. The default command doesn't pass `--env production`, so it would use the local-only top-level config (placeholder database). Note that versions uploaded with `--env production` use the production database and secrets, so their preview URLs run branch code against your real data.
+-   **Non-production branch builds**: keep them off, or set their command to `npx wrangler versions upload --env production`. The default command doesn't pass `--env production`, so it would use the local-only top-level config (placeholder database). Note that versions uploaded with `--env production` use the production database and secrets, so their preview URLs run branch code against your real data. While such a branch version is newer than the deployed one, `npx wrangler secret put` is refused ("the latest version of your Worker isn't currently deployed") - deploy the production branch again first.
 -   **Node.js**: the Workers Builds default works. If you pin a version (`NODE_VERSION` build variable, `.nvmrc` or `.node-version`), it must be 22.17 or newer, otherwise `pnpm install` fails with `ERR_PNPM_UNSUPPORTED_ENGINE`.
 -   **Build variables**:
 
@@ -319,14 +321,14 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
     PUBLIC_ENVIRONMENT = production
     PUBLIC_TIMEZONE = Europe/Ljubljana         # Change to your timezone (e.g., America/New_York, UTC)
     PRODUCTION_DOMAIN = https://your-app.com   # Live application URL (no trailing slash) for email assets and robots.txt control
-    ALLOW_ROBOTS = false                       # Set to true ONLY when ready for search engine indexing
+    ALLOW_ROBOTS = false                       # true only for a public demo - other deployments are behind ADMIN_PASSWORD
     ```
 
 > ⚠️ **Important**: `CRON_SECRET` and `ADMIN_PASSWORD` are **runtime secrets**, not build variables - don't add them here or to [`wrangler.jsonc`](wrangler.jsonc). Set them once with `npx wrangler secret put` (see [Step 5](#step-5-set-runtime-secrets)). The cron handler and `/api/cron` both read the same secret, so there is no value to keep in sync.
 
 ### Step 4: Create & Deploy
 
--   Push to Repository: Commit and push your changes to trigger automatic deployment
+-   Push to Repository: the first build starts when you finish the dashboard setup; every later push to the production branch deploys automatically
 -   Monitor Build: Check build logs in the Cloudflare dashboard under **Workers & Pages > domain-watcher > Deployments**
 -   Verify Deployment: Visit your deployed URL - until [Step 5](#step-5-set-runtime-secrets) is done it answers with 503 on purpose
 
@@ -373,10 +375,11 @@ Good to know:
 -   **Always reachable**: `/api/cron` (protected by `CRON_SECRET` instead - the scheduled self-call sends no browser credentials), `/robots.txt` and static files (images, favicon, JS/CSS bundles), which contain no data.
 -   **HTTPS only**: Basic Auth sends the password with every request, so plain HTTP requests are redirected to HTTPS before the login prompt. For custom domains also enable **SSL/TLS > Edge Certificates > Always Use HTTPS** (and optionally HSTS) in the Cloudflare dashboard.
 -   **Demo mode is public**: with `PUBLIC_ENVIRONMENT = demo` the password is ignored, because the demo is a read-only public showcase. Never store real API keys or webhooks in a demo deployment.
+-   **No embedding**: pages are sent with `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'`, so a hostile site can't load the app in a hidden iframe and trick you into clicks (the browser would send your cached login along). This also means Domain Watcher doesn't load inside an iframe, e.g. in a dashboard app - open it in its own tab.
 
 ### Upgrading an Existing Deployment
 
-Earlier versions had no login and kept `CRON_SECRET` as a build variable and a plain-text `vars` entry in `wrangler.jsonc`. When upgrading:
+Versions up to v1.1.1 had no login and kept `CRON_SECRET` as a build variable and a plain-text `vars` entry in `wrangler.jsonc`. To be safe, export a backup first (`npx wrangler d1 export prod-domain-watcher --remote --output=prod-backup.sql`). When upgrading:
 
 1. **Set the admin password first** - the old version ignores it, so the new one never answers 503:
 
@@ -384,7 +387,7 @@ Earlier versions had no login and kept `CRON_SECRET` as a build variable and a p
     npx wrangler secret put ADMIN_PASSWORD --env production
     ```
 
-2. **Update `wrangler.jsonc`, then deploy this version** (push to trigger the build). Keep your own `database_id`, but remove every `"vars"` block with `CRON_SECRET` (top-level and under `env.production`) - otherwise the deploy keeps the old plain-text variable and step 3 fails. If your build settings pin Node.js (`NODE_VERSION` build variable, `.nvmrc` or `.node-version`), raise it to 22.17 or newer first, otherwise the build fails with `ERR_PNPM_UNSUPPORTED_ENGINE`.
+2. **Update `wrangler.jsonc`, then deploy this version** (push to trigger the build). Keep your own `database_id`, but remove every `"vars"` block with `CRON_SECRET` (top-level and under `env.production`) - otherwise the deploy keeps the old plain-text variable and step 3 fails. The top-level `"services"` block with the `SELF_LOCAL` binding is no longer used either: remove it, or wrangler keeps warning about it on `--env production` commands. If your build settings pin Node.js (`NODE_VERSION` build variable, `.nvmrc` or `.node-version`), raise it to 22.17 or newer first, otherwise the build fails with `ERR_PNPM_UNSUPPORTED_ENGINE`.
 3. **Then set a new cron secret**. It can only be set after that deploy, because until then the old plain-text `CRON_SECRET` variable occupies the name. Use a **new** random value (e.g. `openssl rand -hex 32`): earlier setups kept it in `wrangler.jsonc` and a build variable, and the template value `strong-secret-key-here` is public. Until it is set, the cron endpoint rejects every call.
 
     ```bash
@@ -394,7 +397,8 @@ Earlier versions had no login and kept `CRON_SECRET` as a build variable and a p
 4. **Remove the old `CRON_SECRET` build variable** under **Settings > Build > Variables and Secrets** (it is no longer used).
 5. **Check your watchlist for subdomains** (e.g. `www.example.com`): they can no longer be added, and existing ones are marked as errors ("Enter the registrable domain ...") on their next check instead of being reported as available - remove them and add the registrable domain instead.
 6. **Check your webhook URLs**: they are re-checked before every send - Slack must be `https://hooks.slack.com/services/…`, Discord `https://discord.com/api/webhooks/…` (discordapp.com and the ptb./canary. hosts also work). A stored URL that doesn't pass is skipped with only a log line ("enabled but not configured"), so replace it in Settings and send a test message.
-7. **Local checkout**: switch to Node.js 22.17+ and run `pnpm install`. The local `CRON_SECRET` no longer comes from `wrangler.jsonc` - add it to `.env`, together with `ADMIN_PASSWORD` (required for `pnpm preview`). If you changed the code: `svelte.config.js` moved into the `sveltekit()` plugin in `vite.config.js`, and `$lib`, `$components` and `$src` imports are now `#lib`, `#components` and `#src`; the unused `$home` alias was removed (SvelteKit 3 fails the build on `$lib`).
+7. **Check anything that calls your deployment from outside**: an uptime monitor on `/` now gets 401 - point it at `GET /api/cron` (health JSON, no login). A script or external scheduler that POSTs to `/api/cron` needs the new `CRON_SECRET` from step 3 and a `Content-Type: application/json` header - without the header SvelteKit 3 answers 403 (the old code example left it out).
+8. **Local checkout**: switch to Node.js 22.17+ and run `pnpm install`. The local `CRON_SECRET` no longer comes from `wrangler.jsonc` - add it to `.env`, together with `ADMIN_PASSWORD` (required for `pnpm preview`). If you changed the code: `svelte.config.js` moved into the `sveltekit()` plugin in `vite.config.js`, and `$lib`, `$components` and `$src` imports are now `#lib`, `#components` and `#src`; the unused `$home` alias was removed (SvelteKit 3 fails the build on `$lib`).
 
 No database migration is needed: the tables are unchanged, and the new schedule state (`last_sent_on`, `last_attempt_on`) is stored in each provider's settings automatically. Re-running the current `schema.sql` is harmless (it only re-adds the sample domains if you deleted them), but ⚠️ never run a `schema.sql` from an older checkout against production - it started with `DROP TABLE` and wipes all domains and settings.
 
@@ -428,16 +432,16 @@ For detailed table structure and relationships, see [schema.sql](schema.sql). Th
 
 ### Common Issues
 
-1. **"Database not found"**: Ensure you've created the database and updated the `database_id` in `wrangler.jsonc`
+1. **"Database not found" / "no such table: domains"**: create the database and put its `database_id` in the `DB` binding under `env.production.d1_databases` in `wrangler.jsonc` (the top-level `d1_databases` is the local one). "no such table" means `schema.sql` wasn't applied to that database: `npx wrangler d1 execute prod-domain-watcher --remote --file=./schema.sql` (locally: `npx wrangler d1 execute local-domain-watcher --local --file=./schema.sql`)
 2. **Build fails with "Invalid environment variables ... Value is missing"**: one of the build variables `PUBLIC_ENVIRONMENT`, `PUBLIC_TIMEZONE`, `PRODUCTION_DOMAIN` or `ALLOW_ROBOTS` is not set. Add it under **Settings > Build > Variables and Secrets** (locally: in `.env`) and rebuild. The runtime secrets `CRON_SECRET` and `ADMIN_PASSWORD` are not needed for the build - set them with `npx wrangler secret put <NAME> --env production`
 3. **Cron jobs not working**: Check that the `CRON_SECRET` secret exists (`npx wrangler secret list --env production`). The logs show "CRON_SECRET is not configured" when it is missing. It must not be set in `wrangler.jsonc` or as a build variable
-4. **Cron jobs not working locally**: Run `pnpm run build` and then `pnpm preview` (`wrangler dev --test-scheduled`), make sure `CRON_SECRET` is set in `.env` and test via the `/__scheduled` endpoint
+4. **Cron jobs not working locally**: Run `pnpm run build` and then `pnpm preview` (`wrangler dev --test-scheduled`), make sure `CRON_SECRET` is set in `.env` and test via the `/__scheduled` endpoint. The local handler always posts to `http://localhost:8787/api/cron` (there is no `SELF` binding outside `env.production`), so `pnpm preview` must run on port 8787 (don't pass `--port`). If 8787 is already taken, wrangler switches to another port without failing (check its "Ready on" line) and the self-call goes to whatever runs on 8787 - usually logged as "❌ Cron request failed". Stop the other process and restart `pnpm preview`
 5. **Every page responds with 503 "Domain Watcher is locked"**: `ADMIN_PASSWORD` is not set. Set the secret with `npx wrangler secret put ADMIN_PASSWORD --env production` (locally for `pnpm preview`: add `ADMIN_PASSWORD` to `.env`)
 6. **The login prompt keeps coming back**: Any username works, but the password must match `ADMIN_PASSWORD` exactly. To log out, close the browser
 
 ### Debugging
 
--   Check logs in the Cloudflare dashboard under **Workers & Pages > domain-watcher > Observability** (Workers Logs are enabled in `wrangler.jsonc`), or stream them live with `npx wrangler tail --env production`. A cron run is marked as failed when `/api/cron` answers non-2xx: 503 (`CRON_SECRET` missing, a report slot couldn't be claimed, or provider settings couldn't be loaded), 502 (every provider failed - retried within the hour) or 500 (unexpected error)
+-   Check logs in the Cloudflare dashboard under **Workers & Pages > domain-watcher > Observability** (Workers Logs are enabled in `wrangler.jsonc`), or stream them live with `npx wrangler tail --env production`. A cron run is marked as failed when `/api/cron` answers non-2xx: 503 (`CRON_SECRET` missing, or nothing ran because a due report slot couldn't be claimed or provider settings couldn't be loaded), 502 (no report was sent and every attempted provider failed - retried within the hour) or 500 (unexpected error)
 -   Use `console.log` statements in your code for debugging
 -   Test API endpoints manually using curl or browser developer tools
 
@@ -461,6 +465,9 @@ npx wrangler d1 execute prod-domain-watcher --remote --command="SELECT * FROM do
 
 # Check database structure
 npx wrangler d1 execute prod-domain-watcher --remote --command="PRAGMA table_info(domains);"
+
+# Export production backup (e.g. before upgrading)
+npx wrangler d1 export prod-domain-watcher --remote --output=prod-backup.sql
 ```
 
 ## Contributing
