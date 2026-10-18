@@ -1,3 +1,8 @@
+# Single-package repo: pnpm 9 (e.g. older Cloudflare Workers Builds images)
+# rejects a pnpm-workspace.yaml without a "packages" field
+packages:
+  - "."
+
 # pnpm 11+ (no longer reads engine-strict from .npmrc)
 engineStrict: true
 
