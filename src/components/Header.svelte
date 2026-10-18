@@ -5,9 +5,9 @@
     import EnvTag from "./EnvTag.svelte";
     import Icon from "@iconify/svelte";
     import Tooltip from "./Tooltip.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
-    import { isDemo } from "$src/lib/utils/helpers";
-    import { batchCheck } from "$src/lib/remote/check-domains.remote";
+    import { toast } from "#lib/stores/toast.svelte.js";
+    import { isDemo } from "#lib/utils/helpers.js";
+    import { batchCheck } from "#lib/remote/check-domains.remote.js";
 
     /**
      * App header with per-page layout configuration and batch check action

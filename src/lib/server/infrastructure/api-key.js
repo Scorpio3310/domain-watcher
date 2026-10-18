@@ -5,13 +5,13 @@
 
 /** @import { ApiKeyConfig, ServiceResult } from '#lib/types.js' */
 
-import { executeQueryFirst, executeSql } from "$src/lib/database/db";
-import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
+import { executeQueryFirst, executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
 import { WHOIS_JSON_API_STATUS } from "#lib/constants/constants.js";
-import { isDemo } from "$src/lib/utils/helpers";
+import { isDemo } from "#lib/utils/helpers.js";
 import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
 import { testApiKeyConnection } from "./whois-client";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 // ========================================
 // TYPES & INTERFACES

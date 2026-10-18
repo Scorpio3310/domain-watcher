@@ -1,22 +1,22 @@
 <script>
-    import Button from "$components/Button.svelte";
+    import Button from "#components/Button.svelte";
     import Icon from "@iconify/svelte";
     import { slide, fly } from "svelte/transition";
     import { UI_DOMAIN_VIEW } from "#lib/constants/constants.js";
     import {
         DOMAIN_STATUS,
         DOMAIN_PROVIDER,
-    } from "$src/lib/constants/constants";
-    import { isDemo } from "$src/lib/utils/helpers";
-    import Tooltip from "$components/Tooltip.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
+    } from "#lib/constants/constants.js";
+    import { isDemo } from "#lib/utils/helpers.js";
+    import Tooltip from "#components/Tooltip.svelte";
+    import { toast } from "#lib/stores/toast.svelte.js";
     import {
         formatHumanDate,
         formatExpirationDate,
         formatLastChecked,
         getExpirationStatus,
-    } from "$src/lib/utils/helpers";
-    import { ssl, ns, check, remove } from "$src/lib/remote/domain-card.remote";
+    } from "#lib/utils/helpers.js";
+    import { ssl, ns, check, remove } from "#lib/remote/domain-card.remote.js";
 
     //// PROPS ////
     /** @type {{data: import('#lib/types.js').DomainRecord, uiView?: string, isApiConfigured?: boolean, lookupProvider?: ('rdap'|'whoisjson')|null, whoisjsonFallback?: boolean}} */

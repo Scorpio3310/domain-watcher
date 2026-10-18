@@ -7,12 +7,12 @@ import {
     getRegistrar,
     getLookupSource,
 } from "#lib/utils/helpers.js";
-import { domains } from "$src/lib/server/services/domain";
-import { ui } from "$src/lib/server/services/settings";
+import { domains } from "#lib/server/services/domain.js";
+import { ui } from "#lib/server/services/settings.js";
 import {
     resolveLookupContext,
     predictProvider,
-} from "$src/lib/server/services/domain-lookup";
+} from "#lib/server/services/domain-lookup.js";
 
 // ========================================
 // PAGE LOAD

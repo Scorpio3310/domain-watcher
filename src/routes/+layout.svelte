@@ -1,10 +1,10 @@
 <script>
-    import Header from "$components/Header.svelte";
-    import Toast from "$components/Toast.svelte";
+    import Header from "#components/Header.svelte";
+    import Toast from "#components/Toast.svelte";
     import { page } from "$app/state";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
+    import { toast } from "#lib/stores/toast.svelte.js";
     import "../app.css";
-    import NoJavascript from "$components/NoJavascript.svelte";
+    import NoJavascript from "#components/NoJavascript.svelte";
     import { dev } from "$app/env";
 
     /** @type {import('./$types').LayoutProps} */

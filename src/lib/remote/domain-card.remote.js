@@ -7,11 +7,11 @@
 
 /** @import { ServiceResult } from '#lib/types.js' */
 
-import * as whoisService from "$src/lib/server/infrastructure/whois-client";
-import * as dnsService from "$src/lib/server/infrastructure/dns-client";
+import * as whoisService from "#lib/server/infrastructure/whois-client.js";
+import * as dnsService from "#lib/server/infrastructure/dns-client.js";
 import { form } from "$app/server";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { domainIdFormSchema } from "$src/routes/validation";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { domainIdFormSchema } from "#src/routes/validation.js";
 import {
     validateAccess,
     validateSslAccess,
@@ -19,7 +19,7 @@ import {
     findDomainById,
     executeDomainQuery,
     verificationEngine,
-} from "$src/lib/server/utils/domain-utils.js";
+} from "#lib/server/utils/domain-utils.js";
 
 // ========================================
 // DOMAIN CARD REMOTE FUNCTIONS

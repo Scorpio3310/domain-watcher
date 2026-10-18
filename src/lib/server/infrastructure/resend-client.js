@@ -1,12 +1,12 @@
 /** @import { ServiceResult, ResendConfig } from '#lib/types.js' */
 
-import { executeSql } from "$src/lib/database/db";
-import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { isDemo } from "$src/lib/utils/helpers";
+import { executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
+import { isDemo } from "#lib/utils/helpers.js";
 import { RESEND_CONNECTION_STATUS } from "#lib/constants/constants.js";
 import { getErrorMessage, maskApiKey } from "#lib/utils/helpers.js";
 import { Resend } from "resend";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 // ========================================
 // CORE UTILITIES

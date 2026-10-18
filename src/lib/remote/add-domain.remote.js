@@ -6,9 +6,9 @@
 /** @import { ServiceResult } from '#lib/types.js' */
 
 import { form } from "$app/server";
-import { addDomainSchema } from "$src/routes/validation";
-import { domains } from "$src/lib/server/services/domain";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { addDomainSchema } from "#src/routes/validation.js";
+import { domains } from "#lib/server/services/domain.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 /**
  * Adds a new domain to the watchlist.

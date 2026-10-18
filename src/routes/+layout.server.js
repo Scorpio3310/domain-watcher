@@ -1,4 +1,4 @@
-import { resolveLookupContext } from "$src/lib/server/services/domain-lookup";
+import { resolveLookupContext } from "#lib/server/services/domain-lookup.js";
 import { DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 
 export async function load() {

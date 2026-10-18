@@ -18,14 +18,14 @@ import {
     slackWebhookSchema,
     discordWebhookSchema,
     resendSchema,
-} from "$src/routes/settings/validation";
-import { apiKey } from "$src/lib/server/infrastructure/api-key";
-import { ui, domainProvider } from "$src/lib/server/services/settings";
+} from "#src/routes/settings/validation.js";
+import { apiKey } from "#lib/server/infrastructure/api-key.js";
+import { ui, domainProvider } from "#lib/server/services/settings.js";
 import { DOMAIN_PROVIDER } from "#lib/constants/constants.js";
-import { slack } from "$src/lib/server/infrastructure/slack-client";
-import { discord } from "$src/lib/server/infrastructure/discord-client";
-import { resend } from "$src/lib/server/infrastructure/resend-client";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { slack } from "#lib/server/infrastructure/slack-client.js";
+import { discord } from "#lib/server/infrastructure/discord-client.js";
+import { resend } from "#lib/server/infrastructure/resend-client.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 /**
  * Save and test the WhoisJSON API key.

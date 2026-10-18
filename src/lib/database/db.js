@@ -1,4 +1,4 @@
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 // ========================================
 // TYPE DEFINITIONS

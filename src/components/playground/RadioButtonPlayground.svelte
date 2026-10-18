@@ -1,5 +1,5 @@
 <script>
-    import RadioButton from "$components/RadioButton.svelte";
+    import RadioButton from "#components/RadioButton.svelte";
 
     // All possible prop combinations
     /** @type {('sm'|'md'|'lg')[]} */

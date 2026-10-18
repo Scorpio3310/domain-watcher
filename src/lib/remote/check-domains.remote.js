@@ -8,9 +8,9 @@
 /** @import { ServiceResult } from '#lib/types.js' */
 
 import { form } from "$app/server";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { validateAccess } from "$src/lib/server/utils/domain-utils.js";
-import { domainVerification } from "$src/lib/server/services/domain.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { validateAccess } from "#lib/server/utils/domain-utils.js";
+import { domainVerification } from "#lib/server/services/domain.js";
 
 /** Maximum number of individual error messages shown in the toast */
 const MAX_SHOWN_ERRORS = 3;

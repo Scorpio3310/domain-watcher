@@ -9,11 +9,6 @@ export default defineConfig({
         sveltekit({
             // See https://svelte.dev/docs/kit/adapters for more information about adapters.
             adapter: adapter(),
-            alias: {
-                $components: "src/components",
-                $src: "src",
-                $home: ".",
-            },
             experimental: {
                 remoteFunctions: true,
             },

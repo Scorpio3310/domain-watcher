@@ -1,9 +1,9 @@
 <script>
     import { fly } from "svelte/transition";
-    import ButtonPlayground from "$components/playground/ButtonPlayground.svelte";
-    import InputPlayground from "$components/playground/InputPlayground.svelte";
-    import RadioButtonPlayground from "$components/playground/RadioButtonPlayground.svelte";
-    import ToggleSwitchPlayground from "$components/playground/ToggleSwitchPlayground.svelte";
+    import ButtonPlayground from "#components/playground/ButtonPlayground.svelte";
+    import InputPlayground from "#components/playground/InputPlayground.svelte";
+    import RadioButtonPlayground from "#components/playground/RadioButtonPlayground.svelte";
+    import ToggleSwitchPlayground from "#components/playground/ToggleSwitchPlayground.svelte";
 
     // Component configuration with metadata
     const components = [

@@ -8,10 +8,10 @@
 
 /** @import { ServiceResult, LookupContext } from '#lib/types.js' */
 
-import * as rdapClient from "$src/lib/server/infrastructure/rdap-client";
-import * as whoisClient from "$src/lib/server/infrastructure/whois-client";
-import { apiKey } from "$src/lib/server/infrastructure/api-key";
-import { domainProvider } from "$src/lib/server/services/settings";
+import * as rdapClient from "#lib/server/infrastructure/rdap-client.js";
+import * as whoisClient from "#lib/server/infrastructure/whois-client.js";
+import { apiKey } from "#lib/server/infrastructure/api-key.js";
+import { domainProvider } from "#lib/server/services/settings.js";
 import { DOMAIN_PROVIDER } from "#lib/constants/constants.js";
 
 // ========================================

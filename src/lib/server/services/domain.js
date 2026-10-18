@@ -5,15 +5,15 @@
  * @module DomainsServer
  */
 
-import { executeSql } from "$src/lib/database/db";
-import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { executeSql } from "#lib/database/db.js";
+import { DOMAIN_QUERIES } from "#lib/database/domain-queries.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import {
     validateDemoMode,
     executeDomainQuery,
     verificationEngine,
     CONFIG,
-} from "$src/lib/server/utils/domain-utils.js";
+} from "#lib/server/utils/domain-utils.js";
 import { DOMAIN_STATUS, EXPIRY_WARNING_DAYS } from "#lib/constants/constants.js";
 
 /** @import { DomainRecord, BatchOptions, BatchVerificationResult } from "#lib/types.js" */

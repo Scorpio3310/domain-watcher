@@ -5,13 +5,13 @@
  * @module DomainUtils
  */
 
-import { executeSql, executeQueryFirst } from "$src/lib/database/db";
-import { DOMAIN_QUERIES } from "$src/lib/database/domain-queries";
-import * as domainLookup from "$src/lib/server/services/domain-lookup";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { apiKey } from "$src/lib/server/infrastructure/api-key.js";
+import { executeSql, executeQueryFirst } from "#lib/database/db.js";
+import { DOMAIN_QUERIES } from "#lib/database/domain-queries.js";
+import * as domainLookup from "#lib/server/services/domain-lookup.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { apiKey } from "#lib/server/infrastructure/api-key.js";
 import { DOMAIN_STATUS, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 export { validateDemoMode };
 

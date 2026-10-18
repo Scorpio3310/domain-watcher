@@ -1,5 +1,5 @@
 <script>
-    import ToggleSwitch from "$components/ToggleSwitch.svelte";
+    import ToggleSwitch from "#components/ToggleSwitch.svelte";
 
     // All possible prop combinations
     /** @type {('lg'|'md'|'sm')[]} */

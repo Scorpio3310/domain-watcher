@@ -5,7 +5,7 @@
  * @module AccessUtils
  */
 
-import { isDemo } from "$src/lib/utils/helpers";
+import { isDemo } from "#lib/utils/helpers.js";
 
 /** @import { ValidationError } from "#lib/types.js" */
 

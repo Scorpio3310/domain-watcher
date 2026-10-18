@@ -8,7 +8,7 @@
 
 import { apiKey } from "./api-key";
 import { WhoisJson } from "@whoisjson/whoisjson";
-import { DOMAIN_STATUS } from "$src/lib/constants/constants";
+import { DOMAIN_STATUS } from "#lib/constants/constants.js";
 import { getErrorMessage } from "#lib/utils/helpers.js";
 
 // ========================================

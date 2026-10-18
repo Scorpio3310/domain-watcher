@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { sequence } from "@sveltejs/kit/hooks";
-import { initDatabase } from "$src/lib/database/db.js";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { initDatabase } from "#lib/database/db.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 
 /** @type {import('@sveltejs/kit/hooks').Handle} */
 export async function handle_db_connect({ event, resolve }) {

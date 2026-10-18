@@ -1,15 +1,15 @@
 <script>
-    import Button from "$components/Button.svelte";
-    import DomainCard from "$components/DomainCard.svelte";
-    import Input from "$components/Input.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
+    import Button from "#components/Button.svelte";
+    import DomainCard from "#components/DomainCard.svelte";
+    import Input from "#components/Input.svelte";
+    import { toast } from "#lib/stores/toast.svelte.js";
     import Icon from "@iconify/svelte";
-    import { addDomain } from "$src/lib/remote/add-domain.remote";
+    import { addDomain } from "#lib/remote/add-domain.remote.js";
     import { addDomainSchema } from "./validation";
     import { flip } from "svelte/animate";
     import { scale, fly } from "svelte/transition";
-    import Tooltip from "$components/Tooltip.svelte";
-    import { isDemo } from "$src/lib/utils/helpers.js";
+    import Tooltip from "#components/Tooltip.svelte";
+    import { isDemo } from "#lib/utils/helpers.js";
     import { page } from "$app/state";
 
     //// PROPS ////

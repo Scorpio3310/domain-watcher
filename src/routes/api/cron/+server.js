@@ -1,7 +1,7 @@
 import { CRON_SECRET } from "$app/env/private";
 import { cronNotifications } from "#lib/server/notifications/cron-notifications.js";
-import { getErrorMessage } from "$src/lib/utils/helpers";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { getErrorMessage } from "#lib/utils/helpers.js";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 /**
  * Validates cron request authentication using secret header

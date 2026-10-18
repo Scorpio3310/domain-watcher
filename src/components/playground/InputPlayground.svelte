@@ -1,5 +1,5 @@
 <script>
-    import Input from "$components/Input.svelte";
+    import Input from "#components/Input.svelte";
 
     // All possible prop combinations
     const types = ["text", "email", "password", "number", "tel", "url"];

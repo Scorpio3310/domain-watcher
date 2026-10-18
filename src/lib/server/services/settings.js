@@ -3,11 +3,11 @@
  * @module SettingsService
  */
 
-import { executeSql } from "$src/lib/database/db";
-import { SETTINGS_QUERIES } from "$src/lib/database/settings-queries";
-import { getErrorMessage } from "$src/lib/utils/helpers";
+import { executeSql } from "#lib/database/db.js";
+import { SETTINGS_QUERIES } from "#lib/database/settings-queries.js";
+import { getErrorMessage } from "#lib/utils/helpers.js";
 import { UI_DOMAIN_VIEW, DOMAIN_PROVIDER } from "#lib/constants/constants.js";
-import { validateDemoMode } from "$src/lib/server/utils/access";
+import { validateDemoMode } from "#lib/server/utils/access.js";
 
 // ========================================
 // CORE UTILITIES

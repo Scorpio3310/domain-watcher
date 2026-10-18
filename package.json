@@ -57,6 +57,8 @@
         "resend": "^6.34.1"
     },
     "imports": {
-        "#lib/*": "./src/lib/*"
+        "#lib/*": "./src/lib/*",
+        "#components/*": "./src/components/*",
+        "#src/*": "./src/*"
     }
 }

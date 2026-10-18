@@ -1,11 +1,11 @@
 <script>
-    import Button from "$components/Button.svelte";
-    import Input from "$components/Input.svelte";
-    import Tooltip from "$components/Tooltip.svelte";
-    import { toast } from "$src/lib/stores/toast.svelte.js";
+    import Button from "#components/Button.svelte";
+    import Input from "#components/Input.svelte";
+    import Tooltip from "#components/Tooltip.svelte";
+    import { toast } from "#lib/stores/toast.svelte.js";
     import { slide } from "svelte/transition";
     import Icon from "@iconify/svelte";
-    import { isDemo } from "$src/lib/utils/helpers.js";
+    import { isDemo } from "#lib/utils/helpers.js";
     import {
         UI_DOMAIN_VIEW,
         DOMAIN_PROVIDER,
@@ -13,11 +13,11 @@
         SLACK_CONNECTION_STATUS,
         DISCORD_CONNECTION_STATUS,
         RESEND_CONNECTION_STATUS,
-    } from "$src/lib/constants/constants";
-    import RadioButton from "$components/RadioButton.svelte";
-    import ToggleSwitch from "$components/ToggleSwitch.svelte";
+    } from "#lib/constants/constants.js";
+    import RadioButton from "#components/RadioButton.svelte";
+    import ToggleSwitch from "#components/ToggleSwitch.svelte";
     import { page } from "$app/state";
-    import { formatLastChecked } from "$src/lib/utils/helpers.js";
+    import { formatLastChecked } from "#lib/utils/helpers.js";
     import {
         saveApiKey,
         updateDomainProvider,
@@ -28,7 +28,7 @@
         updateDiscordWebhook,
         updateResendEnabled,
         updateResendConfig,
-    } from "$src/lib/remote/settings.remote";
+    } from "#lib/remote/settings.remote.js";
     import {
         whoIsApiKeySchema,
         slackWebhookSchema,
